@@ -32,6 +32,33 @@ function Get-FfprobePath {
     return $fromPath ? $fromPath.Source : $null
 }
 
+function Test-FFmpegAmfEncoderAvailable {
+    param(
+        [Parameter(Mandatory)] [string]$FFmpegPath,
+        [Parameter(Mandatory)] [ValidateSet('hevc_amf', 'av1_amf')] [string]$Encoder
+    )
+
+    if (-not (Test-Path -LiteralPath $FFmpegPath -PathType Leaf)) {
+        return $false
+    }
+
+    $encodersOutput = & $FFmpegPath '-hide_banner' '-encoders' 2>&1 | Out-String
+    if (-not $encodersOutput -or $encodersOutput -notmatch "(?m)\b$([regex]::Escape($Encoder))\b") {
+        return $false
+    }
+
+    & $FFmpegPath `
+        '-hide_banner' `
+        '-loglevel' 'error' `
+        '-f' 'lavfi' `
+        '-i' 'color=size=320x240:rate=1:duration=0.04:color=black' `
+        '-c:v' $Encoder `
+        '-frames:v' '1' `
+        '-f' 'null' '-' | Out-Null
+
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Invoke-FFmpeg {
     param(
         [Parameter(Mandatory)] [string]$Arguments,
@@ -74,4 +101,4 @@ function Get-MediaFastHash {
     return "$size-$([System.BitConverter]::ToString($hash).Replace('-','').Substring(0,8))"
 }
 
-Export-ModuleMember -Function Get-FFmpegPath, Get-FfprobePath, Invoke-FFmpeg, Get-MediaFastHash
+Export-ModuleMember -Function Get-FFmpegPath, Get-FfprobePath, Test-FFmpegAmfEncoderAvailable, Invoke-FFmpeg, Get-MediaFastHash
