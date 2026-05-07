@@ -281,6 +281,8 @@ function Select-VideoStreams {
     param(
         [hashtable] $FfprobeOutput,
         [bool] $ForceRecodeVideo,
+        [ValidateSet('HEVC', 'AV1')] [string] $VideoCodec,
+        [bool] $AllowVideoCodecUpgrade,
         [bool] $Deinterlace,
         [string] $Upscale,
         [int] $UpscaleWidth,
@@ -299,6 +301,7 @@ function Select-VideoStreams {
 			$keepStream = -not (($stream.disposition.attached_pic -eq 1) -or ($stream.codec_name -eq 'mjpeg'))
 			$isHEVC = ($stream.codec_name -ieq 'hevc') -and ($stream.profile -like 'main*')
 			$keepVideoCodec = $isHEVC -or ($stream.codec_name -ieq 'av1') -or ($stream.codec_name -ieq 'vc1')
+			if ($VideoCodec -eq 'AV1' -and $AllowVideoCodecUpgrade -and $isHEVC) { $keepVideoCodec = $false }
 			if ($ForceRecodeVideo) { $keepVideoCodec = $false }
 			
 			$upscaleStream = $false
@@ -826,6 +829,8 @@ function Invoke-ReencodeFile {
         $videoResult = Select-VideoStreams `
             -FfprobeOutput $ffprobeOutput `
             -ForceRecodeVideo $Config.ForceRecodeVideo `
+            -VideoCodec $Config.VideoCodec `
+            -AllowVideoCodecUpgrade $Config.AllowVideoCodecUpgrade `
             -Deinterlace $Config.Deinterlace `
             -Upscale $Config.Upscale `
             -UpscaleWidth $Config.UpscaleWidth `
@@ -1148,6 +1153,11 @@ function Invoke-ReencodeMedia {
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
         [Parameter(ParameterSetName = 'SetExtensionFromPath')]
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [switch] $AllowVideoCodecUpgrade,
+        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
+        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
+        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
+        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
         [ValidateSet('Low','Medium','High')]
         [string] $Quality = 'Medium',
         [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
@@ -1262,6 +1272,7 @@ function Invoke-ReencodeMedia {
         # Vidéo
         VideoCodec = $VideoCodec
         ForceRecodeVideo = $ForceRecodeVideo
+        AllowVideoCodecUpgrade = $AllowVideoCodecUpgrade
         Quality = $Quality
         NoGpu = $NoGpu
         UseGpuAmf = $useGpuAmf
