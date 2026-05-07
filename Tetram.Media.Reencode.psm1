@@ -525,63 +525,68 @@ function Get-VideoEncoderArgs {
         [int] $StreamIndex
     )
 
-    if ($UseGpuAmf) {
-        $amfCodec = if ($VideoCodec -eq 'AV1') { 'av1_amf' } else { 'hevc_amf' }
-        $amfQuality = switch ($Quality) {
-            'Low'    { 'speed' }
-            'Medium' { 'balanced' }
-            'High'   { 'quality' }
-            default  { 'balanced' }
+    $args = switch ($UseGpuAmf) {
+        $true {
+            $amfCodec = if ($VideoCodec -eq 'AV1') { 'av1_amf' } else { 'hevc_amf' }
+            $amfQuality = switch ($Quality) {
+                'Low'    { 'speed' }
+                'Medium' { 'balanced' }
+                'High'   { 'quality' }
+                default  { 'balanced' }
+            }
+            $qp = if ($VideoCodec -eq 'AV1') {
+                switch ($Quality) { 'Low' { 36 } 'Medium' { 28 } 'High' { 24 } default { 28 } }
+            } else {
+                switch ($Quality) { 'Low' { 28 } 'Medium' { 22 } 'High' { 19 } default { 22 } }
+            }
+            $profile = if ($VideoCodec -eq 'AV1') { 'main' } else { if ($TargetIs10Bit) { 'main10' } else { 'main' } }
+
+            @(
+                "-c:v:$StreamIndex", $amfCodec
+                "-rc:v:$StreamIndex", 'cqp'
+                "-usage:v:$StreamIndex", 'transcoding'
+                "-quality:v:$StreamIndex", $amfQuality
+                "-qp_i:v:$StreamIndex", "$qp"
+                "-qp_p:v:$StreamIndex", "$qp"
+                "-profile:v:$StreamIndex", $profile
+                "-pix_fmt:v:$StreamIndex", $PixFmt
+            )
         }
-        $qp = if ($VideoCodec -eq 'AV1') {
-            switch ($Quality) { 'Low' { 36 } 'Medium' { 28 } 'High' { 24 } default { 28 } }
-        } else {
-            switch ($Quality) { 'Low' { 28 } 'Medium' { 22 } 'High' { 19 } default { 22 } }
+        default {
+            $codec = if ($VideoCodec -eq 'AV1') { 'libsvtav1' } else { 'libx265' }
+            $crf = ''
+            $preset = ''
+            if ($VideoCodec -eq 'AV1') {
+                $crf = switch ($Quality) { 'High' {24} 'Medium' {28} 'Low' {36} default {28} }
+                $preset = switch ($Quality) { 'High' {4} 'Medium' {6} 'Low' {8} default {6} }
+            } else {
+                $crf = switch ($Quality) { 'High' {18} 'Medium' {21} 'Low' {28} default {21} }
+                $preset = switch ($Quality) { 'High' { 'slow' } 'Medium' { 'medium' } 'Low' { 'fast' } default { 'medium' } }
+            }
+
+            $cpuArgs = @(
+                "-c:v:$StreamIndex", $codec
+                "-crf:v:$StreamIndex", $crf
+                "-preset:v:$StreamIndex", $preset
+                "-pix_fmt:v:$StreamIndex", $PixFmt
+            )
+
+            if ($VideoCodec -eq 'AV1') {
+                $cpuArgs += @("-svtav1-params:v:$StreamIndex", 'tune=0')
+            }
+            if ($VideoCodec -eq 'HEVC') {
+                $x265Profile = if ($PixFmt -like 'yuv444*') {
+                    ($TargetIs10Bit ? 'main444-10' : 'main444-8')
+                } elseif ($PixFmt -like 'yuv422*') {
+                    ($TargetIs10Bit ? 'main422-10' : 'main422-8')
+                } else {
+                    ($TargetIs10Bit ? 'main10' : 'main')
+                }
+                $cpuArgs += @("-profile:v:$StreamIndex", $x265Profile)
+            }
+
+            $cpuArgs
         }
-        $profile = if ($VideoCodec -eq 'AV1') { 'main' } else { if ($TargetIs10Bit) { 'main10' } else { 'main' } }
-
-        return @(
-            "-c:v:$StreamIndex", $amfCodec
-            "-rc:v:$StreamIndex", 'cqp'
-            "-usage:v:$StreamIndex", 'transcoding'
-            "-quality:v:$StreamIndex", $amfQuality
-            "-qp_i:v:$StreamIndex", "$qp"
-            "-qp_p:v:$StreamIndex", "$qp"
-            "-profile:v:$StreamIndex", $profile
-            "-pix_fmt:v:$StreamIndex", $PixFmt
-        )
-    }
-
-    $codec = if ($VideoCodec -eq 'AV1') { 'libsvtav1' } else { 'libx265' }
-    $crf = ''
-    $preset = ''
-    if ($VideoCodec -eq 'AV1') {
-        $crf = switch ($Quality) { 'High' {24} 'Medium' {28} 'Low' {36} default {28} }
-        $preset = switch ($Quality) { 'High' {4} 'Medium' {6} 'Low' {8} default {6} }
-    } else {
-        $crf = switch ($Quality) { 'High' {18} 'Medium' {21} 'Low' {28} default {21} }
-        $preset = switch ($Quality) { 'High' { 'slow' } 'Medium' { 'medium' } 'Low' { 'fast' } default { 'medium' } }
-    }
-
-    $args = @(
-        "-c:v:$StreamIndex", $codec
-        "-crf:v:$StreamIndex", $crf
-        "-preset:v:$StreamIndex", $preset
-        "-pix_fmt:v:$StreamIndex", $PixFmt
-    )
-
-    if ($VideoCodec -eq 'AV1') {
-        $args += @("-svtav1-params:v:$StreamIndex", 'tune=0')
-    }
-    if ($VideoCodec -eq 'HEVC') {
-        $x265Profile = if ($PixFmt -like 'yuv444*') {
-            ($TargetIs10Bit ? 'main444-10' : 'main444-8')
-        } elseif ($PixFmt -like 'yuv422*') {
-            ($TargetIs10Bit ? 'main422-10' : 'main422-8')
-        } else {
-            ($TargetIs10Bit ? 'main10' : 'main')
-        }
-        $args += @("-profile:v:$StreamIndex", $x265Profile)
     }
 
     return $args
