@@ -1272,7 +1272,7 @@ function Invoke-ReencodeMedia {
         # Vidéo
         VideoCodec = $VideoCodec
         ForceRecodeVideo = $ForceRecodeVideo
-        AllowVideoCodecUpgrade = [bool]($PSBoundParameters['AllowVideoCodecUpgrade'] -eq $true)
+        AllowVideoCodecUpgrade = $AllowVideoCodecUpgrade
         Quality = $Quality
         NoGpu = $NoGpu
         UseGpuAmf = $useGpuAmf
