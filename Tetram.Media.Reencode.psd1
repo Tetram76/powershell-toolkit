@@ -1,7 +1,7 @@
 @{
     # --- Identité du module ---
     RootModule = 'Tetram.Media.Reencode.psm1'
-    ModuleVersion = '2.3.0'
+    ModuleVersion = '2.4.0'
     GUID = 'd4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95'
 
     Author = 'TRL'
@@ -49,6 +49,7 @@
 - 2.1.0 : Réecriture (découpage en modules, découpages en méthodes plus simples, ...)
 - 2.2.0 : Ajout de l'activation AMF AMD en qualité Low (avec fallback CPU), switch NoGpu et refactor des arguments encodeurs audio/vidéo.
 - 2.3.0 : Switch AllowVideoCodecUpgrade (réencodage HEVC main* vers AV1 lorsque -VideoCodec AV1 ; absent des modes -CheckOnly).
+- 2.4.0 : Suppression du chemin GPU AMF (performance en mode Low inférieure au CPU).
 '@
         }
     }
