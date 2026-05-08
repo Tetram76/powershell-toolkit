@@ -522,92 +522,46 @@ function Get-VideoEncoderArgs {
     param(
         [ValidateSet('HEVC', 'AV1')] [string] $VideoCodec,
         [ValidateSet('Low','Medium','High')] [string] $Quality,
-        [bool] $UseGpuAmf,
         [bool] $TargetIs10Bit,
         [string] $PixFmt,
         [int] $StreamIndex
     )
 
-    $args = switch ($UseGpuAmf) {
-        $true {
-            $amfCodec = switch ($VideoCodec) {
-                'AV1' { 'av1_amf' }
-                default { 'hevc_amf' }
-            }
-            $amfQuality = switch ($Quality) {
-                'Low'    { 'balanced' }
-                'Medium' { 'balanced' }
-                'High'   { 'quality' }
-                default  { 'balanced' }
-            }
-            $qvbrQualityLevel = switch ($VideoCodec) {
-                'AV1' {
-                    switch ($Quality) { 'Low' {40} 'Medium' {32} 'High' {28} default {32} }
-                }
-                default {
-                    switch ($Quality) { 'Low' {32} 'Medium' {25} 'High' {22} default {25} }
-                }
-            }
-
-            $baseAmf = Get-AmfBaseArgs -PixFmt $PixFmt
-            $amfStreamOpts = [System.Collections.Generic.List[string]]::new()
-            for ($i = 0; $i -lt $baseAmf.Count; $i += 2) {
-                $opt = $baseAmf[$i]
-                $val = $baseAmf[$i + 1]
-                $amfStreamOpts.Add("${opt}:v:$StreamIndex")
-                $amfStreamOpts.Add($val)
-                if ($opt -eq '-rc' -and $val -eq 'qvbr') {
-                    $amfStreamOpts.Add("-qvbr_quality_level:v:$StreamIndex")
-                    $amfStreamOpts.Add("$qvbrQualityLevel")
-                }
-                elseif ($opt -eq '-usage' -and $val -eq 'transcoding') {
-                    $amfStreamOpts.Add("-quality:v:$StreamIndex")
-                    $amfStreamOpts.Add($amfQuality)
-                }
-            }
-
-            @("-c:v:$StreamIndex", $amfCodec) + $amfStreamOpts.ToArray()
-        }
-        default {
-            $codec = switch ($VideoCodec) {
-                'AV1' { 'libsvtav1' }
-                default { 'libx265' }
-            }
-            $crf = switch ($VideoCodec) {
-                'AV1' { switch ($Quality) { 'High' {24} 'Medium' {28} 'Low' {36} default {28} } }
-                default { switch ($Quality) { 'High' {18} 'Medium' {21} 'Low' {28} default {21} } }
-            }
-            $preset = switch ($VideoCodec) {
-                'AV1' { switch ($Quality) { 'High' {4} 'Medium' {6} 'Low' {8} default {6} } }
-                default { switch ($Quality) { 'High' { 'slow' } 'Medium' { 'medium' } 'Low' { 'fast' } default { 'medium' } } }
-            }
-
-            $cpuArgs = @(
-                "-c:v:$StreamIndex", $codec
-                "-crf:v:$StreamIndex", $crf
-                "-preset:v:$StreamIndex", $preset
-                "-pix_fmt:v:$StreamIndex", $PixFmt
-            )
-
-            if ($VideoCodec -eq 'AV1') {
-                $cpuArgs += @("-svtav1-params:v:$StreamIndex", 'tune=0')
-            }
-            if ($VideoCodec -eq 'HEVC') {
-                $x265Profile = if ($PixFmt -like 'yuv444*') {
-                    ($TargetIs10Bit ? 'main444-10' : 'main444-8')
-                } elseif ($PixFmt -like 'yuv422*') {
-                    ($TargetIs10Bit ? 'main422-10' : 'main422-8')
-                } else {
-                    ($TargetIs10Bit ? 'main10' : 'main')
-                }
-                $cpuArgs += @("-profile:v:$StreamIndex", $x265Profile)
-            }
-
-            $cpuArgs
-        }
+    $codec = switch ($VideoCodec) {
+        'AV1' { 'libsvtav1' }
+        default { 'libx265' }
+    }
+    $crf = switch ($VideoCodec) {
+        'AV1' { switch ($Quality) { 'High' {24} 'Medium' {28} 'Low' {36} default {28} } }
+        default { switch ($Quality) { 'High' {18} 'Medium' {21} 'Low' {28} default {21} } }
+    }
+    $preset = switch ($VideoCodec) {
+        'AV1' { switch ($Quality) { 'High' {4} 'Medium' {6} 'Low' {8} default {6} } }
+        default { switch ($Quality) { 'High' { 'slow' } 'Medium' { 'medium' } 'Low' { 'fast' } default { 'medium' } } }
     }
 
-    return $args
+    $cpuArgs = @(
+        "-c:v:$StreamIndex", $codec
+        "-crf:v:$StreamIndex", $crf
+        "-preset:v:$StreamIndex", $preset
+        "-pix_fmt:v:$StreamIndex", $PixFmt
+    )
+
+    if ($VideoCodec -eq 'AV1') {
+        $cpuArgs += @("-svtav1-params:v:$StreamIndex", 'tune=0')
+    }
+    if ($VideoCodec -eq 'HEVC') {
+        $x265Profile = if ($PixFmt -like 'yuv444*') {
+            ($TargetIs10Bit ? 'main444-10' : 'main444-8')
+        } elseif ($PixFmt -like 'yuv422*') {
+            ($TargetIs10Bit ? 'main422-10' : 'main422-8')
+        } else {
+            ($TargetIs10Bit ? 'main10' : 'main')
+        }
+        $cpuArgs += @("-profile:v:$StreamIndex", $x265Profile)
+    }
+
+    return $cpuArgs
 }
 
 function Get-AudioEncoderArgs {
@@ -652,7 +606,6 @@ function Get-FFmpegArgs {
         [string] $UpscaleFit,
         [int] $ConfigUpscaleWidth,
         [bool] $ClearStreamsTitle,
-        [bool] $UseGpuAmf,
 
         # Paramètres issus de l'analyse
         [object[]] $VideoTracks,
@@ -675,14 +628,10 @@ function Get-FFmpegArgs {
         default  { $SourceChroma }
     }
     
-    $pixFmt = if ($UseGpuAmf) {
-        if ($targetIs10Bit) { 'p010le' } else { 'yuv420p' }
-    } else {
-        switch ($targetChroma) {
-            '444' { if ($targetIs10Bit) { 'yuv444p10le' } else { 'yuv444p' } }
-            '422' { if ($targetIs10Bit) { 'yuv422p10le' } else { 'yuv422p' } }
-            default { if ($targetIs10Bit) { 'yuv420p10le' } else { 'yuv420p' } }
-        }
+    $pixFmt = switch ($targetChroma) {
+        '444' { if ($targetIs10Bit) { 'yuv444p10le' } else { 'yuv444p' } }
+        '422' { if ($targetIs10Bit) { 'yuv422p10le' } else { 'yuv422p' } }
+        default { if ($targetIs10Bit) { 'yuv420p10le' } else { 'yuv420p' } }
     }
     
     $ffmpegArgs = @()
@@ -711,7 +660,6 @@ function Get-FFmpegArgs {
             $ffmpegArgs += Get-VideoEncoderArgs `
                 -VideoCodec $VideoCodec `
                 -Quality $Quality `
-                -UseGpuAmf $UseGpuAmf `
                 -TargetIs10Bit $targetIs10Bit `
                 -PixFmt $pixFmt `
                 -StreamIndex $new_index
@@ -918,7 +866,6 @@ function Invoke-ReencodeFile {
             -UpscaleFit $Config.UpscaleFit `
             -ConfigUpscaleWidth $Config.UpscaleWidth `
             -ClearStreamsTitle $Config.ClearStreamsTitle `
-            -UseGpuAmf $Config.UseGpuAmf `
             -VideoTracks $videoResult.VideoTracks `
             -IsSource10Bit $videoResult.IsSource10Bit `
             -SourceChroma $videoResult.SourceChroma `
@@ -1179,11 +1126,6 @@ function Invoke-ReencodeMedia {
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
         [Parameter(ParameterSetName = 'SetExtensionFromPath')]
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [switch] $NoGpu,
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
         [ValidateSet('720p','1080p','2160p','4320p')]
         [string] $Upscale,
         [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
@@ -1261,16 +1203,6 @@ function Invoke-ReencodeMedia {
 
     $resolvedFFmpegPath = Get-FFmpegPath -OverridePath $FFMPEGPath
     $resolvedFFprobePath = Get-FfprobePath -OverridePath $FFPROBEPath
-    $useGpuAmf = $false
-    if ($Quality -eq 'Low' -and -not $NoGpu) {
-        $amfCodec = ($VideoCodec -eq 'AV1') ? 'av1_amf' : 'hevc_amf'
-        if (Test-FFmpegAmfEncoderAvailable -FFmpegPath $resolvedFFmpegPath -Encoder $amfCodec) {
-            $useGpuAmf = $true
-            Write-InfoLog -Color Cyan "GPU AMD AMF activé : $amfCodec"
-        } else {
-            Write-WarnLog "GPU AMD/$amfCodec indisponible — fallback CPU (libx265/libsvtav1) pour toute la session"
-        }
-    }
     
     $config = @{
         # Parcours / sélection
@@ -1289,8 +1221,6 @@ function Invoke-ReencodeMedia {
         ForceRecodeVideo = $ForceRecodeVideo
         AllowVideoCodecUpgrade = $AllowVideoCodecUpgrade
         Quality = $Quality
-        NoGpu = $NoGpu
-        UseGpuAmf = $useGpuAmf
         Deinterlace = $Deinterlace
         Upscale = $Upscale
         UpscaleWidth = $upscaleWidth

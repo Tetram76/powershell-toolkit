@@ -19,8 +19,6 @@
     # --- Export ---
     FunctionsToExport = @(
 		'Get-FFmpegPath', 'Get-FfprobePath',
-		'Get-AmfBaseArgs',
-		'Test-FFmpegAmfEncoderAvailable',
 		'Invoke-FFmpeg',
 		'Get-MediaFastHash'
 	)
