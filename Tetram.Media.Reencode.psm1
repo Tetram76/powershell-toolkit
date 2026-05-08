@@ -549,25 +549,24 @@ function Get-VideoEncoderArgs {
                 }
             }
 
-            @(
-                "-c:v:$StreamIndex", $amfCodec
-                "-rc:v:$StreamIndex", 'qvbr'
-                "-qvbr_quality_level:v:$StreamIndex", "$qvbrQualityLevel"
-                "-usage:v:$StreamIndex", 'transcoding'
-                "-quality:v:$StreamIndex", $amfQuality
-                "-profile:v:$StreamIndex", 'main'
-                "-pix_fmt:v:$StreamIndex", $PixFmt
-                "-preencode:v:$StreamIndex", 'true'
-                "-vbaq:v:$StreamIndex", 'true'
-                "-high_motion_quality_boost_enable:v:$StreamIndex", 'true'
-                "-preanalysis:v:$StreamIndex", 'true'
-                "-pa_taq_mode:v:$StreamIndex", '2'
-                "-pa_paq_mode:v:$StreamIndex", 'caq'
-                "-pa_caq_strength:v:$StreamIndex", 'medium'
-                "-pa_lookahead_buffer_depth:v:$StreamIndex", '41'
-                "-pa_high_motion_quality_boost_mode:v:$StreamIndex", 'auto'
-                "-pa_scene_change_detection_enable:v:$StreamIndex", 'true'
-            )
+            $baseAmf = Get-AmfBaseArgs -PixFmt $PixFmt
+            $amfStreamOpts = [System.Collections.Generic.List[string]]::new()
+            for ($i = 0; $i -lt $baseAmf.Count; $i += 2) {
+                $opt = $baseAmf[$i]
+                $val = $baseAmf[$i + 1]
+                $amfStreamOpts.Add("${opt}:v:$StreamIndex")
+                $amfStreamOpts.Add($val)
+                if ($opt -eq '-rc' -and $val -eq 'qvbr') {
+                    $amfStreamOpts.Add("-qvbr_quality_level:v:$StreamIndex")
+                    $amfStreamOpts.Add("$qvbrQualityLevel")
+                }
+                elseif ($opt -eq '-usage' -and $val -eq 'transcoding') {
+                    $amfStreamOpts.Add("-quality:v:$StreamIndex")
+                    $amfStreamOpts.Add($amfQuality)
+                }
+            }
+
+            @("-c:v:$StreamIndex", $amfCodec) + $amfStreamOpts.ToArray()
         }
         default {
             $codec = switch ($VideoCodec) {
