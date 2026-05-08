@@ -53,6 +53,8 @@ function Test-FFmpegAmfEncoderAvailable {
         '-f' 'lavfi' `
         '-i' 'color=size=320x240:rate=1:duration=0.04:color=black' `
         '-c:v' $Encoder `
+        '-rc' 'qvbr' `
+        '-qvbr_quality_level' '30' `
         '-frames:v' '1' `
         '-f' 'null' '-' | Out-Null
 
