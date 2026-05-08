@@ -1,6 +1,28 @@
 Set-StrictMode -Version 3.0
 
 $script:FFToolsDefaultBase = Join-Path $PSScriptRoot 'RecodeVideo\ffmpeg-8.0.1-full_build\bin'
+$script:AmfProbeCache = @{}
+
+function Get-AmfBaseArgs {
+    param([Parameter(Mandatory)] [string] $PixFmt)
+
+    @(
+        '-rc', 'qvbr'
+        '-usage', 'transcoding'
+        '-profile', 'main'
+        '-pix_fmt', $PixFmt
+        '-preencode', 'true'
+        '-vbaq', 'true'
+        '-high_motion_quality_boost_enable', 'true'
+        '-preanalysis', 'true'
+        '-pa_taq_mode', '2'
+        '-pa_paq_mode', 'caq'
+        '-pa_caq_strength', 'medium'
+        '-pa_lookahead_buffer_depth', '41'
+        '-pa_high_motion_quality_boost_mode', 'auto'
+        '-pa_scene_change_detection_enable', 'true'
+    )
+}
 
 function Get-FFmpegPath {
     param([string]$OverridePath)
@@ -35,28 +57,59 @@ function Get-FfprobePath {
 function Test-FFmpegAmfEncoderAvailable {
     param(
         [Parameter(Mandatory)] [string]$FFmpegPath,
-        [Parameter(Mandatory)] [ValidateSet('hevc_amf', 'av1_amf')] [string]$Encoder
+        [Parameter(Mandatory)] [ValidateSet('hevc_amf', 'av1_amf')] [string]$Encoder,
+        [string]$PixFmt = 'yuv420p'
     )
 
     if (-not (Test-Path -LiteralPath $FFmpegPath -PathType Leaf)) {
         return $false
     }
 
+    $cacheKey = "$Encoder|$PixFmt"
+    if ($script:AmfProbeCache.ContainsKey($cacheKey)) {
+        return $script:AmfProbeCache[$cacheKey]
+    }
+
     $encodersOutput = & $FFmpegPath '-hide_banner' '-encoders' 2>&1 | Out-String
     if (-not $encodersOutput -or $encodersOutput -notmatch "(?m)\b$([regex]::Escape($Encoder))\b") {
+        $script:AmfProbeCache[$cacheKey] = $false
         return $false
     }
 
-    & $FFmpegPath `
-        '-hide_banner' `
-        '-loglevel' 'error' `
-        '-f' 'lavfi' `
-        '-i' 'color=size=320x240:rate=1:duration=0.04:color=black' `
-        '-c:v' $Encoder `
-        '-frames:v' '1' `
-        '-f' 'null' '-' | Out-Null
+    $qvbrProbeLevel = if ($Encoder -eq 'av1_amf') { '40' } else { '32' }
+    $baseAmf = Get-AmfBaseArgs -PixFmt $PixFmt
+    $amfOpts = [System.Collections.Generic.List[string]]::new()
+    for ($i = 0; $i -lt $baseAmf.Count; $i += 2) {
+        $opt = $baseAmf[$i]
+        $val = $baseAmf[$i + 1]
+        $amfOpts.Add($opt)
+        $amfOpts.Add($val)
+        if ($opt -eq '-rc' -and $val -eq 'qvbr') {
+            $amfOpts.Add('-qvbr_quality_level')
+            $amfOpts.Add($qvbrProbeLevel)
+        }
+        elseif ($opt -eq '-usage' -and $val -eq 'transcoding') {
+            $amfOpts.Add('-quality')
+            $amfOpts.Add('balanced')
+        }
+    }
 
-    return ($LASTEXITCODE -eq 0)
+    $probeArgs = @(
+        '-hide_banner'
+        '-loglevel', 'error'
+        '-f', 'lavfi'
+        '-i', 'color=size=320x240:rate=1:duration=0.04:color=black'
+        '-c:v', $Encoder
+    ) + $amfOpts.ToArray() + @(
+        '-frames:v', '1'
+        '-f', 'null', '-'
+    )
+
+    & $FFmpegPath @probeArgs 2>&1 | Out-Null
+
+    $ok = ($LASTEXITCODE -eq 0)
+    $script:AmfProbeCache[$cacheKey] = $ok
+    return $ok
 }
 
 function Invoke-FFmpeg {
@@ -101,4 +154,4 @@ function Get-MediaFastHash {
     return "$size-$([System.BitConverter]::ToString($hash).Replace('-','').Substring(0,8))"
 }
 
-Export-ModuleMember -Function Get-FFmpegPath, Get-FfprobePath, Test-FFmpegAmfEncoderAvailable, Invoke-FFmpeg, Get-MediaFastHash
+Export-ModuleMember -Function Get-FFmpegPath, Get-FfprobePath, Get-AmfBaseArgs, Test-FFmpegAmfEncoderAvailable, Invoke-FFmpeg, Get-MediaFastHash

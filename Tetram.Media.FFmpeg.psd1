@@ -18,9 +18,10 @@
 
     # --- Export ---
     FunctionsToExport = @(
-		'Get-FFmpegPath', 'Get-FfprobePath', 
+		'Get-FFmpegPath', 'Get-FfprobePath',
+		'Get-AmfBaseArgs',
 		'Test-FFmpegAmfEncoderAvailable',
-		'Invoke-FFmpeg', 
+		'Invoke-FFmpeg',
 		'Get-MediaFastHash'
 	)
     CmdletsToExport = @()
