@@ -484,7 +484,7 @@ function Select-SubtitleStreams {
 		Write-Verbose "Select-SubtitleStreams >>`n $($SubtitleTracks | Format-List | Out-String)"
 		return @{
 			SubtitleTracks = $SubtitleTracks
-			HasAssSubtitles = ($null -ne $assSubtitles)
+			HasAssSubtitles = [bool]($SubtitleTracks | Where-Object { $_.codec_name -eq 'ass' -and ($_.__copy -or $_.__process) })
 		}
 	}
 	catch {
@@ -501,11 +501,14 @@ function Select-AttachmentStreams {
     Write-Verbose ">> Select-AttachmentStreams"
 	try {
 		$attachmentStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'attachment' }
-		$AttachmentTracks = $attachmentStreams | Select-Object codec_name
+		$AttachmentTracks = $attachmentStreams | Select-Object codec_name, tags
 		$i = -1
 		foreach ($stream in $AttachmentTracks) {
 			$stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
-			$keepStream = ($stream.codec_name -ne 'ttf') -or $HasAssSubtitles
+			$isFont = ($stream.codec_name -in @('ttf', 'otf')) -or
+			          ($stream.tags.mimetype -match '\bfont\b|truetype|opentype') -or
+			          ($stream.tags.filename -match '\.(ttf|otf|woff2?|ttc)$')
+			$keepStream = (-not $isFont) -or $HasAssSubtitles
 			Set-StreamProcessingState $stream $keepStream | Out-Null
 		}
 		
