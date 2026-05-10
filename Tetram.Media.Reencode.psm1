@@ -453,6 +453,7 @@ function Select-SubtitleStreams {
         [hashtable] $FfprobeOutput,
         [string] $FinalExtension,
         [bool] $AllowSubTitlesConversion,
+        [bool] $RewriteMode,
         [string[]] $SubTitlesToKeep,
         [string] $Filename,
         [string] $DirectoryName
@@ -462,8 +463,10 @@ function Select-SubtitleStreams {
 		$subtitleStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'subtitle' }
 		$SubtitleTracks = $subtitleStreams | Select-Object codec_name, tags
 		
-		if ($SubtitleTracks -and $FinalExtension -ieq '.mp4' -and -not $AllowSubTitlesConversion) {
-			return $null
+		if (-not $RewriteMode) {
+			if ($SubtitleTracks -and $FinalExtension -ieq '.mp4' -and -not $AllowSubTitlesConversion) {
+				return $null
+			}
 		}
 		
 		$assSubtitles = $SubtitleTracks | Where-Object { $_.codec_name -eq 'ass' }
@@ -471,8 +474,10 @@ function Select-SubtitleStreams {
 			$BaseName = [Path]::GetFileNameWithoutExtension($Filename)
 			$assSubtitles = Get-ChildItem -Path $DirectoryName -Filter "$BaseName.*.ass"
 		}
-		if ($assSubtitles -and $FinalExtension -ieq '.mp4' -and $AllowSubTitlesConversion) {
-			return $null
+		if (-not $RewriteMode) {
+			if ($assSubtitles -and $FinalExtension -ieq '.mp4' -and $AllowSubTitlesConversion) {
+				return $null
+			}
 		}
 		
 		$i = -1
@@ -483,7 +488,11 @@ function Select-SubtitleStreams {
 			} else {
 				$keepStream = [bool]((@('un','und') + $SubTitlesToKeep) | Where-Object { $_ -ieq $stream.tags.language })
 			}
-			$recode = ($FinalExtension -ieq '.mp4' -and $AllowSubTitlesConversion)
+			if ($RewriteMode -and $FinalExtension -ieq '.mp4') {
+				# En rewrite, seul mov_text peut être copié dans un conteneur mp4
+				$keepStream = $keepStream -and ($stream.codec_name -ieq 'mov_text')
+			}
+			$recode = if ($RewriteMode) { $false } else { $FinalExtension -ieq '.mp4' -and $AllowSubTitlesConversion }
 			$stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue ($keepStream -and $recode) -Force
 
 			Set-StreamProcessingState $stream $keepStream | Out-Null
@@ -823,6 +832,7 @@ function Invoke-ReencodeFile {
             -FfprobeOutput $ffprobeOutput `
             -FinalExtension $FinalExtension `
             -AllowSubTitlesConversion $Config.AllowSubTitlesConversion `
+            -RewriteMode $Config.Rewrite `
             -SubTitlesToKeep $Config.SubTitlesToKeep `
             -Filename $Filename `
             -DirectoryName $OriginalFile.DirectoryName
@@ -852,10 +862,17 @@ function Invoke-ReencodeFile {
             (@($subtitleResult.SubtitleTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0
         )
         
-        if (($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and ($hasSubtitlesToConvert -eq 0) -and
-            ($OriginalFile.Extension -ieq $FinalExtension) -and -not $hasTracksDropped) {
-            Write-InfoLog "No reencoding needed for '$Filename'"
-            return
+        if ($Config.Rewrite) {
+            if (-not $hasTracksDropped) {
+                Write-InfoLog "No stream filtering needed for '$Filename'"
+                return
+            }
+        } else {
+            if (($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and ($hasSubtitlesToConvert -eq 0) -and
+                ($OriginalFile.Extension -ieq $FinalExtension) -and -not $hasTracksDropped) {
+                Write-InfoLog "No reencoding needed for '$Filename'"
+                return
+            }
         }
         
         $mediaDuration = ($ffprobeOutput.format.Keys -contains "duration") ? $ffprobeOutput.format.duration : 0
@@ -1185,8 +1202,6 @@ function Invoke-ReencodeMedia {
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
         [Parameter(ParameterSetName = 'SetExtensionFromPath')]
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
         [switch] $AllowSubTitlesConversion,
         [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
