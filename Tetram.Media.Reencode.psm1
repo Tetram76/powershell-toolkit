@@ -859,7 +859,8 @@ function Invoke-ReencodeFile {
         $hasTracksDropped = (
             @(@($videoResult.VideoTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
             @(@($AudioTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
-            @(@($subtitleResult.SubtitleTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0
+            @(@($subtitleResult.SubtitleTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
+            @(@($AttachmentTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0
         )
         
         if ($Config.Rewrite) {
