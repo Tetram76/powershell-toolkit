@@ -852,10 +852,17 @@ function Invoke-ReencodeFile {
             (@($subtitleResult.SubtitleTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0
         )
         
-        if (($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and ($hasSubtitlesToConvert -eq 0) -and
-            ($OriginalFile.Extension -ieq $FinalExtension) -and -not $hasTracksDropped) {
-            Write-InfoLog "No reencoding needed for '$Filename'"
-            return
+        if ($Config.Rewrite) {
+            if (-not $hasTracksDropped) {
+                Write-InfoLog "No stream filtering needed for '$Filename'"
+                return
+            }
+        } else {
+            if (($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and ($hasSubtitlesToConvert -eq 0) -and
+                ($OriginalFile.Extension -ieq $FinalExtension) -and -not $hasTracksDropped) {
+                Write-InfoLog "No reencoding needed for '$Filename'"
+                return
+            }
         }
         
         $mediaDuration = ($ffprobeOutput.format.Keys -contains "duration") ? $ffprobeOutput.format.duration : 0
@@ -1185,8 +1192,6 @@ function Invoke-ReencodeMedia {
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
         [Parameter(ParameterSetName = 'SetExtensionFromPath')]
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
         [switch] $AllowSubTitlesConversion,
         [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
