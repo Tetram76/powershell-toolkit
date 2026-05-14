@@ -44,15 +44,16 @@ jobs:
             Invoke-ScriptAnalyzer -Path $script.FullName @invokeParams
           }
 
-          $errors = @($issues | Where-Object { $_.Severity -eq 'Error' })
+          # Échouer aussi sur ParseError (syntaxe / analyse), pas seulement sur Error — évite de merger du PowerShell invalide.
+          $failures = @($issues | Where-Object { $_.Severity -in @('ParseError', 'Error') })
 
-          if ($errors.Count -gt 0) {
-            $errors | Sort-Object RuleName, ScriptPath, Line | Format-Table -AutoSize RuleName, Severity, ScriptPath, Line, Message | Out-Host
-            Write-Host ("##[error]PSScriptAnalyzer reported {0} Error diagnostic(s)." -f $errors.Count)
+          if ($failures.Count -gt 0) {
+            $failures | Sort-Object Severity, RuleName, ScriptPath, Line | Format-Table -AutoSize RuleName, Severity, ScriptPath, Line, Message | Out-Host
+            Write-Host ("##[error]PSScriptAnalyzer reported {0} failing diagnostic(s) (ParseError or Error)." -f $failures.Count)
             exit 1
           }
 
-          Write-Host ('Analyzed {0} file(s); Error severity count: {1}.' -f $scripts.Count, $errors.Count)
+          Write-Host ('Analyzed {0} file(s); ParseError/Error count: {1}.' -f $scripts.Count, $failures.Count)
           exit 0
 
   pester:
