@@ -1,7 +1,7 @@
 @{
 # --- Identité du module ---
     RootModule = 'Tetram.Media.Reencode.psm1'
-    ModuleVersion = '2.5.0'
+    ModuleVersion = '2.6.0'
     GUID = 'd4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95'
 
     Author = 'TRL'
@@ -52,6 +52,7 @@
 - 2.3.0 : Switch AllowVideoCodecUpgrade (réencodage HEVC main* vers AV1 lorsque -VideoCodec AV1 ; absent des modes -CheckOnly).
 - 2.4.0 : Suppression du chemin GPU AMF (performance en mode Low inférieure au CPU).
 - 2.5.0 : Mode -Rewrite (ParameterSets RewriteFromPath / RewriteFromFile) : remux avec -c:v/-c:a copy, filtrage des pistes (sous-titres, vignettes) et nettoyage des métadonnées ; correction du skip lorsque seules des pistes sont retirées.
+- 2.6.0 : Contrôle d'intégrité de la durée après encodage (comparaison source/sortie avec tolérance configurable) ; correction de la détection des flux attached-picture et de la sonde de durée pilotée par la sélection de flux.
 '@
         }
     }
