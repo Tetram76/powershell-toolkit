@@ -187,6 +187,7 @@ function Get-DurationFromTags {
     foreach ($prefer in @('video', 'audio')) {
         foreach ($s in $arr) {
             if (-not ($s -is [hashtable]) -or $s['codec_type'] -ne $prefer) { continue }
+            if ($prefer -eq 'video' -and (Test-IsAttachedPicStream -Stream $s)) { continue }
             $tags = $s['tags']
             if (-not ($tags -is [hashtable])) { continue }
             $dur = $null
