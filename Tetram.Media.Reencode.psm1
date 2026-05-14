@@ -1,4 +1,5 @@
 using namespace System
+using namespace System.Collections.Generic
 using namespace System.IO
 
 Set-StrictMode -Version 3.0
@@ -113,6 +114,182 @@ function Get-FFprobeJson([string] $FFPROBE, [string] $File) {
     }
 }
 
+function Get-DurationFromFormat {
+    param([hashtable] $Probe)
+    if ($null -eq $Probe) { return $null }
+    $fmt = $Probe['format']
+    if (-not ($fmt -is [hashtable])) { return $null }
+    $d = $fmt['duration']
+    if ($null -eq $d) { return $null }
+    $ds = [string]$d
+    if ([string]::IsNullOrWhiteSpace($ds)) { return $null }
+    try {
+        $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
+        if ($sec -gt 0) { return $sec }
+    } catch { }
+    return $null
+}
+
+function Get-DurationFromStreams {
+    param([hashtable] $Probe)
+    if ($null -eq $Probe) { return $null }
+    $streams = $Probe['streams']
+    if ($null -eq $streams) { return $null }
+    $arr = @($streams)
+    $pick = $null
+    foreach ($s in $arr) {
+        if (-not ($s -is [hashtable])) { continue }
+        if ($s['codec_type'] -eq 'video') { $pick = $s; break }
+    }
+    if (-not $pick) {
+        foreach ($s in $arr) {
+            if ($s -is [hashtable] -and $s['codec_type'] -eq 'audio') { $pick = $s; break }
+        }
+    }
+    if (-not $pick) { return $null }
+    $d = $pick['duration']
+    if ($null -eq $d) { return $null }
+    $ds = [string]$d
+    if ([string]::IsNullOrWhiteSpace($ds)) { return $null }
+    try {
+        $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
+        if ($sec -gt 0) { return $sec }
+    } catch { }
+    return $null
+}
+
+function ConvertTo-DurationSeconds {
+    param([string] $Tag)
+    if ([string]::IsNullOrWhiteSpace($Tag)) { return $null }
+    $s = $Tag.Trim()
+    $dot = $s.IndexOf('.')
+    if ($dot -ge 0 -and ($s.Length - $dot - 1) -gt 7) {
+        $s = $s.Substring(0, $dot + 1 + 7)
+    }
+    try {
+        $ts = [TimeSpan]::Parse($s, [cultureinfo]::InvariantCulture)
+        $sec = $ts.TotalSeconds
+        if ($sec -gt 0) { return $sec }
+    } catch { }
+    return $null
+}
+
+function Get-DurationFromTags {
+    param([hashtable] $Probe)
+    if ($null -eq $Probe) { return $null }
+    $streams = $Probe['streams']
+    if ($null -eq $streams) { return $null }
+    $arr = @($streams)
+    foreach ($prefer in @('video', 'audio')) {
+        foreach ($s in $arr) {
+            if (-not ($s -is [hashtable]) -or $s['codec_type'] -ne $prefer) { continue }
+            $tags = $s['tags']
+            if (-not ($tags -is [hashtable])) { continue }
+            $dur = $null
+            foreach ($key in @('DURATION', 'duration')) {
+                if ($tags.ContainsKey($key)) { $dur = $tags[$key]; break }
+            }
+            if ($null -ne $dur) {
+                $parsed = ConvertTo-DurationSeconds -Tag ([string]$dur)
+                if ($null -ne $parsed) { return $parsed }
+            }
+        }
+    }
+    return $null
+}
+
+function Get-DurationFromPacketCount {
+    param(
+        [string] $FFPROBE,
+        [string] $File
+    )
+    if ([string]::IsNullOrWhiteSpace($File) -or -not [File]::Exists($File)) { return $null }
+    $ffprobeArgs = @(
+        $File,
+        '-v', 'error',
+        '-select_streams', 'v:0',
+        '-count_packets',
+        '-show_entries', 'stream=nb_read_packets,r_frame_rate',
+        '-of', 'json'
+    )
+    $out = & $FFPROBE $ffprobeArgs 2>$null | Out-String
+    if (-not $?) { return $null }
+    try {
+        $j = ConvertFrom-Json -InputObject $out -AsHashtable
+    } catch { return $null }
+    $streams = $j['streams']
+    if ($null -eq $streams) { return $null }
+    $st = @($streams)[0]
+    if (-not ($st -is [hashtable])) { return $null }
+    $nb = $st['nb_read_packets']
+    $rfr = $st['r_frame_rate']
+    if ($null -eq $nb -or $null -eq $rfr) { return $null }
+    try {
+        $n = [long]::Parse([string]$nb, [cultureinfo]::InvariantCulture)
+    } catch { return $null }
+    if ($n -le 0) { return $null }
+    $rate = [string]$rfr
+    if ($rate -match '^(\d+)/(\d+)$') {
+        $num = [double]$Matches[1]
+        $den = [double]$Matches[2]
+        if ($num -le 0 -or $den -le 0) { return $null }
+        return $n * $den / $num
+    }
+    try {
+        $fps = [double]::Parse($rate, [cultureinfo]::InvariantCulture)
+        if ($fps -le 0) { return $null }
+        return $n / $fps
+    } catch { return $null }
+}
+
+function Get-ComparableDurationPair {
+    param(
+        [Parameter(Mandatory)] [string] $FFPROBE,
+        [Parameter(Mandatory)] [hashtable] $SourceProbe,
+        [Parameter(Mandatory)] [string] $SourceFile,
+        [Parameter(Mandatory)] [string] $TempFile
+    )
+
+    [hashtable] $tempProbe = $null
+
+    $s = Get-DurationFromFormat -Probe $SourceProbe
+    if ($null -ne $s) {
+        $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile
+        $t = Get-DurationFromFormat -Probe $tempProbe
+        if ($null -ne $t) {
+            return [pscustomobject]@{ Method = 'format'; Source = $s; Temp = $t }
+        }
+    }
+
+    $s = Get-DurationFromStreams -Probe $SourceProbe
+    if ($null -ne $s) {
+        if ($null -eq $tempProbe) { $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile }
+        $t = Get-DurationFromStreams -Probe $tempProbe
+        if ($null -ne $t) {
+            return [pscustomobject]@{ Method = 'stream'; Source = $s; Temp = $t }
+        }
+    }
+
+    $s = Get-DurationFromTags -Probe $SourceProbe
+    if ($null -ne $s) {
+        if ($null -eq $tempProbe) { $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile }
+        $t = Get-DurationFromTags -Probe $tempProbe
+        if ($null -ne $t) {
+            return [pscustomobject]@{ Method = 'tag'; Source = $s; Temp = $t }
+        }
+    }
+
+    $s = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $SourceFile
+    if ($null -ne $s) {
+        $t = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $TempFile
+        if ($null -ne $t) {
+            return [pscustomobject]@{ Method = 'count'; Source = $s; Temp = $t }
+        }
+    }
+
+    return [pscustomobject]@{ Method = 'unknown'; Source = $null; Temp = $null }
+}
+
 function Invoke-FFmpeg {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
@@ -183,6 +360,50 @@ function Get-SortedFileList {
 # Fonctions privées de traitement
 # -----------------------------------------------------------------------------
 
+function Test-EncodedFileIntegrity {
+    param(
+        [Parameter(Mandatory)] [string] $FFPROBE,
+        [Parameter(Mandatory)] [hashtable] $SourceProbe,
+        [Parameter(Mandatory)] [string] $SourceFile,
+        [Parameter(Mandatory)] [string] $TempFile,
+        [double] $TolerancePercent = 0.5,
+        [double] $ToleranceSecondsMin = 1.0
+    )
+
+    $pair = Get-ComparableDurationPair -FFPROBE $FFPROBE -SourceProbe $SourceProbe -SourceFile $SourceFile -TempFile $TempFile
+    if ($pair.Method -eq 'unknown') {
+        return [pscustomobject]@{
+            Status   = 'unknown'
+            Method   = 'unknown'
+            Expected = $null
+            Actual   = $null
+            Diff     = $null
+        }
+    }
+
+    $expected = $pair.Source
+    $actual = $pair.Temp
+    $tolerance = [math]::Max($ToleranceSecondsMin, $expected * $TolerancePercent / 100.0)
+    $diff = [math]::Abs($expected - $actual)
+    if ($diff -gt $tolerance) {
+        return [pscustomobject]@{
+            Status   = 'mismatch'
+            Method   = $pair.Method
+            Expected = $expected
+            Actual   = $actual
+            Diff     = $diff
+        }
+    }
+
+    return [pscustomobject]@{
+        Status   = 'ok'
+        Method   = $pair.Method
+        Expected = $expected
+        Actual   = $actual
+        Diff     = $diff
+    }
+}
+
 function Initialize-ReencodeState {
     param(
         [string] $TempPath
@@ -192,6 +413,8 @@ function Initialize-ReencodeState {
         ErrorLog = 'reencode-errors.log'
         BaseTempFilename = Join-Path $TempPath ([guid]::NewGuid().ToString())
         Attempts = 0
+        IntegrityWarningFiles = [List[string]]::new()
+        IntegrityFailureFiles = [List[string]]::new()
         SessionResult = [EncodingResult]::new()
     }
     
@@ -920,6 +1143,29 @@ function Invoke-ReencodeFile {
         
         if (-not $ok) { return }
         
+        if (Test-Path -LiteralPath $TempFilename -PathType Leaf) {
+            $integrity = Test-EncodedFileIntegrity `
+                -FFPROBE $Config.FFPROBEPath `
+                -SourceProbe $ffprobeOutput `
+                -SourceFile $Filename `
+                -TempFile $TempFilename
+
+            switch ($integrity.Status) {
+                'mismatch' {
+                    $msg = "Incomplete encoding for '{0}' [via {1}] - expected {2:0.000}s, got {3:0.000}s (diff {4:0.000}s)" -f `
+                        $Filename, $integrity.Method, $integrity.Expected, $integrity.Actual, $integrity.Diff
+                    Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
+                    [void]$State.IntegrityFailureFiles.Add($Filename)
+                    return
+                }
+                'unknown' {
+                    $msg = "Integrity check inconclusive for '$Filename' - no comparable duration method - accepting file"
+                    Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
+                    [void]$State.IntegrityWarningFiles.Add($Filename)
+                }
+            }
+        }
+        
         if ($Cmdlet.ShouldProcess($TempFilename, "Move temp over original '$Filename'")) {
             Move-Item -Path $TempFilename -Destination $Filename -Force
         }
@@ -1315,6 +1561,19 @@ function Invoke-ReencodeMedia {
     finally {
         $state.SessionResult.WriteReport('Green', 'This session, ', $true)
         Write-InfoLog -Color Green "On $($state.Attempts) ffmpeg invocation(s)" -Force
+
+        if ($state.IntegrityFailureFiles.Count -gt 0) {
+            Write-InfoLog -Color Red ("{0} file(s) rejected by integrity check (originals preserved):" -f $state.IntegrityFailureFiles.Count) -Force
+            foreach ($f in $state.IntegrityFailureFiles) {
+                Write-InfoLog -Color Red "  - $f" -Force
+            }
+        }
+        if ($state.IntegrityWarningFiles.Count -gt 0) {
+            Write-InfoLog -Color Yellow ("{0} file(s) accepted with integrity warning (duration unverifiable):" -f $state.IntegrityWarningFiles.Count) -Force
+            foreach ($f in $state.IntegrityWarningFiles) {
+                Write-InfoLog -Color Yellow "  - $f" -Force
+            }
+        }
     }
 }
 
