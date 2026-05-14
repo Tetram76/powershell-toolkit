@@ -1,0 +1,66 @@
+name: CI PowerShell
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  psscriptanalyzer:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+
+          $settingsPath = Join-Path $env:GITHUB_WORKSPACE '.PSScriptAnalyzerSettings.psd1'
+          $invokeParams = @{}
+          if (Test-Path -LiteralPath $settingsPath) {
+            $invokeParams.Settings = $settingsPath
+          }
+
+          $scripts = @(Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Recurse -File |
+            Where-Object {
+              $_.Extension -in @('.ps1', '.psm1') -and
+              $_.FullName -notmatch '(?i)[\\/]\.git[\\/]'
+            })
+
+          if ($scripts.Count -eq 0) {
+            Write-Warning 'No .ps1 or .psm1 files found under the repository root.'
+            exit 0
+          }
+
+          $issues = foreach ($script in $scripts) {
+            Invoke-ScriptAnalyzer -Path $script.FullName @invokeParams
+          }
+
+          $errors = @($issues | Where-Object { $_.Severity -eq 'Error' })
+
+          if ($errors.Count -gt 0) {
+            $errors | Sort-Object RuleName, ScriptPath, Line | Format-Table -AutoSize RuleName, Severity, ScriptPath, Line, Message | Out-Host
+            Write-Host ("##[error]PSScriptAnalyzer reported {0} Error diagnostic(s)." -f $errors.Count)
+            exit 1
+          }
+
+          Write-Host ('Analyzed {0} file(s); Error severity count: {1}.' -f $scripts.Count, $errors.Count)
+          exit 0
+
+  pester:
+    name: Pester
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Pester
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Install-Module Pester -Force -Scope CurrentUser
+          Invoke-Pester -Path ./tests -CI
