@@ -16,8 +16,8 @@
     RequiredModules = @()
     RequiredAssemblies = @()
     NestedModules = @(
-        '.\Tetram.Common',
-        '.\Tetram.Media.FFmpeg'
+        '.\Utils\Tetram.Common',
+        '.\Utils\Tetram.Media.FFmpeg'
     )
 
     # --- Export ---

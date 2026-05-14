@@ -25,10 +25,10 @@
     # dot-sourcing de .ps1 place leurs fonctions directement dans le scope du
     # root, où toutes les dépendances sont visibles.
     NestedModules = @(
-        '.\Tetram.Common',
-        '.\Tetram.Media.VideoUtils',
-        '.\Tetram.Media.AudioUtils',
-        '.\Tetram.Media.FFmpeg'
+        '.\Utils\Tetram.Common',
+        '.\Utils\Tetram.Media.VideoUtils',
+        '.\Utils\Tetram.Media.AudioUtils',
+        '.\Utils\Tetram.Media.FFmpeg'
     )
 
     # --- Export ---
