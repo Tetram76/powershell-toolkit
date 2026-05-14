@@ -1,8 +1,12 @@
 name: CI PowerShell
 
+# pull_request : CI sur les PR (opened / synchronize). push sur main uniquement : évite
+# deux courses identiques à chaque push sur une branche de PR (push + synchronize).
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
 
 jobs:
   psscriptanalyzer:
