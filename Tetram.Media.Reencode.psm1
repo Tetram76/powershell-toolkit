@@ -191,31 +191,14 @@ function Get-DurationFromFormat
     return $null
 }
 
-function Test-IsAttachedPicStream
-{
-    param([hashtable] $Stream)
-    if (-not ($Stream -is [hashtable]))
-    {
-        return $false
-    }
-    $disp = $Stream['disposition']
-    if (-not ($disp -is [hashtable]))
-    {
-        return $false
-    }
-    try
-    {
-        return ([int]$disp['attached_pic']) -eq 1
-    }
-    catch
-    {
-        return $false
-    }
-}
 
 function Get-DurationFromStreams
 {
-    param([hashtable] $Probe)
+    param(
+        [hashtable] $Probe,
+        [int[]] $KeptSourceVideoIndices = $null,
+        [int[]] $KeptSourceAudioIndices = $null
+    )
     if ($null -eq $Probe)
     {
         return $null
@@ -228,6 +211,15 @@ function Get-DurationFromStreams
     $arr = @($streams)
     foreach ($prefer in @('video', 'audio'))
     {
+        $kept = if ($prefer -eq 'video')
+        {
+            $KeptSourceVideoIndices
+        }
+        else
+        {
+            $KeptSourceAudioIndices
+        }
+        $relIdx = -1
         foreach ($s in $arr)
         {
             if (-not ($s -is [hashtable]))
@@ -238,7 +230,8 @@ function Get-DurationFromStreams
             {
                 continue
             }
-            if ($prefer -eq 'video' -and (Test-IsAttachedPicStream -Stream $s))
+            $relIdx++
+            if ($null -ne $kept -and -not ($kept -contains $relIdx))
             {
                 continue
             }
@@ -298,7 +291,11 @@ function ConvertTo-DurationSeconds
 
 function Get-DurationFromTags
 {
-    param([hashtable] $Probe)
+    param(
+        [hashtable] $Probe,
+        [int[]] $KeptSourceVideoIndices = $null,
+        [int[]] $KeptSourceAudioIndices = $null
+    )
     if ($null -eq $Probe)
     {
         return $null
@@ -311,13 +308,23 @@ function Get-DurationFromTags
     $arr = @($streams)
     foreach ($prefer in @('video', 'audio'))
     {
+        $kept = if ($prefer -eq 'video')
+        {
+            $KeptSourceVideoIndices
+        }
+        else
+        {
+            $KeptSourceAudioIndices
+        }
+        $relIdx = -1
         foreach ($s in $arr)
         {
             if (-not ($s -is [hashtable]) -or $s['codec_type'] -ne $prefer)
             {
                 continue
             }
-            if ($prefer -eq 'video' -and (Test-IsAttachedPicStream -Stream $s))
+            $relIdx++
+            if ($null -ne $kept -and -not ($kept -contains $relIdx))
             {
                 continue
             }
@@ -351,16 +358,21 @@ function Get-DurationFromPacketCount
 {
     param(
         [string] $FFPROBE,
-        [string] $File
+        [string] $File,
+        [int] $StreamIndex = 0
     )
     if ([string]::IsNullOrWhiteSpace($File) -or -not [File]::Exists($File))
+    {
+        return $null
+    }
+    if ($StreamIndex -lt 0)
     {
         return $null
     }
     $ffprobeArgs = @(
         $File,
         '-v', 'error',
-        '-select_streams', 'V:0',
+        '-select_streams', "v:$StreamIndex",
         '-count_packets',
         '-show_entries', 'stream=nb_read_packets,r_frame_rate',
         '-of', 'json'
@@ -438,7 +450,9 @@ function Get-ComparableDurationPair
         [Parameter(Mandatory)] [string] $FFPROBE,
         [Parameter(Mandatory)] [hashtable] $SourceProbe,
         [Parameter(Mandatory)] [string] $SourceFile,
-        [Parameter(Mandatory)] [string] $TempFile
+        [Parameter(Mandatory)] [string] $TempFile,
+        [int[]] $KeptSourceVideoIndices = $null,
+        [int[]] $KeptSourceAudioIndices = $null
     )
 
     [hashtable]$tempProbe = $null
@@ -454,7 +468,7 @@ function Get-ComparableDurationPair
         }
     }
 
-    $s = Get-DurationFromStreams -Probe $SourceProbe
+    $s = Get-DurationFromStreams -Probe $SourceProbe -KeptSourceVideoIndices $KeptSourceVideoIndices -KeptSourceAudioIndices $KeptSourceAudioIndices
     if ($null -ne $s)
     {
         if ($null -eq $tempProbe)
@@ -468,7 +482,7 @@ function Get-ComparableDurationPair
         }
     }
 
-    $s = Get-DurationFromTags -Probe $SourceProbe
+    $s = Get-DurationFromTags -Probe $SourceProbe -KeptSourceVideoIndices $KeptSourceVideoIndices -KeptSourceAudioIndices $KeptSourceAudioIndices
     if ($null -ne $s)
     {
         if ($null -eq $tempProbe)
@@ -482,13 +496,29 @@ function Get-ComparableDurationPair
         }
     }
 
-    $s = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $SourceFile
-    if ($null -ne $s)
+    $srcVideoIdx = if ($null -ne $KeptSourceVideoIndices -and $KeptSourceVideoIndices.Count -gt 0)
     {
-        $t = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $TempFile
-        if ($null -ne $t)
+        $KeptSourceVideoIndices[0]
+    }
+    elseif ($null -eq $KeptSourceVideoIndices)
+    {
+        0
+    }
+    else
+    {
+        $null
+    }
+
+    if ($null -ne $srcVideoIdx)
+    {
+        $s = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $SourceFile -StreamIndex $srcVideoIdx
+        if ($null -ne $s)
         {
-            return [pscustomobject]@{ Method = 'count'; Source = $s; Temp = $t }
+            $t = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $TempFile -StreamIndex 0
+            if ($null -ne $t)
+            {
+                return [pscustomobject]@{ Method = 'count'; Source = $s; Temp = $t }
+            }
         }
     }
 
@@ -591,10 +621,12 @@ function Test-EncodedFileIntegrity
         [Parameter(Mandatory)] [string] $SourceFile,
         [Parameter(Mandatory)] [string] $TempFile,
         [double] $TolerancePercent = 0.5,
-        [double] $ToleranceSecondsMin = 1.0
+        [double] $ToleranceSecondsMin = 1.0,
+        [int[]] $KeptSourceVideoIndices = $null,
+        [int[]] $KeptSourceAudioIndices = $null
     )
 
-    $pair = Get-ComparableDurationPair -FFPROBE $FFPROBE -SourceProbe $SourceProbe -SourceFile $SourceFile -TempFile $TempFile
+    $pair = Get-ComparableDurationPair -FFPROBE $FFPROBE -SourceProbe $SourceProbe -SourceFile $SourceFile -TempFile $TempFile -KeptSourceVideoIndices $KeptSourceVideoIndices -KeptSourceAudioIndices $KeptSourceAudioIndices
     if ($pair.Method -eq 'unknown')
     {
         return [pscustomobject]@{
@@ -1648,11 +1680,24 @@ function Invoke-ReencodeFile
 
         if (-not $WhatIfPreference -and (Test-Path -LiteralPath $TempFilename -PathType Leaf))
         {
+            $keptSourceVideoIndices = @(
+            $videoResult.VideoTracks |
+                    Where-Object { $_.__copy -or $_.__process } |
+                    ForEach-Object { [int]$_._index }
+            )
+            $keptSourceAudioIndices = @(
+            $AudioTracks |
+                    Where-Object { $_.__copy -or $_.__process } |
+                    ForEach-Object { [int]$_._index }
+            )
+
             $integrity = Test-EncodedFileIntegrity `
                 -FFPROBE $Config.FFPROBEPath `
                 -SourceProbe $ffprobeOutput `
                 -SourceFile $Filename `
-                -TempFile $TempFilename
+                -TempFile $TempFilename `
+                -KeptSourceVideoIndices $keptSourceVideoIndices `
+                -KeptSourceAudioIndices $keptSourceAudioIndices
 
             switch ($integrity.Status)
             {
