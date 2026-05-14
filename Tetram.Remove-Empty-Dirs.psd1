@@ -16,7 +16,7 @@
     RequiredModules = @()
     RequiredAssemblies = @()
     NestedModules = @(
-        '.\Tetram.Common'
+        '.\Utils\Tetram.Common'
     )
 
     # --- Export ---
