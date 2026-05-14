@@ -1,7 +1,5 @@
-
 BeforeAll {
     Set-StrictMode -Version Latest
-    # tests/Utils => two parents up = repo root
     $script:RepoRootCommon = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
     $script:ManifestPathCommon = Join-Path $script:RepoRootCommon 'Utils/Tetram.Common.psd1'
     Import-Module -Name $script:ManifestPathCommon -Force -ErrorAction Stop

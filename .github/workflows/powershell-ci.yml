@@ -1,7 +1,5 @@
 name: CI PowerShell
 
-# pull_request : CI sur les PR (opened / synchronize). push sur main uniquement : évite
-# deux courses identiques à chaque push sur une branche de PR (push + synchronize).
 on:
   pull_request:
   push:
@@ -29,7 +27,6 @@ jobs:
             $invokeParams.Settings = $settingsPath
           }
 
-          # Inclure .psd1 (manifestes de modules) pour détecter parse / erreurs sur les manifests, pas seulement .ps1/.psm1.
           $scripts = @(Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Recurse -File |
             Where-Object {
               $_.Extension -in @('.ps1', '.psm1', '.psd1') -and
@@ -45,7 +42,6 @@ jobs:
             Invoke-ScriptAnalyzer -Path $script.FullName @invokeParams
           }
 
-          # Échouer aussi sur ParseError (syntaxe / analyse), pas seulement sur Error — évite de merger du PowerShell invalide.
           $failures = @($issues | Where-Object { $_.Severity -in @('ParseError', 'Error') })
 
           if ($failures.Count -gt 0) {
