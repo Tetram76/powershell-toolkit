@@ -1143,7 +1143,7 @@ function Invoke-ReencodeFile {
         
         if (-not $ok) { return }
         
-        if (Test-Path -LiteralPath $TempFilename -PathType Leaf) {
+        if (-not $WhatIfPreference -and (Test-Path -LiteralPath $TempFilename -PathType Leaf)) {
             $integrity = Test-EncodedFileIntegrity `
                 -FFPROBE $Config.FFPROBEPath `
                 -SourceProbe $ffprobeOutput `
