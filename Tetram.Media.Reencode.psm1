@@ -130,31 +130,35 @@ function Get-DurationFromFormat {
     return $null
 }
 
+function Test-IsAttachedPicStream {
+    param([hashtable] $Stream)
+    if (-not ($Stream -is [hashtable])) { return $false }
+    $disp = $Stream['disposition']
+    if (-not ($disp -is [hashtable])) { return $false }
+    try { return ([int]$disp['attached_pic']) -eq 1 } catch { return $false }
+}
+
 function Get-DurationFromStreams {
     param([hashtable] $Probe)
     if ($null -eq $Probe) { return $null }
     $streams = $Probe['streams']
     if ($null -eq $streams) { return $null }
     $arr = @($streams)
-    $pick = $null
-    foreach ($s in $arr) {
-        if (-not ($s -is [hashtable])) { continue }
-        if ($s['codec_type'] -eq 'video') { $pick = $s; break }
-    }
-    if (-not $pick) {
+    foreach ($prefer in @('video', 'audio')) {
         foreach ($s in $arr) {
-            if ($s -is [hashtable] -and $s['codec_type'] -eq 'audio') { $pick = $s; break }
+            if (-not ($s -is [hashtable])) { continue }
+            if ($s['codec_type'] -ne $prefer) { continue }
+            if ($prefer -eq 'video' -and (Test-IsAttachedPicStream -Stream $s)) { continue }
+            $d = $s['duration']
+            if ($null -eq $d) { continue }
+            $ds = [string]$d
+            if ([string]::IsNullOrWhiteSpace($ds)) { continue }
+            try {
+                $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
+                if ($sec -gt 0) { return $sec }
+            } catch { }
         }
     }
-    if (-not $pick) { return $null }
-    $d = $pick['duration']
-    if ($null -eq $d) { return $null }
-    $ds = [string]$d
-    if ([string]::IsNullOrWhiteSpace($ds)) { return $null }
-    try {
-        $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
-        if ($sec -gt 0) { return $sec }
-    } catch { }
     return $null
 }
 
@@ -207,7 +211,7 @@ function Get-DurationFromPacketCount {
     $ffprobeArgs = @(
         $File,
         '-v', 'error',
-        '-select_streams', 'v:0',
+        '-select_streams', 'V:0',
         '-count_packets',
         '-show_entries', 'stream=nb_read_packets,r_frame_rate',
         '-of', 'json'
