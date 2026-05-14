@@ -1,4 +1,5 @@
 using namespace System
+using namespace System.Collections.Generic
 using namespace System.IO
 
 Set-StrictMode -Version 3.0
@@ -6,72 +7,102 @@ Set-StrictMode -Version 3.0
 # -----------------------------------------------------------------------------
 # Types et enums
 # -----------------------------------------------------------------------------
-class EncodingResult {
+class EncodingResult
+{
     [long] $OriginalSize = 0
     [long] $ReencodedSize = 0
     [TimeSpan] $Duration = 0
     [TimeSpan] $ElapsedTime = 0
     [int] $Count = 0
 
-    EncodingResult() {
-	}
-    
-	EncodingResult([long] $o, [long] $r) {
-		$this.OriginalSize = $o; 
-		$this.ReencodedSize = $r; 
-		$this.Count = 1 
-	}
-	
-    EncodingResult([long] $o, [long] $r, [TimeSpan] $d, [TimeSpan] $e) {
-        $this.OriginalSize = $o;
-		$this.ReencodedSize = $r;
-		$this.Duration = $d; 
-		$this.ElapsedTime = $e; 
-		$this.Count = 1
+    EncodingResult()
+    {
     }
 
-    [void] Add([EncodingResult] $Other) {
-		$this.OriginalSize += $Other.OriginalSize
-		$this.ReencodedSize += $Other.ReencodedSize
-		$this.Duration += $Other.Duration
-		$this.ElapsedTime += $Other.ElapsedTime
-		$this.Count += $Other.Count
+    EncodingResult([long] $o, [long] $r)
+    {
+        $this.OriginalSize = $o;
+        $this.ReencodedSize = $r;
+        $this.Count = 1
     }
-	
-    [string] SizeReport() {
-        if ($this.Count -eq 0 -or $this.OriginalSize -eq 0 -or $this.ReencodedSize -eq 0) { return '' }
+
+    EncodingResult([long] $o, [long] $r, [TimeSpan] $d, [TimeSpan] $e)
+    {
+        $this.OriginalSize = $o;
+        $this.ReencodedSize = $r;
+        $this.Duration = $d;
+        $this.ElapsedTime = $e;
+        $this.Count = 1
+    }
+
+    [void]
+    Add([EncodingResult] $Other)
+    {
+        $this.OriginalSize += $Other.OriginalSize
+        $this.ReencodedSize += $Other.ReencodedSize
+        $this.Duration += $Other.Duration
+        $this.ElapsedTime += $Other.ElapsedTime
+        $this.Count += $Other.Count
+    }
+
+    [string]
+    SizeReport()
+    {
+        if ($this.Count -eq 0 -or $this.OriginalSize -eq 0 -or $this.ReencodedSize -eq 0)
+        {
+            return ''
+        }
         $saved = $this.OriginalSize - $this.ReencodedSize
         return ("{0} reencoded into {1} ({2:0.00}:1, {3:0.00} %, {4} disk space saved)" -f
-            (Format-FileSize -Size $this.OriginalSize),
-            (Format-FileSize -Size $this.ReencodedSize),
-            ($this.OriginalSize / $this.ReencodedSize),
-            ($saved / $this.OriginalSize * 100),
-            (Format-FileSize -Size $saved))
+        (Format-FileSize -Size $this.OriginalSize),
+        (Format-FileSize -Size $this.ReencodedSize),
+        ($this.OriginalSize / $this.ReencodedSize),
+        ($saved / $this.OriginalSize * 100),
+        (Format-FileSize -Size $saved))
     }
-	
-    [string] TimeReport() {
-        if ($this.Count -eq 0 -or $this.Duration -eq 0 -or $this.ElapsedTime -eq 0) { return '' }
-        return ("{0} reencoded in {1} (Speed: x{2:0.00})" -f
-            (Format-Duration -TimeSpan $this.Duration),
-            (Format-Duration -TimeSpan $this.ElapsedTime),
-            ($this.Duration / $this.ElapsedTime))
-    }
-	
-	[void] WriteReport([ConsoleColor] $Color, [string] $Prefix, [bool] $Force) {
-        if (-not [string]::IsNullOrWhiteSpace($Prefix)) {
-            if ($this.Count -eq 0) { Write-InfoLog -Color $Color ("{0}no reencoded file" -f $Prefix) -Force:$Force; return }
-            Write-InfoLog -Color $Color ($Prefix + "$($this.Count) reencoded file(s)") -Force:$Force
+
+    [string]
+    TimeReport()
+    {
+        if ($this.Count -eq 0 -or $this.Duration -eq 0 -or $this.ElapsedTime -eq 0)
+        {
+            return ''
         }
-        $size = $this.SizeReport(); if ($size) { Write-InfoLog -Color $Color $size -Force:$Force }
-        if ($this.Duration -gt 0) {
-            $time = $this.TimeReport(); if ($time) { Write-InfoLog -Color $Color $time -Force:$Force }
+        return ("{0} reencoded in {1} (Speed: x{2:0.00})" -f
+        (Format-Duration -TimeSpan $this.Duration),
+        (Format-Duration -TimeSpan $this.ElapsedTime),
+        ($this.Duration / $this.ElapsedTime))
+    }
+
+    [void]
+    WriteReport([ConsoleColor] $Color, [string] $Prefix, [bool] $Force)
+    {
+        if (-not [string]::IsNullOrWhiteSpace($Prefix))
+        {
+            if ($this.Count -eq 0)
+            {
+                Write-InfoLog -Color $Color ("{0}no reencoded file" -f $Prefix) -Force:$Force; return
+            }
+            Write-InfoLog -Color $Color ($Prefix + "$( $this.Count ) reencoded file(s)") -Force:$Force
+        }
+        $size = $this.SizeReport(); if ($size)
+        {
+            Write-InfoLog -Color $Color $size -Force:$Force
+        }
+        if ($this.Duration -gt 0)
+        {
+            $time = $this.TimeReport(); if ($time)
+            {
+                Write-InfoLog -Color $Color $time -Force:$Force
+            }
         }
     }
 }
 
-enum Upscale {
-    x      = -1
-    x720p  = 720
+enum Upscale
+{
+    x = -1
+    x720p = 720
     x1080p = 1080
     x2160p = 2160
     x4320p = 4320
@@ -80,102 +111,501 @@ enum Upscale {
 # -----------------------------------------------------------------------------
 # Helpers média (internes au module)
 # -----------------------------------------------------------------------------
-function Set-StreamProcessingState {
+function Set-StreamProcessingState
+{
     param(
-		[Parameter(Mandatory)] [pscustomobject] $stream,
+        [Parameter(Mandatory)] [pscustomobject] $stream,
         [bool] $keepStream
-	)
-	
+    )
+
     $hasTrueProperty = $stream.PSObject.Properties |
-        Where-Object { $_.Name -like '__*' -and $_.Value -eq $true } |
-        ForEach-Object { $true } | Select-Object -First 1 -OutVariable hasResult
-    if (-not $hasResult) { $hasTrueProperty = $false }
+            Where-Object { $_.Name -like '__*' -and $_.Value -eq $true } |
+            ForEach-Object { $true } | Select-Object -First 1 -OutVariable hasResult
+    if (-not $hasResult)
+    {
+        $hasTrueProperty = $false
+    }
 
     $stream | Add-Member -NotePropertyName '__process' -NotePropertyValue $hasTrueProperty -Force
     $stream | Add-Member -NotePropertyName '__copy'    -NotePropertyValue ($keepStream -and -not $hasTrueProperty) -Force
 }
 
-function Get-FFprobeJson([string] $FFPROBE, [string] $File) {
+function Get-FFprobeJson([string] $FFPROBE, [string] $File)
+{
     $ffprobeArgs = @(
-		$File,
-		'-v', 'quiet'
-		'-show_format'
-		'-show_streams'
-		'-of', 'json'
-	)
-	
+        $File,
+        '-v', 'quiet'
+        '-show_format'
+        '-show_streams'
+        '-of', 'json'
+    )
+
     $out = & $FFPROBE $ffprobeArgs | Out-String
-    if (-not $?) { Write-ErrorLog "Can't get media info for '$File'"; return $null }
-    try { 
-		return (ConvertFrom-Json -InputObject $out -AsHashtable)
-	} catch {
-        Write-ErrorLog "Invalid ffprobe json for '$File' — $($_.Exception.Message)"; return $null
+    if (-not $?)
+    {
+        Write-ErrorLog "Can't get media info for '$File'"; return $null
+    }
+    try
+    {
+        return (ConvertFrom-Json -InputObject $out -AsHashtable)
+    }
+    catch
+    {
+        Write-ErrorLog "Invalid ffprobe json for '$File' — $( $_.Exception.Message )"; return $null
     }
 }
 
-function Invoke-FFmpeg {
+function Get-DurationFromFormat
+{
+    param([hashtable] $Probe)
+    if ($null -eq $Probe)
+    {
+        return $null
+    }
+    $fmt = $Probe['format']
+    if (-not ($fmt -is [hashtable]))
+    {
+        return $null
+    }
+    $d = $fmt['duration']
+    if ($null -eq $d)
+    {
+        return $null
+    }
+    $ds = [string]$d
+    if ( [string]::IsNullOrWhiteSpace($ds))
+    {
+        return $null
+    }
+    try
+    {
+        $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
+        if ($sec -gt 0)
+        {
+            return $sec
+        }
+    }
+    catch
+    {
+    }
+    return $null
+}
+
+
+function Get-DurationFromStreams
+{
+    param(
+        [hashtable] $Probe,
+        [int[]] $KeptSourceVideoIndices = $null,
+        [int[]] $KeptSourceAudioIndices = $null
+    )
+    if ($null -eq $Probe)
+    {
+        return $null
+    }
+    $streams = $Probe['streams']
+    if ($null -eq $streams)
+    {
+        return $null
+    }
+    $arr = @($streams)
+    foreach ($prefer in @('video', 'audio'))
+    {
+        $kept = if ($prefer -eq 'video')
+        {
+            $KeptSourceVideoIndices
+        }
+        else
+        {
+            $KeptSourceAudioIndices
+        }
+        $relIdx = -1
+        foreach ($s in $arr)
+        {
+            if (-not ($s -is [hashtable]))
+            {
+                continue
+            }
+            if ($s['codec_type'] -ne $prefer)
+            {
+                continue
+            }
+            $relIdx++
+            if ($null -ne $kept -and -not ($kept -contains $relIdx))
+            {
+                continue
+            }
+            $d = $s['duration']
+            if ($null -eq $d)
+            {
+                continue
+            }
+            $ds = [string]$d
+            if ( [string]::IsNullOrWhiteSpace($ds))
+            {
+                continue
+            }
+            try
+            {
+                $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
+                if ($sec -gt 0)
+                {
+                    return $sec
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+    return $null
+}
+
+function ConvertTo-DurationSeconds
+{
+    param([string] $Tag)
+    if ( [string]::IsNullOrWhiteSpace($Tag))
+    {
+        return $null
+    }
+    $s = $Tag.Trim()
+    $dot = $s.IndexOf('.')
+    if ($dot -ge 0 -and ($s.Length - $dot - 1) -gt 7)
+    {
+        $s = $s.Substring(0, $dot + 1 + 7)
+    }
+    try
+    {
+        $ts = [TimeSpan]::Parse($s, [cultureinfo]::InvariantCulture)
+        $sec = $ts.TotalSeconds
+        if ($sec -gt 0)
+        {
+            return $sec
+        }
+    }
+    catch
+    {
+    }
+    return $null
+}
+
+function Get-DurationFromTags
+{
+    param(
+        [hashtable] $Probe,
+        [int[]] $KeptSourceVideoIndices = $null,
+        [int[]] $KeptSourceAudioIndices = $null
+    )
+    if ($null -eq $Probe)
+    {
+        return $null
+    }
+    $streams = $Probe['streams']
+    if ($null -eq $streams)
+    {
+        return $null
+    }
+    $arr = @($streams)
+    foreach ($prefer in @('video', 'audio'))
+    {
+        $kept = if ($prefer -eq 'video')
+        {
+            $KeptSourceVideoIndices
+        }
+        else
+        {
+            $KeptSourceAudioIndices
+        }
+        $relIdx = -1
+        foreach ($s in $arr)
+        {
+            if (-not ($s -is [hashtable]) -or $s['codec_type'] -ne $prefer)
+            {
+                continue
+            }
+            $relIdx++
+            if ($null -ne $kept -and -not ($kept -contains $relIdx))
+            {
+                continue
+            }
+            $tags = $s['tags']
+            if (-not ($tags -is [hashtable]))
+            {
+                continue
+            }
+            $dur = $null
+            foreach ($key in @('DURATION', 'duration'))
+            {
+                if ( $tags.ContainsKey($key))
+                {
+                    $dur = $tags[$key]; break
+                }
+            }
+            if ($null -ne $dur)
+            {
+                $parsed = ConvertTo-DurationSeconds -Tag ([string]$dur)
+                if ($null -ne $parsed)
+                {
+                    return $parsed
+                }
+            }
+        }
+    }
+    return $null
+}
+
+function Get-DurationFromPacketCount
+{
+    param(
+        [string] $FFPROBE,
+        [string] $File,
+        [int] $StreamIndex = 0
+    )
+    if ([string]::IsNullOrWhiteSpace($File) -or -not [File]::Exists($File))
+    {
+        return $null
+    }
+    if ($StreamIndex -lt 0)
+    {
+        return $null
+    }
+    $ffprobeArgs = @(
+        $File,
+        '-v', 'error',
+        '-select_streams', "v:$StreamIndex",
+        '-count_packets',
+        '-show_entries', 'stream=nb_read_packets,r_frame_rate',
+        '-of', 'json'
+    )
+    $out = & $FFPROBE $ffprobeArgs 2> $null | Out-String
+    if (-not $?)
+    {
+        return $null
+    }
+    try
+    {
+        $j = ConvertFrom-Json -InputObject $out -AsHashtable
+    }
+    catch
+    {
+        return $null
+    }
+    $streams = $j['streams']
+    if ($null -eq $streams)
+    {
+        return $null
+    }
+    $st = @($streams)[0]
+    if (-not ($st -is [hashtable]))
+    {
+        return $null
+    }
+    $nb = $st['nb_read_packets']
+    $rfr = $st['r_frame_rate']
+    if ($null -eq $nb -or $null -eq $rfr)
+    {
+        return $null
+    }
+    try
+    {
+        $n = [long]::Parse([string]$nb, [cultureinfo]::InvariantCulture)
+    }
+    catch
+    {
+        return $null
+    }
+    if ($n -le 0)
+    {
+        return $null
+    }
+    $rate = [string]$rfr
+    if ($rate -match '^(\d+)/(\d+)$')
+    {
+        $num = [double]$Matches[1]
+        $den = [double]$Matches[2]
+        if ($num -le 0 -or $den -le 0)
+        {
+            return $null
+        }
+        return $n * $den / $num
+    }
+    try
+    {
+        $fps = [double]::Parse($rate, [cultureinfo]::InvariantCulture)
+        if ($fps -le 0)
+        {
+            return $null
+        }
+        return $n / $fps
+    }
+    catch
+    {
+        return $null
+    }
+}
+
+function Get-ComparableDurationPair
+{
+    param(
+        [Parameter(Mandatory)] [string] $FFPROBE,
+        [Parameter(Mandatory)] [hashtable] $SourceProbe,
+        [Parameter(Mandatory)] [string] $SourceFile,
+        [Parameter(Mandatory)] [string] $TempFile,
+        [int[]] $KeptSourceVideoIndices = $null,
+        [int[]] $KeptSourceAudioIndices = $null
+    )
+
+    [hashtable]$tempProbe = $null
+
+    $s = Get-DurationFromFormat -Probe $SourceProbe
+    if ($null -ne $s)
+    {
+        $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile
+        $t = Get-DurationFromFormat -Probe $tempProbe
+        if ($null -ne $t)
+        {
+            return [pscustomobject]@{ Method = 'format'; Source = $s; Temp = $t }
+        }
+    }
+
+    $s = Get-DurationFromStreams -Probe $SourceProbe -KeptSourceVideoIndices $KeptSourceVideoIndices -KeptSourceAudioIndices $KeptSourceAudioIndices
+    if ($null -ne $s)
+    {
+        if ($null -eq $tempProbe)
+        {
+            $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile
+        }
+        $t = Get-DurationFromStreams -Probe $tempProbe
+        if ($null -ne $t)
+        {
+            return [pscustomobject]@{ Method = 'stream'; Source = $s; Temp = $t }
+        }
+    }
+
+    $s = Get-DurationFromTags -Probe $SourceProbe -KeptSourceVideoIndices $KeptSourceVideoIndices -KeptSourceAudioIndices $KeptSourceAudioIndices
+    if ($null -ne $s)
+    {
+        if ($null -eq $tempProbe)
+        {
+            $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile
+        }
+        $t = Get-DurationFromTags -Probe $tempProbe
+        if ($null -ne $t)
+        {
+            return [pscustomobject]@{ Method = 'tag'; Source = $s; Temp = $t }
+        }
+    }
+
+    $srcVideoIdx = if ($null -ne $KeptSourceVideoIndices -and $KeptSourceVideoIndices.Count -gt 0)
+    {
+        $KeptSourceVideoIndices[0]
+    }
+    elseif ($null -eq $KeptSourceVideoIndices)
+    {
+        0
+    }
+    else
+    {
+        $null
+    }
+
+    if ($null -ne $srcVideoIdx)
+    {
+        $s = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $SourceFile -StreamIndex $srcVideoIdx
+        if ($null -ne $s)
+        {
+            $t = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $TempFile -StreamIndex 0
+            if ($null -ne $t)
+            {
+                return [pscustomobject]@{ Method = 'count'; Source = $s; Temp = $t }
+            }
+        }
+    }
+
+    return [pscustomobject]@{ Method = 'unknown'; Source = $null; Temp = $null }
+}
+
+function Invoke-FFmpeg
+{
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [Parameter(Mandatory)]
-		[string] $FFMPEG,
+        [string] $FFMPEG,
         [Parameter(Mandatory)]
-		[string] $InputFile,
-		[Parameter()]
-		[string[]] $DynamicArgs = @(), 
+        [string] $InputFile,
         [Parameter()]
-		[string] $OutputFile,
-		
+        [string[]] $DynamicArgs = @(),
+        [Parameter()]
+        [string] $OutputFile,
+
         [Parameter(Mandatory)]
-		[string] $TargetLabel,
-        
+        [string] $TargetLabel,
+
         [Parameter(Mandatory)]
         [hashtable] $State
     )
 
-	[bool] $IsCheckMode = [string]::IsNullOrWhiteSpace($OutputFile)
+    [bool]$IsCheckMode = [string]::IsNullOrWhiteSpace($OutputFile)
 
     $ffmpegArgs = @(
         '-hide_banner'
-		'-v', ($IsCheckMode ? 'error' : '+level')
+        '-v', ($IsCheckMode ? 'error' : '+level')
         '-analyzeduration', '200M'
         '-probesize', '200M'
-		'-i', $InputFile
+        '-i', $InputFile
     )
     $ffmpegArgs += $DynamicArgs
 
-    if ($IsCheckMode) {
-		# ensures "null" muxer if not defined yet
-        if (-not ($DynamicArgs -match '^-f$' -or $DynamicArgs -match '^null$')) {
+    if ($IsCheckMode)
+    {
+        # ensures "null" muxer if not defined yet
+        if (-not ($DynamicArgs -match '^-f$' -or $DynamicArgs -match '^null$'))
+        {
             $ffmpegArgs += @('-f', 'null')
-        }    
-	} else {
+        }
+    }
+    else
+    {
         $ffmpegArgs += $OutputFile
     }
 
     $State.Attempts++
-	Show-CommandLine $FFMPEG $ffmpegArgs -NoPathDetectionParameters 'metadata*'
+    Show-CommandLine $FFMPEG $ffmpegArgs -NoPathDetectionParameters 'metadata*'
 
-    if ($PSCmdlet.ShouldProcess($TargetLabel, "ffmpeg $($IsCheckMode ? 'check' : 'run') on $TargetLabel")) {
+    if ( $PSCmdlet.ShouldProcess($TargetLabel, "ffmpeg $( $IsCheckMode ? 'check' : 'run' ) on $TargetLabel"))
+    {
         & $FFMPEG $ffmpegArgs
         return $?
     }
-	
-    Write-InfoLog -Color Magenta "[WhatIf] Would run ffmpeg ($($IsCheckMode ? 'check' : 'run')) on $TargetLabel"
+
+    Write-InfoLog -Color Magenta "[WhatIf] Would run ffmpeg ($( $IsCheckMode ? 'check' : 'run' )) on $TargetLabel"
     return $true
 }
 
-function Get-SortedFileList {
+function Get-SortedFileList
+{
     param(
-		[Object[]] $Files, 
-		[string] $Sort
-	)
-	
-    switch ($Sort) {
-        'NewestFirst'  { $Files | Sort-Object LastWriteTime -Descending }
-        'OldestFirst'  { $Files | Sort-Object LastWriteTime }
-        'SmallerFirst' { $Files | Sort-Object Length }
-        'LargerFirst'  { $Files | Sort-Object Length -Descending }
-        default        { $Files | Sort-Object Name }
+        [Object[]] $Files,
+        [string] $Sort
+    )
+
+    switch ($Sort)
+    {
+        'NewestFirst'  {
+            $Files | Sort-Object LastWriteTime -Descending
+        }
+        'OldestFirst'  {
+            $Files | Sort-Object LastWriteTime
+        }
+        'SmallerFirst' {
+            $Files | Sort-Object Length
+        }
+        'LargerFirst'  {
+            $Files | Sort-Object Length -Descending
+        }
+        default        {
+            $Files | Sort-Object Name
+        }
     }
 }
 
@@ -183,22 +613,75 @@ function Get-SortedFileList {
 # Fonctions privées de traitement
 # -----------------------------------------------------------------------------
 
-function Initialize-ReencodeState {
+function Test-EncodedFileIntegrity
+{
+    param(
+        [Parameter(Mandatory)] [string] $FFPROBE,
+        [Parameter(Mandatory)] [hashtable] $SourceProbe,
+        [Parameter(Mandatory)] [string] $SourceFile,
+        [Parameter(Mandatory)] [string] $TempFile,
+        [double] $TolerancePercent = 0.5,
+        [double] $ToleranceSecondsMin = 1.0,
+        [int[]] $KeptSourceVideoIndices = $null,
+        [int[]] $KeptSourceAudioIndices = $null
+    )
+
+    $pair = Get-ComparableDurationPair -FFPROBE $FFPROBE -SourceProbe $SourceProbe -SourceFile $SourceFile -TempFile $TempFile -KeptSourceVideoIndices $KeptSourceVideoIndices -KeptSourceAudioIndices $KeptSourceAudioIndices
+    if ($pair.Method -eq 'unknown')
+    {
+        return [pscustomobject]@{
+            Status = 'unknown'
+            Method = 'unknown'
+            Expected = $null
+            Actual = $null
+            Diff = $null
+        }
+    }
+
+    $expected = $pair.Source
+    $actual = $pair.Temp
+    $tolerance = [math]::Max($ToleranceSecondsMin, $expected * $TolerancePercent / 100.0)
+    $diff = [math]::Abs($expected - $actual)
+    if ($diff -gt $tolerance)
+    {
+        return [pscustomobject]@{
+            Status = 'mismatch'
+            Method = $pair.Method
+            Expected = $expected
+            Actual = $actual
+            Diff = $diff
+        }
+    }
+
+    return [pscustomobject]@{
+        Status = 'ok'
+        Method = $pair.Method
+        Expected = $expected
+        Actual = $actual
+        Diff = $diff
+    }
+}
+
+function Initialize-ReencodeState
+{
     param(
         [string] $TempPath
     )
-    
+
     $state = @{
         ErrorLog = 'reencode-errors.log'
         BaseTempFilename = Join-Path $TempPath ([guid]::NewGuid().ToString())
         Attempts = 0
+        IntegrityWarningFiles = [List[string]]::new()
+        IntegrityFailureFiles = [List[string]]::new()
         SessionResult = [EncodingResult]::new()
     }
-    
+
     return $state
 }
 
-function Write-ErrorLogWithFile {
+function Write-ErrorLogWithFile
+{
     param(
         [string] $Text,
         [string] $ErrorLog
@@ -207,77 +690,95 @@ function Write-ErrorLogWithFile {
     ("{0}: {1}" -f (Get-Date -Format 'u'), $Text) | Out-File -Append -Encoding UTF8 $ErrorLog
 }
 
-function Get-NFOTimestamps {
+function Get-NFOTimestamps
+{
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [string] $Filename,
         [System.Management.Automation.PSCmdlet] $Cmdlet
     )
-    
-    $LastWriteTimeFixes = @{}
+
+    $LastWriteTimeFixes = @{ }
     $NFOFilename = [Path]::ChangeExtension($Filename, '.nfo')
-    
-    if (-not [File]::Exists($NFOFilename)) {
+
+    if (-not [File]::Exists($NFOFilename))
+    {
         return $LastWriteTimeFixes
     }
-    
+
     $FileDirectory = Get-Item -LiteralPath ([Path]::GetDirectoryName($Filename))
     $xml = Get-Content -LiteralPath $NFOFilename -ErrorAction SilentlyContinue
     $NFO = $null
-    
-    if ($xml) {
+
+    if ($xml)
+    {
         $NFO = [xml](Select-String -InputObject $xml -Pattern '.*?<([^\?^\!.]*?)>.*?</\1>').Matches.Value
     }
-    
-    if ($NFO) {
-        try {
+
+    if ($NFO)
+    {
+        try
+        {
             $DatePremiered = $NFO.SelectSingleNode("./episodedetails") ? $NFO.episodedetails.premiered : $NFO.movie.premiered
-            if ($DatePremiered) {
+            if ($DatePremiered)
+            {
                 $LastWriteTime = [datetime]::ParseExact($DatePremiered, "yyyy-MM-dd", $null)
                 $OriginalFile = Get-Item -LiteralPath $Filename
-                if ($Cmdlet.ShouldProcess($Filename, "Set original file times from premiered=$DatePremiered")) {
+                if ( $Cmdlet.ShouldProcess($Filename, "Set original file times from premiered=$DatePremiered"))
+                {
                     $OriginalFile.CreationTime = $LastWriteTime
                     $OriginalFile.LastWriteTime = $LastWriteTime
                 }
-                if ($FileDirectory.LastWriteTime -gt $LastWriteTime) {
+                if ($FileDirectory.LastWriteTime -gt $LastWriteTime)
+                {
                     $LastWriteTimeFixes[$FileDirectory] = $LastWriteTime
                 }
             }
-        } catch {
+        }
+        catch
+        {
             Write-DebugLog "get content nfo from $NFOFilename failed"
             Write-DebugLog $_
         }
     }
-    
+
     $NFOFilesCandidates = @(
         [Path]::Combine($FileDirectory, 'tvshow.nfo')
         [Path]::Combine([Directory]::GetParent($FileDirectory), 'tvshow.nfo')
         [Path]::Combine([Directory]::GetParent([Directory]::GetParent($FileDirectory)), 'tvshow.nfo')
     )
-    
-    :NFOLoop foreach ($nfoPath in $NFOFilesCandidates) {
-        if ([File]::Exists($nfoPath)) {
+
+    :NFOLoop foreach ($nfoPath in $NFOFilesCandidates)
+    {
+        if ( [File]::Exists($nfoPath))
+        {
             $n = [xml](Get-Content -LiteralPath $nfoPath -ErrorAction SilentlyContinue)
-            if ($n) {
-                try {
+            if ($n)
+            {
+                try
+                {
                     $DatePremiered = $n.tvshow.premiered
-                    if ($DatePremiered) {
+                    if ($DatePremiered)
+                    {
                         $LastWriteTimeFixes[(Get-Item -LiteralPath ([Path]::GetDirectoryName($nfoPath)))] =
-                            [datetime]::ParseExact($DatePremiered, "yyyy-MM-dd", $null)
+                        [datetime]::ParseExact($DatePremiered, "yyyy-MM-dd", $null)
                     }
                     break NFOLoop
-                } catch {
+                }
+                catch
+                {
                     Write-DebugLog "get content nfo from $nfoPath failed"
                     Write-DebugLog $_
                 }
             }
         }
     }
-    
+
     return $LastWriteTimeFixes
 }
 
-function Select-VideoStreams {
+function Select-VideoStreams
+{
     param(
         [hashtable] $FfprobeOutput,
         [bool] $ForceRecodeVideo,
@@ -291,72 +792,97 @@ function Select-VideoStreams {
         [int] $ConfigUpscaleWidth,
         [bool] $RewriteMode
     )
-	Write-Verbose ">> Select-VideoStreams"
-    try {
-		$videoStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'video' }
-		$VideoTracks = $videoStreams | Select-Object codec_name, profile, height, width, disposition
-		$i = -1
-		
-		foreach ($stream in $VideoTracks) {
-			$stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
-			$keepStream = -not (($stream.disposition.attached_pic -eq 1) -or ($stream.codec_name -eq 'mjpeg'))
-			$isHEVC = ($stream.codec_name -ieq 'hevc') -and ($stream.profile -like 'main*')
-			$keepVideoCodec = $isHEVC -or ($stream.codec_name -ieq 'av1') -or ($stream.codec_name -ieq 'vc1')
-			if ($VideoCodec -eq 'AV1' -and $AllowVideoCodecUpgrade -and $isHEVC) { $keepVideoCodec = $false }
-			if ($ForceRecodeVideo) { $keepVideoCodec = $false }
-			
-			$upscaleStream = $false
-			if ($UpscaleFit -and $UpscaleWidth -ne $null -and $UpscaleHeight -ne $null) {
-				$upscaleStream = ($UpscaleWidth -gt $stream.width) -and ($UpscaleHeight -gt $stream.height)
-			} elseif ($Upscale) {
-				if ([int][Upscale]::Parse([string]"x$Upscale").value__ -gt $stream.height) {
-					$upscaleStream = $true
-				}
-				if ([int][Upscale]::Parse([string]"x$Upscale").value__ -eq $stream.height) {
-					$upscaleStream = ($ConfigUpscaleWidth -ne -1) -and ($ConfigUpscaleWidth -ne $stream.width)
-				}
-			} else {
-				if ($ConfigUpscaleWidth -gt $stream.width) { $upscaleStream = $true }
-			}
-			
-			if ($RewriteMode) {
-				$stream | Add-Member -NotePropertyName '__deinterlace' -NotePropertyValue $false -Force
-				$stream | Add-Member -NotePropertyName '__upscale' -NotePropertyValue $false -Force
-				$stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $false -Force
-			} else {
-				$stream | Add-Member -NotePropertyName '__deinterlace' -NotePropertyValue ($keepStream -and $Deinterlace) -Force
-				$stream | Add-Member -NotePropertyName '__upscale' -NotePropertyValue ($keepStream -and $upscaleStream) -Force
-				$stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue ($keepStream -and -not $keepVideoCodec) -Force
-			}
+    Write-Verbose ">> Select-VideoStreams"
+    try
+    {
+        $videoStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'video' }
+        $VideoTracks = $videoStreams | Select-Object codec_name, profile, height, width, disposition
+        $i = -1
 
-			Set-StreamProcessingState $stream $keepStream | Out-Null
-		}
-		
-		$isSource10Bit = @($videoStreams | Where-Object { Test-Is10BitVideoStream $_ }).Count -gt 0
-		
-		$chromaRank = @{ '420' = 0; '422' = 1; '444' = 2 }
-		$sourceChroma = '420'
-		foreach ($vs in $videoStreams) {
-			$c = Get-SourceChromaMode $vs
-			if ($chromaRank[$c] -gt $chromaRank[$sourceChroma]) {
-				$sourceChroma = $c
-			}
-		}
-		
-		Write-Verbose "Select-VideoStreams >>`n $($VideoTracks | Format-List | Out-String)"
-		return @{
-			VideoTracks = $VideoTracks
-			IsSource10Bit = $isSource10Bit
-			SourceChroma = $sourceChroma
-		}
-	}
-	catch {
-		Write-Verbose "EE Select-VideoStreams >>`n ($_.Exception)"
-		throw
-	}
+        foreach ($stream in $VideoTracks)
+        {
+            $stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
+            $keepStream = -not (($stream.disposition.attached_pic -eq 1) -or ($stream.codec_name -eq 'mjpeg'))
+            $isHEVC = ($stream.codec_name -ieq 'hevc') -and ($stream.profile -like 'main*')
+            $keepVideoCodec = $isHEVC -or ($stream.codec_name -ieq 'av1') -or ($stream.codec_name -ieq 'vc1')
+            if ($VideoCodec -eq 'AV1' -and $AllowVideoCodecUpgrade -and $isHEVC)
+            {
+                $keepVideoCodec = $false
+            }
+            if ($ForceRecodeVideo)
+            {
+                $keepVideoCodec = $false
+            }
+
+            $upscaleStream = $false
+            if ($UpscaleFit -and $UpscaleWidth -ne $null -and $UpscaleHeight -ne $null)
+            {
+                $upscaleStream = ($UpscaleWidth -gt $stream.width) -and ($UpscaleHeight -gt $stream.height)
+            }
+            elseif ($Upscale)
+            {
+                if ([int][Upscale]::Parse([string]"x$Upscale").value__ -gt $stream.height)
+                {
+                    $upscaleStream = $true
+                }
+                if ([int][Upscale]::Parse([string]"x$Upscale").value__ -eq $stream.height)
+                {
+                    $upscaleStream = ($ConfigUpscaleWidth -ne -1) -and ($ConfigUpscaleWidth -ne $stream.width)
+                }
+            }
+            else
+            {
+                if ($ConfigUpscaleWidth -gt $stream.width)
+                {
+                    $upscaleStream = $true
+                }
+            }
+
+            if ($RewriteMode)
+            {
+                $stream | Add-Member -NotePropertyName '__deinterlace' -NotePropertyValue $false -Force
+                $stream | Add-Member -NotePropertyName '__upscale' -NotePropertyValue $false -Force
+                $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $false -Force
+            }
+            else
+            {
+                $stream | Add-Member -NotePropertyName '__deinterlace' -NotePropertyValue ($keepStream -and $Deinterlace) -Force
+                $stream | Add-Member -NotePropertyName '__upscale' -NotePropertyValue ($keepStream -and $upscaleStream) -Force
+                $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue ($keepStream -and -not $keepVideoCodec) -Force
+            }
+
+            Set-StreamProcessingState $stream $keepStream | Out-Null
+        }
+
+        $isSource10Bit = @($videoStreams | Where-Object { Test-Is10BitVideoStream $_ }).Count -gt 0
+
+        $chromaRank = @{ '420' = 0; '422' = 1; '444' = 2 }
+        $sourceChroma = '420'
+        foreach ($vs in $videoStreams)
+        {
+            $c = Get-SourceChromaMode $vs
+            if ($chromaRank[$c] -gt $chromaRank[$sourceChroma])
+            {
+                $sourceChroma = $c
+            }
+        }
+
+        Write-Verbose "Select-VideoStreams >>`n $( $VideoTracks | Format-List | Out-String )"
+        return @{
+            VideoTracks = $VideoTracks
+            IsSource10Bit = $isSource10Bit
+            SourceChroma = $sourceChroma
+        }
+    }
+    catch
+    {
+        Write-Verbose "EE Select-VideoStreams >>`n ($_.Exception)"
+        throw
+    }
 }
 
-function Select-AudioStreams {
+function Select-AudioStreams
+{
     param(
         [hashtable] $FfprobeOutput,
         [string] $FinalExtension,
@@ -364,91 +890,141 @@ function Select-AudioStreams {
         [bool] $RewriteMode
     )
     Write-Verbose ">> Select-AudioStreams"
-	try {
-		$audioStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'audio' }
-		$AudioTracks = $audioStreams | Select-Object codec_name, channels, channel_layout, bit_rate
-		$targetAudioCodec = Get-TargetAudioCodec -FinalExtension $FinalExtension
-		$i = -1
-		
-		foreach ($stream in $AudioTracks) {
-			$stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i) -Force
-			
-			$codec = [string]$stream.codec_name
-			
-			$recodeForContainer = ($codec -ieq 'nellymoser')
-			if ($FinalExtension -ieq '.mp4') {
-				$recodeForContainer = $recodeForContainer -or
-					($codec -ieq 'flac') -or
-					($codec -ilike 'wm*') -or
-					($codec -in 'pcm_u8','adpcm_ima_wav')
-			}
-			
-			$channels = if ($stream.channels) { [int]$stream.channels } else { 2 }
-			$currentBps = if ($stream.bit_rate) { [int]$stream.bit_rate } else { 0 }
-			$layout = [string]$stream.channel_layout
-			
-			$isLossless = Test-IsLosslessAudioCodec $codec
-			
-			$targetBitrateLabel = Get-TargetAudioBitrate -Codec $targetAudioCodec -Quality $Quality -Channels $channels
-			$targetBps = ConvertTo-IntBitrateK $targetBitrateLabel
-			
-			$hasGain = ($currentBps -gt 0) -and ($targetBps -gt 0) -and ($targetBps -lt [int]($currentBps / 1.05))
-			
-			$likelyGainCodecs = @('dts','eac3','ac3','truehd')
-			$alreadyTargetNoGain =
-				($codec -ieq $targetAudioCodec) -and (
-					($currentBps -le 0) -or
-					($targetBps -gt 0 -and $currentBps -le $targetBps)
-				)
-			
-			$recodeForQuality = switch ($Quality) {
-				'High'   { $isLossless }
-				'Medium' { $isLossless }
-				'Low'    {
-					if ($alreadyTargetNoGain) { $false }
-					if ($isLossless) { $true }
-					if ($hasGain) { $true }
-					if ($likelyGainCodecs -contains ($codec.ToLowerInvariant())) { $true }
-					$false
-				}
-				default  { $isLossless }
-			}
-			
-			$opusLayoutFix = $null
-			if ($targetAudioCodec -eq 'opus' -and $layout -match 'side') {
-				if ($channels -eq 5) {
-					$opusLayoutFix = "channelmap=FL-FL|FR-FR|FC-FC|SL-BL|SR-BR:5.0"
-				}
-				elseif ($channels -eq 6) {
-					$opusLayoutFix = "channelmap=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR:5.1"
-				}
-			}
+    try
+    {
+        $audioStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'audio' }
+        $AudioTracks = $audioStreams | Select-Object codec_name, channels, channel_layout, bit_rate
+        $targetAudioCodec = Get-TargetAudioCodec -FinalExtension $FinalExtension
+        $i = -1
 
-			$recode = if ($RewriteMode) { $false } else { $recodeForContainer -or $recodeForQuality }
-			$stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $recode -Force
-			
-			if ($recode) {
-				$stream | Add-Member -NotePropertyName '__targetAudioCodec' -NotePropertyValue $targetAudioCodec -Force
-				$stream | Add-Member -NotePropertyName '__targetAudioBitrate' -NotePropertyValue $targetBitrateLabel -Force
-			
-				if ($opusLayoutFix) {
-					$stream | Add-Member -NotePropertyName '__targetAudioFilter' -NotePropertyValue $opusLayoutFix -Force
-				}
-			}
-			
-			Set-StreamProcessingState $stream $true | Out-Null
-		}
-		
-		Write-Verbose "Select-AudioStreams >>`n $($AudioTracks | Format-List | Out-String)"
-		return $AudioTracks
-	}
-	catch {
-		Write-Verbose "EE Select-AudioStreams`n ($_.Exception)"
-		throw
-	}
+        foreach ($stream in $AudioTracks)
+        {
+            $stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i) -Force
+
+            $codec = [string]$stream.codec_name
+
+            $recodeForContainer = ($codec -ieq 'nellymoser')
+            if ($FinalExtension -ieq '.mp4')
+            {
+                $recodeForContainer = $recodeForContainer -or
+                        ($codec -ieq 'flac') -or
+                        ($codec -ilike 'wm*') -or
+                        ($codec -in 'pcm_u8', 'adpcm_ima_wav')
+            }
+
+            $channels = if ($stream.channels)
+            {
+                [int]$stream.channels
+            }
+            else
+            {
+                2
+            }
+            $currentBps = if ($stream.bit_rate)
+            {
+                [int]$stream.bit_rate
+            }
+            else
+            {
+                0
+            }
+            $layout = [string]$stream.channel_layout
+
+            $isLossless = Test-IsLosslessAudioCodec $codec
+
+            $targetBitrateLabel = Get-TargetAudioBitrate -Codec $targetAudioCodec -Quality $Quality -Channels $channels
+            $targetBps = ConvertTo-IntBitrateK $targetBitrateLabel
+
+            $hasGain = ($currentBps -gt 0) -and ($targetBps -gt 0) -and ($targetBps -lt [int]($currentBps / 1.05))
+
+            $likelyGainCodecs = @('dts', 'eac3', 'ac3', 'truehd')
+            $alreadyTargetNoGain =
+            ($codec -ieq $targetAudioCodec) -and (
+            ($currentBps -le 0) -or
+                    ($targetBps -gt 0 -and $currentBps -le $targetBps)
+            )
+
+            $recodeForQuality = switch ($Quality)
+            {
+                'High'   {
+                    $isLossless
+                }
+                'Medium' {
+                    $isLossless
+                }
+                'Low'    {
+                    if ($alreadyTargetNoGain)
+                    {
+                        $false
+                    }
+                    if ($isLossless)
+                    {
+                        $true
+                    }
+                    if ($hasGain)
+                    {
+                        $true
+                    }
+                    if ($likelyGainCodecs -contains ($codec.ToLowerInvariant()))
+                    {
+                        $true
+                    }
+                    $false
+                }
+                default  {
+                    $isLossless
+                }
+            }
+
+            $opusLayoutFix = $null
+            if ($targetAudioCodec -eq 'opus' -and $layout -match 'side')
+            {
+                if ($channels -eq 5)
+                {
+                    $opusLayoutFix = "channelmap=FL-FL|FR-FR|FC-FC|SL-BL|SR-BR:5.0"
+                }
+                elseif ($channels -eq 6)
+                {
+                    $opusLayoutFix = "channelmap=FL-FL|FR-FR|FC-FC|LFE-LFE|SL-BL|SR-BR:5.1"
+                }
+            }
+
+            $recode = if ($RewriteMode)
+            {
+                $false
+            }
+            else
+            {
+                $recodeForContainer -or $recodeForQuality
+            }
+            $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $recode -Force
+
+            if ($recode)
+            {
+                $stream | Add-Member -NotePropertyName '__targetAudioCodec' -NotePropertyValue $targetAudioCodec -Force
+                $stream | Add-Member -NotePropertyName '__targetAudioBitrate' -NotePropertyValue $targetBitrateLabel -Force
+
+                if ($opusLayoutFix)
+                {
+                    $stream | Add-Member -NotePropertyName '__targetAudioFilter' -NotePropertyValue $opusLayoutFix -Force
+                }
+            }
+
+            Set-StreamProcessingState $stream $true | Out-Null
+        }
+
+        Write-Verbose "Select-AudioStreams >>`n $( $AudioTracks | Format-List | Out-String )"
+        return $AudioTracks
+    }
+    catch
+    {
+        Write-Verbose "EE Select-AudioStreams`n ($_.Exception)"
+        throw
+    }
 }
 
-function Select-SubtitleStreams {
+function Select-SubtitleStreams
+{
     param(
         [hashtable] $FfprobeOutput,
         [string] $FinalExtension,
@@ -459,105 +1035,188 @@ function Select-SubtitleStreams {
         [string] $DirectoryName
     )
     Write-Verbose ">> Select-SubtitleStreams"
-	try {
-		$subtitleStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'subtitle' }
-		$SubtitleTracks = $subtitleStreams | Select-Object codec_name, tags
-		
-		if (-not $RewriteMode) {
-			if ($SubtitleTracks -and $FinalExtension -ieq '.mp4' -and -not $AllowSubTitlesConversion) {
-				return $null
-			}
-		}
-		
-		$assSubtitles = $SubtitleTracks | Where-Object { $_.codec_name -eq 'ass' }
-		if (-not $assSubtitles) {
-			$BaseName = [Path]::GetFileNameWithoutExtension($Filename)
-			$assSubtitles = Get-ChildItem -Path $DirectoryName -Filter "$BaseName.*.ass"
-		}
-		if (-not $RewriteMode) {
-			if ($assSubtitles -and $FinalExtension -ieq '.mp4' -and $AllowSubTitlesConversion) {
-				return $null
-			}
-		}
-		
-		$i = -1
-		foreach ($stream in $SubtitleTracks) {
-			$stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
-			if (-not ($stream.PSObject.Properties.Name -contains "tags") -or -not ($stream.tags.Keys -contains "language")) {
-				$keepStream = $true
-			} else {
-				$keepStream = [bool]((@('un','und') + $SubTitlesToKeep) | Where-Object { $_ -ieq $stream.tags.language })
-			}
-			if ($RewriteMode -and $FinalExtension -ieq '.mp4') {
-				# En rewrite, seul mov_text peut être copié dans un conteneur mp4
-				$keepStream = $keepStream -and ($stream.codec_name -ieq 'mov_text')
-			}
-			$recode = if ($RewriteMode) { $false } else { $FinalExtension -ieq '.mp4' -and $AllowSubTitlesConversion }
-			$stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue ($keepStream -and $recode) -Force
+    try
+    {
+        $subtitleStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'subtitle' }
+        $SubtitleTracks = $subtitleStreams | Select-Object codec_name, tags
 
-			Set-StreamProcessingState $stream $keepStream | Out-Null
-		}
-		
-		Write-Verbose "Select-SubtitleStreams >>`n $($SubtitleTracks | Format-List | Out-String)"
-		return @{
-			SubtitleTracks = $SubtitleTracks
-			HasAssSubtitles = [bool]($SubtitleTracks | Where-Object { $_.codec_name -eq 'ass' -and ($_.__copy -or $_.__process) })
-		}
-	}
-	catch {
-		Write-Verbose "EE Select-SubtitleStreams >>`n ($_.Exception)"
-		throw
-	}
+        if (-not $RewriteMode)
+        {
+            if ($SubtitleTracks -and $FinalExtension -ieq '.mp4' -and -not $AllowSubTitlesConversion)
+            {
+                return $null
+            }
+        }
+
+        $assSubtitles = $SubtitleTracks | Where-Object { $_.codec_name -eq 'ass' }
+        if (-not $assSubtitles)
+        {
+            $BaseName = [Path]::GetFileNameWithoutExtension($Filename)
+            $assSubtitles = Get-ChildItem -Path $DirectoryName -Filter "$BaseName.*.ass"
+        }
+        if (-not $RewriteMode)
+        {
+            if ($assSubtitles -and $FinalExtension -ieq '.mp4' -and $AllowSubTitlesConversion)
+            {
+                return $null
+            }
+        }
+
+        $i = -1
+        foreach ($stream in $SubtitleTracks)
+        {
+            $stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
+            if (-not ($stream.PSObject.Properties.Name -contains "tags") -or -not ($stream.tags.Keys -contains "language"))
+            {
+                $keepStream = $true
+            }
+            else
+            {
+                $keepStream = [bool]((@('un', 'und') + $SubTitlesToKeep) | Where-Object { $_ -ieq $stream.tags.language })
+            }
+            if ($RewriteMode -and $FinalExtension -ieq '.mp4')
+            {
+                # En rewrite, seul mov_text peut être copié dans un conteneur mp4
+                $keepStream = $keepStream -and ($stream.codec_name -ieq 'mov_text')
+            }
+            $recode = if ($RewriteMode)
+            {
+                $false
+            }
+            else
+            {
+                $FinalExtension -ieq '.mp4' -and $AllowSubTitlesConversion
+            }
+            $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue ($keepStream -and $recode) -Force
+
+            Set-StreamProcessingState $stream $keepStream | Out-Null
+        }
+
+        Write-Verbose "Select-SubtitleStreams >>`n $( $SubtitleTracks | Format-List | Out-String )"
+        return @{
+            SubtitleTracks = $SubtitleTracks
+            HasAssSubtitles = [bool]($SubtitleTracks | Where-Object { $_.codec_name -eq 'ass' -and ($_.__copy -or $_.__process) })
+        }
+    }
+    catch
+    {
+        Write-Verbose "EE Select-SubtitleStreams >>`n ($_.Exception)"
+        throw
+    }
 }
 
-function Select-AttachmentStreams {
+function Select-AttachmentStreams
+{
     param(
         [hashtable] $FfprobeOutput,
         [bool] $HasAssSubtitles
     )
     Write-Verbose ">> Select-AttachmentStreams"
-	try {
-		$attachmentStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'attachment' }
-		$AttachmentTracks = $attachmentStreams | Select-Object codec_name, tags
-		$i = -1
-		foreach ($stream in $AttachmentTracks) {
-			$stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
-			$isFont = ($stream.codec_name -in @('ttf', 'otf')) -or
-			          ($stream.tags.mimetype -match '\bfont\b|truetype|opentype') -or
-			          ($stream.tags.filename -match '\.(ttf|otf|woff2?|ttc)$')
-			$keepStream = (-not $isFont) -or $HasAssSubtitles
-			Set-StreamProcessingState $stream $keepStream | Out-Null
-		}
-		
-		Write-Verbose "Select-AttachmentStreams >>`n $($AttachmentTracks | Format-List | Out-String)"
-		return $AttachmentTracks
-	}
-	catch {
-		Write-Verbose "EE Select-AttachmentStreams >>`n ($_.Exception)"
-		throw
-	}
+    try
+    {
+        $attachmentStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'attachment' }
+        $AttachmentTracks = $attachmentStreams | Select-Object codec_name, tags
+        $i = -1
+        foreach ($stream in $AttachmentTracks)
+        {
+            $stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
+            $isFont = ($stream.codec_name -in @('ttf', 'otf')) -or
+                    ($stream.tags.mimetype -match '\bfont\b|truetype|opentype') -or
+                    ($stream.tags.filename -match '\.(ttf|otf|woff2?|ttc)$')
+            $keepStream = (-not $isFont) -or $HasAssSubtitles
+            Set-StreamProcessingState $stream $keepStream | Out-Null
+        }
+
+        Write-Verbose "Select-AttachmentStreams >>`n $( $AttachmentTracks | Format-List | Out-String )"
+        return $AttachmentTracks
+    }
+    catch
+    {
+        Write-Verbose "EE Select-AttachmentStreams >>`n ($_.Exception)"
+        throw
+    }
 }
 
-function Get-VideoEncoderArgs {
+function Get-VideoEncoderArgs
+{
     param(
         [ValidateSet('HEVC', 'AV1')] [string] $VideoCodec,
-        [ValidateSet('Low','Medium','High')] [string] $Quality,
+        [ValidateSet('Low', 'Medium', 'High')] [string] $Quality,
         [bool] $TargetIs10Bit,
         [string] $PixFmt,
         [int] $StreamIndex
     )
 
-    $codec = switch ($VideoCodec) {
-        'AV1' { 'libsvtav1' }
-        default { 'libx265' }
+    $codec = switch ($VideoCodec)
+    {
+        'AV1' {
+            'libsvtav1'
+        }
+        default {
+            'libx265'
+        }
     }
-    $crf = switch ($VideoCodec) {
-        'AV1' { switch ($Quality) { 'High' {24} 'Medium' {28} 'Low' {36} default {28} } }
-        default { switch ($Quality) { 'High' {18} 'Medium' {21} 'Low' {28} default {21} } }
+    $crf = switch ($VideoCodec)
+    {
+        'AV1' {
+            switch ($Quality)
+            {
+                'High' {
+                    24
+                } 'Medium' {
+                    28
+                } 'Low' {
+                    36
+                } default {
+                    28
+                }
+            }
+        }
+        default {
+            switch ($Quality)
+            {
+                'High' {
+                    18
+                } 'Medium' {
+                    21
+                } 'Low' {
+                    28
+                } default {
+                    21
+                }
+            }
+        }
     }
-    $preset = switch ($VideoCodec) {
-        'AV1' { switch ($Quality) { 'High' {4} 'Medium' {6} 'Low' {8} default {6} } }
-        default { switch ($Quality) { 'High' { 'slow' } 'Medium' { 'medium' } 'Low' { 'fast' } default { 'medium' } } }
+    $preset = switch ($VideoCodec)
+    {
+        'AV1' {
+            switch ($Quality)
+            {
+                'High' {
+                    4
+                } 'Medium' {
+                    6
+                } 'Low' {
+                    8
+                } default {
+                    6
+                }
+            }
+        }
+        default {
+            switch ($Quality)
+            {
+                'High' {
+                    'slow'
+                } 'Medium' {
+                    'medium'
+                } 'Low' {
+                    'fast'
+                } default {
+                    'medium'
+                }
+            }
+        }
     }
 
     $cpuArgs = @(
@@ -567,15 +1226,22 @@ function Get-VideoEncoderArgs {
         "-pix_fmt:v:$StreamIndex", $PixFmt
     )
 
-    if ($VideoCodec -eq 'AV1') {
+    if ($VideoCodec -eq 'AV1')
+    {
         $cpuArgs += @("-svtav1-params:v:$StreamIndex", 'tune=0')
     }
-    if ($VideoCodec -eq 'HEVC') {
-        $x265Profile = if ($PixFmt -like 'yuv444*') {
+    if ($VideoCodec -eq 'HEVC')
+    {
+        $x265Profile = if ($PixFmt -like 'yuv444*')
+        {
             ($TargetIs10Bit ? 'main444-10' : 'main444-8')
-        } elseif ($PixFmt -like 'yuv422*') {
+        }
+        elseif ($PixFmt -like 'yuv422*')
+        {
             ($TargetIs10Bit ? 'main422-10' : 'main422-8')
-        } else {
+        }
+        else
+        {
             ($TargetIs10Bit ? 'main10' : 'main')
         }
         $cpuArgs += @("-profile:v:$StreamIndex", $x265Profile)
@@ -584,7 +1250,8 @@ function Get-VideoEncoderArgs {
     return $cpuArgs
 }
 
-function Get-AudioEncoderArgs {
+function Get-AudioEncoderArgs
+{
     param(
         [int] $StreamIndex,
         [bool] $Process,
@@ -593,7 +1260,8 @@ function Get-AudioEncoderArgs {
         [string] $ChannelMapFilter
     )
 
-    if (-not $Process) {
+    if (-not $Process)
+    {
         return @("-c:a:$StreamIndex", 'copy')
     }
 
@@ -601,10 +1269,12 @@ function Get-AudioEncoderArgs {
         "-c:a:$StreamIndex", ($TargetCodec -eq 'opus' ? 'libopus' : 'aac')
         "-b:a:$StreamIndex", $TargetBitrate
     )
-    if ($ChannelMapFilter) {
+    if ($ChannelMapFilter)
+    {
         $args += @("-filter:a:$StreamIndex", $ChannelMapFilter)
     }
-    if ($TargetCodec -eq 'opus') {
+    if ($TargetCodec -eq 'opus')
+    {
         $args += @(
             "-vbr:a:$StreamIndex", 'on'
             "-compression_level:a:$StreamIndex", '10'
@@ -615,9 +1285,10 @@ function Get-AudioEncoderArgs {
     return $args
 }
 
-function Get-FFmpegArgs {
+function Get-FFmpegArgs
+{
     param(
-        # Paramètres issus de la ligne de commande
+    # Paramètres issus de la ligne de commande
         [string] $VideoCodec,
         [string] $Quality,
         [string] $Upscale,
@@ -627,7 +1298,7 @@ function Get-FFmpegArgs {
         [int] $ConfigUpscaleWidth,
         [bool] $ClearStreamsTitle,
 
-        # Paramètres issus de l'analyse
+    # Paramètres issus de l'analyse
         [object[]] $VideoTracks,
         [bool] $IsSource10Bit,
         [string] $SourceChroma,
@@ -635,46 +1306,98 @@ function Get-FFmpegArgs {
         [object[]] $SubtitleTracks,
         [object[]] $AttachmentTracks
     )
-    
-    $targetIs10Bit = switch ($Quality) {
-        'High'   { $true }
-        'Medium' { $IsSource10Bit }
-        'Low'    { $false }
-        default  { $IsSource10Bit }
+
+    $targetIs10Bit = switch ($Quality)
+    {
+        'High'   {
+            $true
+        }
+        'Medium' {
+            $IsSource10Bit
+        }
+        'Low'    {
+            $false
+        }
+        default  {
+            $IsSource10Bit
+        }
     }
-    
-    $targetChroma = switch ($Quality) {
-        'Low'    { '420' }
-        default  { $SourceChroma }
+
+    $targetChroma = switch ($Quality)
+    {
+        'Low'    {
+            '420'
+        }
+        default  {
+            $SourceChroma
+        }
     }
-    
-    $pixFmt = switch ($targetChroma) {
-        '444' { if ($targetIs10Bit) { 'yuv444p10le' } else { 'yuv444p' } }
-        '422' { if ($targetIs10Bit) { 'yuv422p10le' } else { 'yuv422p' } }
-        default { if ($targetIs10Bit) { 'yuv420p10le' } else { 'yuv420p' } }
+
+    $pixFmt = switch ($targetChroma)
+    {
+        '444' {
+            if ($targetIs10Bit)
+            {
+                'yuv444p10le'
+            }
+            else
+            {
+                'yuv444p'
+            }
+        }
+        '422' {
+            if ($targetIs10Bit)
+            {
+                'yuv422p10le'
+            }
+            else
+            {
+                'yuv422p'
+            }
+        }
+        default {
+            if ($targetIs10Bit)
+            {
+                'yuv420p10le'
+            }
+            else
+            {
+                'yuv420p'
+            }
+        }
     }
-    
+
     $ffmpegArgs = @()
-    
+
     $SelectedVideoTracks = ($VideoTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __deinterlace, __upscale
-	Write-Verbose "SelectedVideoTracks:`n $($SelectedVideoTracks | Format-List | Out-String)"
+    Write-Verbose "SelectedVideoTracks:`n $( $SelectedVideoTracks | Format-List | Out-String )"
     $new_index = 0
-    foreach ($stream in $SelectedVideoTracks) {
+    foreach ($stream in $SelectedVideoTracks)
+    {
         $ffmpegArgs += @(
-            '-map', "0:v:$($stream._index)"
+            '-map', "0:v:$( $stream._index )"
         )
-        if ($stream.__process) {
+        if ($stream.__process)
+        {
             $filters = @()
-            if ($stream.__deinterlace) { $filters += 'yadif=0' }
-            if ($stream.__upscale) {
-                if ($UpscaleFit -and $UpscaleWidth -ne $null -and $UpscaleHeight -ne $null) {
+            if ($stream.__deinterlace)
+            {
+                $filters += 'yadif=0'
+            }
+            if ($stream.__upscale)
+            {
+                if ($UpscaleFit -and $UpscaleWidth -ne $null -and $UpscaleHeight -ne $null)
+                {
                     $filters += "scale=w=$UpscaleWidth:h=$UpscaleHeight:force_original_aspect_ratio=decrease:flags=lanczos"
-                } else {
+                }
+                else
+                {
                     $targetH = ([int][Upscale]::Parse([string]"x$Upscale")).value__
                     $filters += ('scale={0}:{1}:flags=lanczos' -f $ConfigUpscaleWidth, $targetH)
                 }
             }
-            if ($filters.Count -gt 0) {
+            if ($filters.Count -gt 0)
+            {
                 $ffmpegArgs += @("-vf:v:$new_index", ($filters -join ','))
             }
             $ffmpegArgs += Get-VideoEncoderArgs `
@@ -683,53 +1406,61 @@ function Get-FFmpegArgs {
                 -TargetIs10Bit $targetIs10Bit `
                 -PixFmt $pixFmt `
                 -StreamIndex $new_index
-        } else {
+        }
+        else
+        {
             $ffmpegArgs += @("-c:v:$new_index", 'copy')
         }
         $new_index++
     }
-    
+
     $SelectedAudioTracks = ($AudioTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __targetAudioCodec, __targetAudioBitrate, __targetAudioFilter
-	Write-Verbose "SelectedAudioTracks:`n $($SelectedAudioTracks | Format-List | Out-String)"
+    Write-Verbose "SelectedAudioTracks:`n $( $SelectedAudioTracks | Format-List | Out-String )"
     $new_index = 0
-    foreach ($stream in $SelectedAudioTracks) {
-        $ffmpegArgs += @('-map', "0:a:$($stream._index)")
+    foreach ($stream in $SelectedAudioTracks)
+    {
+        $ffmpegArgs += @('-map', "0:a:$( $stream._index )")
         $ffmpegArgs += Get-AudioEncoderArgs `
             -StreamIndex $new_index `
             -Process ([bool]$stream.__process) `
             -TargetCodec ([string]$stream.__targetAudioCodec) `
             -TargetBitrate ([string]$stream.__targetAudioBitrate) `
             -ChannelMapFilter ([string]$stream.__targetAudioFilter)
-        
+
         $new_index++
     }
-    
+
     $SelectedSubtitleTracks = ($SubtitleTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process
-	Write-Verbose "SelectedSubtitleTracks:`n $($SelectedSubtitleTracks | Format-List | Out-String)"
+    Write-Verbose "SelectedSubtitleTracks:`n $( $SelectedSubtitleTracks | Format-List | Out-String )"
     $new_index = 0
-    foreach ($stream in $SelectedSubtitleTracks) {
+    foreach ($stream in $SelectedSubtitleTracks)
+    {
         $ffmpegArgs += @(
-            '-map', "0:s:$($stream._index)"
+            '-map', "0:s:$( $stream._index )"
             "-c:s:$new_index", ($stream.__process ? 'mov_text' : 'copy')
         )
         $new_index++
     }
-    
+
     $SelectedAttachmentTracks = ($AttachmentTracks ?? @()) | Where-Object { $_.__copy } | Select-Object _index
-	Write-Verbose "SelectedAttachmentTracks:`n $($SelectedAttachmentTracks | Format-List | Out-String)"
+    Write-Verbose "SelectedAttachmentTracks:`n $( $SelectedAttachmentTracks | Format-List | Out-String )"
     $new_index = 0
-    foreach ($stream in $SelectedAttachmentTracks) {
+    foreach ($stream in $SelectedAttachmentTracks)
+    {
         $ffmpegArgs += @(
-            '-map', "0:t:$($stream._index)"
+            '-map', "0:t:$( $stream._index )"
             "-c:t:$new_index", 'copy'
         )
         $new_index++
     }
-    
+
     $ffmpegArgs += @(
         '-map_metadata', '0'
         '-metadata', 'MOVIE/ENCODER='
-        $(if ($ClearStreamsTitle) { @('-metadata:s','title=') })
+        $( if ($ClearStreamsTitle)
+        {
+            @('-metadata:s', 'title=')
+        } )
         '-metadata:s', '_STATISTICS_TAGS='
         '-metadata:s', '_STATISTICS_TAGS-eng='
         '-metadata:s', 'BPS='
@@ -745,11 +1476,12 @@ function Get-FFmpegArgs {
         '-metadata:s', 'encoder='
         '-map_chapters', '0'
     )
-    
+
     return $ffmpegArgs
 }
 
-function Invoke-ReencodeFile {
+function Invoke-ReencodeFile
+{
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [string] $Filename,
@@ -758,57 +1490,68 @@ function Invoke-ReencodeFile {
         [System.Management.Automation.PSCmdlet] $Cmdlet
     )
     Write-Verbose "Starting analysis of '$Filename'"
-	
+
     $OriginalFile = Get-Item -LiteralPath $Filename
-    if (-not $OriginalFile) {
+    if (-not $OriginalFile)
+    {
         Write-ErrorLogWithFile -Text "Can't get access to '$Filename'" -ErrorLog $State.ErrorLog
         return
     }
-    
+
     $TempFilename = ""
-    
-    try {
-        if ($OriginalFile.IsReadOnly) {
+
+    try
+    {
+        if ($OriginalFile.IsReadOnly)
+        {
             Write-InfoLog "Skip read-only file '$Filename'"
             return
         }
         $OriginalFileSize = $OriginalFile.Length
-        
+
         $LastWriteTimeFixes = Get-NFOTimestamps -Filename $Filename -Cmdlet $Cmdlet
-        
+
         $OriginalFileCreationTime = $OriginalFile.CreationTime
         $OriginalFileLastWriteTime = $OriginalFile.LastWriteTime
         $OriginalFileLastAccessTime = $OriginalFile.LastAccessTime
-        
-        foreach ($item in $LastWriteTimeFixes.GetEnumerator()) {
-            if ($Cmdlet.ShouldProcess($item.Key.FullName, "Fix directory times from premiered")) {
+
+        foreach ($item in $LastWriteTimeFixes.GetEnumerator())
+        {
+            if ( $Cmdlet.ShouldProcess($item.Key.FullName, "Fix directory times from premiered"))
+            {
                 $item.Key.CreationTime = $item.Value
                 $item.Key.LastWriteTime = $item.Value
             }
         }
-        
+
         $ffprobeOutput = Get-FFprobeJson -FFPROBE $Config.FFPROBEPath -File $Filename
-        if (-not $ffprobeOutput) { return }
-        
-        if (-not ($ffprobeOutput.format.Keys -contains "duration") -and -not $Config.ForceRecodeVideo -and -not $Config.Rewrite) {
+        if (-not $ffprobeOutput)
+        {
+            return
+        }
+
+        if (-not ($ffprobeOutput.format.Keys -contains "duration") -and -not $Config.ForceRecodeVideo -and -not $Config.Rewrite)
+        {
             Write-InfoLog "Skip '$Filename' that does not look like a convertable format"
             return
         }
-        
-        if ($Config.CheckOnly) {
+
+        if ($Config.CheckOnly)
+        {
             $ok = Invoke-FFmpeg -FFMPEG $Config.FFMPEGPath `
                 -InputFile $Filename `
                 -DynamicArgs @() `
                 -TargetLabel $Filename `
                 -State $State
-            if (-not $ok) {
+            if (-not $ok)
+            {
                 Write-ErrorLogWithFile -Text "ffmpeg check failed for '$Filename'" -ErrorLog $State.ErrorLog
             }
             return
         }
-        
+
         $FinalExtension = ($Config.KeepExtension ? $OriginalFile.Extension : $Config.OutputExtension)
-        
+
         $videoResult = Select-VideoStreams `
             -FfprobeOutput $ffprobeOutput `
             -ForceRecodeVideo $Config.ForceRecodeVideo `
@@ -821,13 +1564,13 @@ function Invoke-ReencodeFile {
             -UpscaleFit $Config.UpscaleFit `
             -ConfigUpscaleWidth $Config.UpscaleWidth `
             -RewriteMode $Config.Rewrite
-        
+
         $AudioTracks = Select-AudioStreams `
             -FfprobeOutput $ffprobeOutput `
             -FinalExtension $FinalExtension `
             -Quality $Config.Quality `
             -RewriteMode $Config.Rewrite
-        
+
         $subtitleResult = Select-SubtitleStreams `
             -FfprobeOutput $ffprobeOutput `
             -FinalExtension $FinalExtension `
@@ -836,64 +1579,76 @@ function Invoke-ReencodeFile {
             -SubTitlesToKeep $Config.SubTitlesToKeep `
             -Filename $Filename `
             -DirectoryName $OriginalFile.DirectoryName
-        
-        if ($null -eq $subtitleResult) {
+
+        if ($null -eq $subtitleResult)
+        {
             $subtitleStreams = $ffprobeOutput.streams | Where-Object { $_.codec_type -eq 'subtitle' }
             $SubtitleTracks = $subtitleStreams | Select-Object codec_name, tags
-            if ($SubtitleTracks -and $FinalExtension -ieq '.mp4' -and -not $Config.AllowSubTitlesConversion) {
+            if ($SubtitleTracks -and $FinalExtension -ieq '.mp4' -and -not $Config.AllowSubTitlesConversion)
+            {
                 Write-InfoLog -Color Yellow "Skip '$Filename' because $FinalExtension format requires subtitles conversion"
-            } else {
+            }
+            else
+            {
                 Write-InfoLog -Color Yellow "Skip '$Filename' because ass subtitles cannot be properly converted"
             }
             return
         }
-        
+
         $AttachmentTracks = Select-AttachmentStreams `
             -FfprobeOutput $ffprobeOutput `
             -HasAssSubtitles $subtitleResult.HasAssSubtitles
-		
+
         $hasVideoToConvert = @(@($videoResult.VideoTracks) | Where-Object { -not $_.__copy }).Count
         $hasAudioToConvert = @(@($AudioTracks) | Where-Object { -not $_.__copy }).Count
         $hasSubtitlesToConvert = @(@($subtitleResult.SubtitleTracks) | Where-Object { -not $_.__copy }).Count
-        
+
         $hasTracksDropped = (
-            @(@($videoResult.VideoTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
-            @(@($AudioTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
-            @(@($subtitleResult.SubtitleTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
-            @(@($AttachmentTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0
+        @(@($videoResult.VideoTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
+                @(@($AudioTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
+                @(@($subtitleResult.SubtitleTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
+                @(@($AttachmentTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0
         )
-        
-        if ($Config.Rewrite) {
-            if (-not $hasTracksDropped) {
+
+        if ($Config.Rewrite)
+        {
+            if (-not $hasTracksDropped)
+            {
                 Write-InfoLog "No stream filtering needed for '$Filename'"
                 return
             }
-        } else {
+        }
+        else
+        {
             if (($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and ($hasSubtitlesToConvert -eq 0) -and
-                ($OriginalFile.Extension -ieq $FinalExtension) -and -not $hasTracksDropped) {
+                    ($OriginalFile.Extension -ieq $FinalExtension) -and -not $hasTracksDropped)
+            {
                 Write-InfoLog "No reencoding needed for '$Filename'"
                 return
             }
         }
-        
+
         $mediaDuration = ($ffprobeOutput.format.Keys -contains "duration") ? $ffprobeOutput.format.duration : 0
-        
+
         $NewFilename = $OriginalFile.BaseName + $FinalExtension
         $TempFilename = $State.BaseTempFilename + $FinalExtension
         $NewFilePath = Join-Path -Path $OriginalFile.DirectoryName -ChildPath $NewFilename
-        
-        if (([string]$OriginalFile.FullName -ne $NewFilePath) -and [File]::Exists($NewFilePath)) {
+
+        if (([string]$OriginalFile.FullName -ne $NewFilePath) -and [File]::Exists($NewFilePath))
+        {
             Write-InfoLog -Color Yellow "Skip '$Filename' to avoid already existing file override" -Force
             return
         }
-        
+
         Write-InfoLog "Processing '$Filename'..." -Force
-        if (Test-Path $TempFilename -PathType Leaf) {
-            if ($Cmdlet.ShouldProcess($TempFilename, 'Remove temp file')) {
+        if (Test-Path $TempFilename -PathType Leaf)
+        {
+            if ( $Cmdlet.ShouldProcess($TempFilename, 'Remove temp file'))
+            {
                 Remove-Item $TempFilename -Force
             }
         }
-        
+
         $ffmpegArgs = Get-FFmpegArgs `
             -VideoCodec $Config.VideoCodec `
             -Quality $Config.Quality `
@@ -909,7 +1664,7 @@ function Invoke-ReencodeFile {
             -AudioTracks $AudioTracks `
             -SubtitleTracks $subtitleResult.SubtitleTracks `
             -AttachmentTracks $AttachmentTracks
-        
+
         $start = Get-Date
         $ok = Invoke-FFmpeg -FFMPEG $Config.FFMPEGPath `
             -InputFile $Filename `
@@ -917,65 +1672,122 @@ function Invoke-ReencodeFile {
             -OutputFile $TempFilename `
             -TargetLabel $Filename `
             -State $State
-        
-        if (-not $ok) { return }
-        
-        if ($Cmdlet.ShouldProcess($TempFilename, "Move temp over original '$Filename'")) {
+
+        if (-not $ok)
+        {
+            return
+        }
+
+        if (-not $WhatIfPreference -and (Test-Path -LiteralPath $TempFilename -PathType Leaf))
+        {
+            $keptSourceVideoIndices = @(
+            $videoResult.VideoTracks |
+                    Where-Object { $_.__copy -or $_.__process } |
+                    ForEach-Object { [int]$_._index }
+            )
+            $keptSourceAudioIndices = @(
+            $AudioTracks |
+                    Where-Object { $_.__copy -or $_.__process } |
+                    ForEach-Object { [int]$_._index }
+            )
+
+            $integrity = Test-EncodedFileIntegrity `
+                -FFPROBE $Config.FFPROBEPath `
+                -SourceProbe $ffprobeOutput `
+                -SourceFile $Filename `
+                -TempFile $TempFilename `
+                -KeptSourceVideoIndices $keptSourceVideoIndices `
+                -KeptSourceAudioIndices $keptSourceAudioIndices
+
+            switch ($integrity.Status)
+            {
+                'mismatch' {
+                    $msg = "Incomplete encoding for '{0}' [via {1}] - expected {2:0.000}s, got {3:0.000}s (diff {4:0.000}s)" -f `
+                        $Filename, $integrity.Method, $integrity.Expected, $integrity.Actual, $integrity.Diff
+                    Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
+                    [void]$State.IntegrityFailureFiles.Add($Filename)
+                    return
+                }
+                'unknown' {
+                    $msg = "Integrity check inconclusive for '$Filename' - no comparable duration method - accepting file"
+                    Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
+                    [void]$State.IntegrityWarningFiles.Add($Filename)
+                }
+            }
+        }
+
+        if ( $Cmdlet.ShouldProcess($TempFilename, "Move temp over original '$Filename'"))
+        {
             Move-Item -Path $TempFilename -Destination $Filename -Force
         }
-        
+
         $NewFile = Get-Item -LiteralPath $Filename
-        if ($NewFile) {
-            if ($Cmdlet.ShouldProcess($NewFile.FullName, "Rename to '$NewFilename'")) {
+        if ($NewFile)
+        {
+            if ( $Cmdlet.ShouldProcess($NewFile.FullName, "Rename to '$NewFilename'"))
+            {
                 $NewFile = $NewFile | Rename-Item -NewName $NewFilename -Force -PassThru
             }
-            if ($Cmdlet.ShouldProcess($NewFile.FullName, "Restore timestamps")) {
+            if ( $Cmdlet.ShouldProcess($NewFile.FullName, "Restore timestamps"))
+            {
                 $NewFile.CreationTime = $OriginalFileCreationTime
                 $NewFile.LastWriteTime = $OriginalFileLastWriteTime
                 $NewFile.LastAccessTime = $OriginalFileLastAccessTime
             }
-            foreach ($item in $LastWriteTimeFixes.GetEnumerator()) {
-                if ($Cmdlet.ShouldProcess($item.Key.FullName, "Fix directory times (post)")) {
+            foreach ($item in $LastWriteTimeFixes.GetEnumerator())
+            {
+                if ( $Cmdlet.ShouldProcess($item.Key.FullName, "Fix directory times (post)"))
+                {
                     $item.Key.CreationTime = $item.Value
                     $item.Key.LastWriteTime = $item.Value
                 }
             }
-            
+
             $NewFileSize = $NewFile.Length
-            $Result = if ($mediaDuration) {
-                $Duration = [TimeSpan]::FromSeconds([double]::Parse($mediaDuration, [cultureinfo] ''))
+            $Result = if ($mediaDuration)
+            {
+                $Duration = [TimeSpan]::FromSeconds([double]::Parse($mediaDuration, [cultureinfo]''))
                 [EncodingResult]::new($OriginalFileSize, $NewFileSize, $Duration, (Get-Date) - $start)
-            } else {
+            }
+            else
+            {
                 [EncodingResult]::new($OriginalFileSize, $NewFileSize)
             }
-            
+
             Write-Log -Color Magenta "Successfully reencoded $Filename"
-            if ($NewFile.FullName -ne $Filename) {
-                Write-Log -Color Magenta "                    to $($NewFile.FullName)"
+            if ($NewFile.FullName -ne $Filename)
+            {
+                Write-Log -Color Magenta "                    to $( $NewFile.FullName )"
             }
             $Result.WriteReport('Magenta', '', $true)
-            
+
             $State.SessionResult.Add($Result)
-			if ($State.SessionResult.Count -gt 1) {
-				$State.SessionResult.WriteReport('DarkMagenta', 'So far, ', $true)
-			}
+            if ($State.SessionResult.Count -gt 1)
+            {
+                $State.SessionResult.WriteReport('DarkMagenta', 'So far, ', $true)
+            }
         }
     }
-    catch {
-        Write-ErrorLogWithFile -Text "Error while treating $($OriginalFile.FullName)" -ErrorLog $State.ErrorLog
-		Write-Verbose $_.Exception
+    catch
+    {
+        Write-ErrorLogWithFile -Text "Error while treating $( $OriginalFile.FullName )" -ErrorLog $State.ErrorLog
+        Write-Verbose $_.Exception
         throw
     }
-    finally {
-        if ([System.IO.File]::Exists($TempFilename)) {
-            if ($Cmdlet.ShouldProcess($TempFilename, 'Cleanup temp file')) {
+    finally
+    {
+        if ( [System.IO.File]::Exists($TempFilename))
+        {
+            if ( $Cmdlet.ShouldProcess($TempFilename, 'Cleanup temp file'))
+            {
                 Remove-Item $TempFilename -Force
             }
         }
     }
 }
 
-function Invoke-PathScan {
+function Invoke-PathScan
+{
     param(
         [ValidateScript({ Test-Path $_ }, ErrorMessage = "{0} is not a valid path")]
         [string] $Path = "",
@@ -985,57 +1797,70 @@ function Invoke-PathScan {
         [hashtable] $Config,
         [System.Management.Automation.PSCmdlet] $Cmdlet
     )
-    
+
     $LiteralPath = $Path
-    if ($SubPath) { $LiteralPath = [Management.Automation.WildcardPattern]::Unescape($LiteralPath) }
-    
-    if (-not [File]::Exists($LiteralPath)) {
-        if (-not $SubPath) {
-            Write-InfoLog "Scanning '$LiteralPath' $($Recurse ? 'recursively' : '')..."
+    if ($SubPath)
+    {
+        $LiteralPath = [Management.Automation.WildcardPattern]::Unescape($LiteralPath)
+    }
+
+    if (-not [File]::Exists($LiteralPath))
+    {
+        if (-not $SubPath)
+        {
+            Write-InfoLog "Scanning '$LiteralPath' $( $Recurse ? 'recursively' : '' )..."
         }
-        if ($Recurse) {
+        if ($Recurse)
+        {
             Get-SortedFileList (Get-ChildItem -Path $LiteralPath -Directory -Force -ErrorAction SilentlyContinue |
-                        Where-Object { $_.Name -ine "Plex Versions" -and $_.Name -ine ".deletedByTMM" }) $Config.Sort |
-            ForEach-Object {
-                $NotReadOnly = ($_.Attributes -band [FileAttributes]::ReadOnly) -ne [FileAttributes]::ReadOnly
-                if ($NotReadOnly -or $Config.ScanReadOnlyDirectory) {
-                    Invoke-PathScan -Path ([Management.Automation.WildcardPattern]::Escape($_.FullName)) -Recurse -SubPath -State $State -Config $Config -Cmdlet $Cmdlet
-                }
-            }
+                    Where-Object { $_.Name -ine "Plex Versions" -and $_.Name -ine ".deletedByTMM" }) $Config.Sort |
+                    ForEach-Object {
+                        $NotReadOnly = ($_.Attributes -band [FileAttributes]::ReadOnly) -ne [FileAttributes]::ReadOnly
+                        if ($NotReadOnly -or $Config.ScanReadOnlyDirectory)
+                        {
+                            Invoke-PathScan -Path ([Management.Automation.WildcardPattern]::Escape($_.FullName)) -Recurse -SubPath -State $State -Config $Config -Cmdlet $Cmdlet
+                        }
+                    }
         }
     }
-    
-    if ([Directory]::Exists($LiteralPath) -and -not $LiteralPath.EndsWith('*')) {
-        if ((Get-ChildItem -LiteralPath $LiteralPath -Include $Config.InputMasks -Force | Select-Object -First 1 | Measure-Object).Count -eq 0) {
+
+    if ([Directory]::Exists($LiteralPath) -and -not $LiteralPath.EndsWith('*'))
+    {
+        if ((Get-ChildItem -LiteralPath $LiteralPath -Include $Config.InputMasks -Force | Select-Object -First 1 | Measure-Object).Count -eq 0)
+        {
             return
         }
         $LiteralPath = [Management.Automation.WildcardPattern]::Escape($LiteralPath) + '\*'
     }
-    
+
     Get-SortedFileList (Get-ChildItem -Path $LiteralPath -File -Attributes !ReadOnly -Include $Config.InputMasks -Force -ErrorAction SilentlyContinue) $Config.Sort |
-    ForEach-Object {
-        if (-not ([string]$_.FullName).Contains('-trailer.', [StringComparison]::InvariantCultureIgnoreCase)) {
-            Invoke-ReencodeFile -Filename $_.FullName -State $State -Config $Config -Cmdlet $Cmdlet
-        }
-    }
+            ForEach-Object {
+                if (-not ([string]$_.FullName).Contains('-trailer.', [StringComparison]::InvariantCultureIgnoreCase))
+                {
+                    Invoke-ReencodeFile -Filename $_.FullName -State $State -Config $Config -Cmdlet $Cmdlet
+                }
+            }
 }
 
-function Invoke-PathList {
+function Invoke-PathList
+{
     param(
         [string[]] $Paths,
         [hashtable] $State,
         [hashtable] $Config,
         [System.Management.Automation.PSCmdlet] $Cmdlet
     )
-    
-    foreach ($PathItem in $Paths) {
+
+    foreach ($PathItem in $Paths)
+    {
         $DoRecurse = ([string]$PathItem).StartsWith('+')
         $p = ([string]$PathItem).Substring(($DoRecurse ? 1 : 0))
         Invoke-PathScan -Path $p -Recurse:($Config.Recurse -or $DoRecurse) -State $State -Config $Config -Cmdlet $Cmdlet
     }
 }
 
-function Invoke-FileList {
+function Invoke-FileList
+{
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [string] $ListFile,
@@ -1043,18 +1868,20 @@ function Invoke-FileList {
         [hashtable] $Config,
         [System.Management.Automation.PSCmdlet] $Cmdlet
     )
-    
+
     Write-InfoLog -Color Blue "Using file list in '$ListFile'..."
     $ListContent = Get-Content $ListFile
-    
+
     $ListContent | ForEach-Object {
         $currentLine = [string]$_
         $DoRecurse = $currentLine.StartsWith('+')
         $p = $currentLine.Substring(($DoRecurse ? 1 : 0))
         Invoke-PathScan -Path $p -Recurse:($Config.Recurse -or $DoRecurse) -State $State -Config $Config -Cmdlet $Cmdlet
-        
-        if ($Config.UpdateList) {
-            if ($Cmdlet.ShouldProcess($ListFile, "Remove processed entry")) {
+
+        if ($Config.UpdateList)
+        {
+            if ( $Cmdlet.ShouldProcess($ListFile, "Remove processed entry"))
+            {
                 $NewListContent = Get-Content $ListFile | Where-Object { [string]$_ -ne $currentLine }
                 Set-Content $ListFile -Value $NewListContent
             }
@@ -1065,12 +1892,13 @@ function Invoke-FileList {
 # -----------------------------------------------------------------------------
 # Fonction publique
 # -----------------------------------------------------------------------------
-function Invoke-ReencodeMedia {
+function Invoke-ReencodeMedia
+{
     [CmdletBinding(
-        PositionalBinding = $false,
-        DefaultParametersetName = 'SetExtensionFromPath',
-        SupportsShouldProcess = $true,
-        ConfirmImpact = 'Medium'
+            PositionalBinding = $false,
+            DefaultParametersetName = 'SetExtensionFromPath',
+            SupportsShouldProcess = $true,
+            ConfirmImpact = 'Medium'
     )]
     param (
         [Parameter(Position = 0, ParameterSetName = 'CheckFromPath')]
@@ -1105,7 +1933,7 @@ function Invoke-ReencodeMedia {
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
         [Parameter(ParameterSetName = 'RewriteFromPath')]
         [Parameter(ParameterSetName = 'RewriteFromFile')]
-        [ValidateSet('NewestFirst','OldestFirst','SmallerFirst','LargerFirst')]
+        [ValidateSet('NewestFirst', 'OldestFirst', 'SmallerFirst', 'LargerFirst')]
         [string] $Sort,
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
@@ -1152,7 +1980,7 @@ function Invoke-ReencodeMedia {
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
         [ValidateSet('HEVC', 'AV1')]
         [string] $VideoCodec = 'HEVC',
-        
+
         [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
         [Parameter(ParameterSetName = 'SetExtensionFromPath')]
@@ -1174,13 +2002,13 @@ function Invoke-ReencodeMedia {
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
         [Parameter(ParameterSetName = 'SetExtensionFromPath')]
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [ValidateSet('Low','Medium','High')]
+        [ValidateSet('Low', 'Medium', 'High')]
         [string] $Quality = 'Medium',
         [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
         [Parameter(ParameterSetName = 'SetExtensionFromPath')]
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [ValidateSet('720p','1080p','2160p','4320p')]
+        [ValidateSet('720p', '1080p', '2160p', '4320p')]
         [string] $Upscale,
         [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
@@ -1210,7 +2038,7 @@ function Invoke-ReencodeMedia {
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
         [Parameter(ParameterSetName = 'RewriteFromPath')]
         [Parameter(ParameterSetName = 'RewriteFromFile')]
-        [string[]] $SubTitlesToKeep = @('fr','fre','fr-FR','en','eng','en-US','en-GB'),
+        [string[]] $SubTitlesToKeep = @('fr', 'fre', 'fr-FR', 'en', 'eng', 'en-US', 'en-GB'),
 
         [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
@@ -1221,45 +2049,46 @@ function Invoke-ReencodeMedia {
         [ValidateScript({ [Directory]::Exists($_) }, ErrorMessage = "{0} is not a valid path")]
         [string] $TempPath = $env:TEMP,
 
-		[Parameter(ParameterSetName = 'CheckFromPath')]
-		[Parameter(ParameterSetName = 'CheckFromFile')]
-		[Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-		[Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-		[Parameter(ParameterSetName = 'SetExtensionFromPath')]
-		[Parameter(ParameterSetName = 'SetExtensionFromFile')]
-		[Parameter(ParameterSetName = 'RewriteFromPath')]
-		[Parameter(ParameterSetName = 'RewriteFromFile')]
-		[ValidateScript({ [System.IO.Directory]::Exists($_) }, ErrorMessage = "{0} is not a valid folder")]
-		[string] $FFToolsBase = '.\',
+        [Parameter(ParameterSetName = 'CheckFromPath')]
+        [Parameter(ParameterSetName = 'CheckFromFile')]
+        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
+        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
+        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
+        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'RewriteFromPath')]
+        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [ValidateScript({ [System.IO.Directory]::Exists($_) }, ErrorMessage = "{0} is not a valid folder")]
+        [string] $FFToolsBase = '.\',
 
-		[Parameter(ParameterSetName = 'CheckFromPath')]
-		[Parameter(ParameterSetName = 'CheckFromFile')]
-		[Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-		[Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-		[Parameter(ParameterSetName = 'SetExtensionFromPath')]
-		[Parameter(ParameterSetName = 'SetExtensionFromFile')]
-		[Parameter(ParameterSetName = 'RewriteFromPath')]
-		[Parameter(ParameterSetName = 'RewriteFromFile')]
-		[ValidateScript({ [System.IO.File]::Exists($_) }, ErrorMessage = "{0} is not a valid filename")]
-		[string] $FFMPEGPath = (Join-Path $FFToolsBase ($IsWindows ? 'ffmpeg.exe'  : 'ffmpeg')),
+        [Parameter(ParameterSetName = 'CheckFromPath')]
+        [Parameter(ParameterSetName = 'CheckFromFile')]
+        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
+        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
+        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
+        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'RewriteFromPath')]
+        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [ValidateScript({ [System.IO.File]::Exists($_) }, ErrorMessage = "{0} is not a valid filename")]
+        [string] $FFMPEGPath = (Join-Path $FFToolsBase ($IsWindows ? 'ffmpeg.exe'  : 'ffmpeg')),
 
-		[Parameter(ParameterSetName = 'CheckFromPath')]
-		[Parameter(ParameterSetName = 'CheckFromFile')]
-		[Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-		[Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-		[Parameter(ParameterSetName = 'SetExtensionFromPath')]
-		[Parameter(ParameterSetName = 'SetExtensionFromFile')]
-		[Parameter(ParameterSetName = 'RewriteFromPath')]
-		[Parameter(ParameterSetName = 'RewriteFromFile')]
-		[ValidateScript({ [System.IO.File]::Exists($_) }, ErrorMessage = "{0} is not a valid filename")]
-		[string] $FFPROBEPath = (Join-Path $FFToolsBase ($IsWindows ? 'ffprobe.exe' : 'ffprobe'))
+        [Parameter(ParameterSetName = 'CheckFromPath')]
+        [Parameter(ParameterSetName = 'CheckFromFile')]
+        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
+        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
+        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
+        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'RewriteFromPath')]
+        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [ValidateScript({ [System.IO.File]::Exists($_) }, ErrorMessage = "{0} is not a valid filename")]
+        [string] $FFPROBEPath = (Join-Path $FFToolsBase ($IsWindows ? 'ffprobe.exe' : 'ffprobe'))
     )
 
     $state = Initialize-ReencodeState -TempPath $TempPath
-    
+
     $upscaleWidth = $UpscaleWidth
     $upscaleHeight = $null
-    if ($UpscaleFit) {
+    if ($UpscaleFit)
+    {
         $parts = $UpscaleFit -split '[xX]'
         $upscaleWidth = [int]$parts[0]
         $upscaleHeight = [int]$parts[1]
@@ -1267,9 +2096,9 @@ function Invoke-ReencodeMedia {
 
     $resolvedFFmpegPath = Get-FFmpegPath -OverridePath $FFMPEGPath
     $resolvedFFprobePath = Get-FfprobePath -OverridePath $FFPROBEPath
-    
+
     $config = @{
-        # Parcours / sélection
+    # Parcours / sélection
         Recurse = $Recurse
         Sort = $Sort
         ScanReadOnlyDirectory = $ScanReadOnlyDirectory
@@ -1305,16 +2134,38 @@ function Invoke-ReencodeMedia {
         FFPROBEPath = $resolvedFFprobePath
     }
 
-    try {
-        if ($ListFile) {
+    try
+    {
+        if ($ListFile)
+        {
             Invoke-FileList -ListFile $ListFile -State $state -Config $config -Cmdlet $PSCmdlet
-        } else {
+        }
+        else
+        {
             Invoke-PathList -Paths $Path -State $state -Config $config -Cmdlet $PSCmdlet
         }
     }
-    finally {
+    finally
+    {
         $state.SessionResult.WriteReport('Green', 'This session, ', $true)
-        Write-InfoLog -Color Green "On $($state.Attempts) ffmpeg invocation(s)" -Force
+        Write-InfoLog -Color Green "On $( $state.Attempts ) ffmpeg invocation(s)" -Force
+
+        if ($state.IntegrityFailureFiles.Count -gt 0)
+        {
+            Write-InfoLog -Color Red ("{0} file(s) rejected by integrity check (originals preserved):" -f $state.IntegrityFailureFiles.Count) -Force
+            foreach ($f in $state.IntegrityFailureFiles)
+            {
+                Write-InfoLog -Color Red "  - $f" -Force
+            }
+        }
+        if ($state.IntegrityWarningFiles.Count -gt 0)
+        {
+            Write-InfoLog -Color Yellow ("{0} file(s) accepted with integrity warning (duration unverifiable):" -f $state.IntegrityWarningFiles.Count) -Force
+            foreach ($f in $state.IntegrityWarningFiles)
+            {
+                Write-InfoLog -Color Yellow "  - $f" -Force
+            }
+        }
     }
 }
 

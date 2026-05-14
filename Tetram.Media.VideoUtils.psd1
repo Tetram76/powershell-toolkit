@@ -1,5 +1,5 @@
 @{
-    # --- Identité du module ---
+# --- Identité du module ---
     RootModule = 'Tetram.Media.VideoUtils.psm1'
     ModuleVersion = '1.0.0'
     GUID = '5f14ae6d-65e9-4033-a402-903dbff1d95b'
@@ -18,9 +18,9 @@
 
     # --- Export ---
     FunctionsToExport = @(
-		'Test-Is10BitVideoStream', 
-		'Get-SourceChromaMode'
-	)
+        'Test-Is10BitVideoStream',
+        'Get-SourceChromaMode'
+    )
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -29,12 +29,12 @@
     PrivateData = @{
         PSData = @{
             Tags = @(
-				'video', 
-				'ffmpeg', 
-				'ffprobe', 
-				'media', 
-				'ps7'
-			)
+                'video',
+                'ffmpeg',
+                'ffprobe',
+                'media',
+                'ps7'
+            )
         }
     }
 }

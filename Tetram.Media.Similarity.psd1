@@ -1,5 +1,5 @@
 @{
-    # --- Identité du module ---
+# --- Identité du module ---
     RootModule = 'Tetram.Media.Similarity.psm1'
     ModuleVersion = '1.0.0'
     GUID = '7b2e3a1f-ce2d-4b92-9a7a-2d5a0f6a6c88'
@@ -14,16 +14,16 @@
 
     # --- Dépendances ---
     RequiredModules = @()
-    RequiredAssemblies= @()
-	NestedModules = @(
-		'.\Tetram.Common', 
-		'.\Tetram.Media.FFmpeg'
-	)
-    
+    RequiredAssemblies = @()
+    NestedModules = @(
+        '.\Tetram.Common',
+        '.\Tetram.Media.FFmpeg'
+    )
+
     # --- Export ---
     FunctionsToExport = @(
-		'Test-MediaSimilarity'
-	)
+        'Test-MediaSimilarity'
+    )
     CmdletsToExport = @()
     AliasesToExport = @()
     VariablesToExport = @()
@@ -32,12 +32,12 @@
     PrivateData = @{
         PSData = @{
             Tags = @(
-				'video', 
-				'similarity', 
-				'ffmpeg', 
-				'fingerprinting', 
-				'ps7'
-			)
+                'video',
+                'similarity',
+                'ffmpeg',
+                'fingerprinting',
+                'ps7'
+            )
         }
     }
 }
