@@ -296,7 +296,7 @@ function Show-CommandLine
         if ($line -match "^\s*(-\S+)\s+(.+)$")
         {
             $k = $Matches[1]; $v = $Matches[2]
-            $vColor = ((-not (Should-SkipPathDetection $k) -and (Test-IsLikelyPath $v)) ? $FileColor: $ParamColor)
+            $vColor = ((-not (Should-SkipPathDetection $k) -and (Test-IsLikelyPath $v)) ? $FileColor : $ParamColor)
             Write-Host ($indentStr + $k + ' ') -ForegroundColor $ParamColor -NoNewline
             Write-Host $v -ForegroundColor $vColor
         }
