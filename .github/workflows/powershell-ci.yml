@@ -29,14 +29,15 @@ jobs:
             $invokeParams.Settings = $settingsPath
           }
 
+          # Inclure .psd1 (manifestes de modules) pour détecter parse / erreurs sur les manifests, pas seulement .ps1/.psm1.
           $scripts = @(Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Recurse -File |
             Where-Object {
-              $_.Extension -in @('.ps1', '.psm1') -and
+              $_.Extension -in @('.ps1', '.psm1', '.psd1') -and
               $_.FullName -notmatch '(?i)[\\/]\.git[\\/]'
             })
 
           if ($scripts.Count -eq 0) {
-            Write-Warning 'No .ps1 or .psm1 files found under the repository root.'
+            Write-Warning 'No .ps1, .psm1, or .psd1 files found under the repository root.'
             exit 0
           }
 
