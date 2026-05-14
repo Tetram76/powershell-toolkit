@@ -1,6 +1,6 @@
 Set-StrictMode -Version 3.0
 
-$script:FFToolsDefaultBase = Join-Path $PSScriptRoot 'RecodeVideo\ffmpeg-8.0.1-full_build\bin'
+$script:FFToolsDefaultBase = Join-Path (Split-Path -Parent $PSScriptRoot) 'RecodeVideo\ffmpeg-8.0.1-full_build\bin'
 
 function Get-FFmpegPath
 {
