@@ -86,7 +86,7 @@ jobs:
         with:
           name: Pester Tests
           path: TestResults.xml
-          reporter: dotnet-nunit
+          reporter: java-junit
           fail-on-error: false
 
       - name: Write job summary (Pester)
@@ -98,13 +98,13 @@ jobs:
           @'
           ## Résultats Pester
 
-          - **NUnit XML :** `TestResults.xml` (racine du workspace)
+          - **JUnit XML :** `TestResults.xml` (racine du workspace)
           - **Couverture JaCoCo :** `coverage.xml` (si généré par `Invoke-Tests.ps1` avec `-Coverage`)
           - **Rapport de tests (check / annotations) :** étape *Publish Pester test report* (`dorny/test-reporter`)
           - **Fichiers bruts téléchargeables :** artefacts **pester-test-results** et **pester-coverage**
           '@ | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
 
-      - name: Upload test results (NUnit)
+      - name: Upload test results (JUnit)
         uses: actions/upload-artifact@v4
         if: always()
         with:
