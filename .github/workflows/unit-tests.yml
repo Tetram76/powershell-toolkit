@@ -1,4 +1,4 @@
-name: CI PowerShell
+name: Unit tests
 
 on:
   pull_request:
@@ -7,48 +7,6 @@ on:
       - main
 
 jobs:
-  psscriptanalyzer:
-    name: PSScriptAnalyzer
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install PSScriptAnalyzer
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
-          Install-Module ConvertToSARIF -Scope CurrentUser -Force
-
-      - name: Run PSScriptAnalyzer (SARIF + gate)
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          Import-Module PSScriptAnalyzer -Force
-          & "$env:GITHUB_WORKSPACE/build/Invoke-Analyzer.ps1" -SarifOutputPath "$env:GITHUB_WORKSPACE/results.sarif"
-
-      - name: Upload SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
-        if: ${{ (success() || failure()) && hashFiles('results.sarif') != '' }}
-        with:
-          sarif_file: results.sarif
-          category: psscriptanalyzer
-
-      - name: Upload SARIF artifact
-        uses: actions/upload-artifact@v4
-        if: ${{ always() && hashFiles('results.sarif') != '' }}
-        with:
-          name: psscriptanalyzer-sarif
-          path: results.sarif
-          if-no-files-found: ignore
-
   pester:
     name: Pester
     runs-on: ubuntu-latest
@@ -82,7 +40,7 @@ jobs:
 
       - name: Publish Pester test report
         uses: dorny/test-reporter@v2
-        if: success() || failure()
+        if: (success() || failure()) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
         with:
           name: Pester Tests
           path: TestResults.xml
