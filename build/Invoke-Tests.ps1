@@ -27,7 +27,7 @@ if ($ExcludeTag.Count -gt 0) {
 
 $config.TestResult.Enabled = $true
 $config.TestResult.OutputPath = "TestResults.xml"
-$config.TestResult.OutputFormat = "NUnitXml"
+$config.TestResult.OutputFormat = "JUnitXml"
 
 if ($Coverage) {
     $repoRoot = Split-Path -Parent $PSScriptRoot

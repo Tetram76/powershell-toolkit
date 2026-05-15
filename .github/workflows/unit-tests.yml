@@ -1,0 +1,77 @@
+name: Unit tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  pester:
+    name: Pester
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
+          Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run Pester
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Push-Location $env:GITHUB_WORKSPACE
+          try {
+            & "$env:GITHUB_WORKSPACE/build/Invoke-Tests.ps1" -Coverage
+          }
+          finally {
+            Pop-Location
+          }
+
+      - name: Publish Pester test report
+        uses: dorny/test-reporter@v2
+        if: (success() || failure()) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        with:
+          name: Pester Tests
+          path: TestResults.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Write job summary (Pester)
+        if: success() || failure()
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          @'
+          ## Résultats Pester
+
+          - **JUnit XML :** `TestResults.xml` (racine du workspace)
+          - **Couverture JaCoCo :** `coverage.xml` (si généré par `Invoke-Tests.ps1` avec `-Coverage`)
+          - **Rapport de tests (check / annotations) :** étape *Publish Pester test report* (`dorny/test-reporter`)
+          - **Fichiers bruts téléchargeables :** artefacts **pester-test-results** et **pester-coverage**
+          '@ | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+
+      - name: Upload test results (JUnit)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pester-test-results
+          path: TestResults.xml
+
+      - name: Upload code coverage (JaCoCo)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pester-coverage
+          path: coverage.xml

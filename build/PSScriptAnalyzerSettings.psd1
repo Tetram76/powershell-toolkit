@@ -11,15 +11,6 @@
 # contient ce fichier ; ici on passe -Settings explicitement depuis Invoke-Analyzer.ps1.
 
 @{
-
-    # Severités analysées. Les warnings peuvent être non bloquants selon -Severity sur Invoke-Analyzer.ps1.
-    # Attention : -Severity en ligne de commande peut encore varier selon la version de PSA ; le filtre du script reste la référence.
-    Severity = @(
-        'ParseError'
-        'Error'
-        'Warning'
-    )
-
     ExcludeRules = @(
         'PSAvoidUsingWriteHost'
     )
