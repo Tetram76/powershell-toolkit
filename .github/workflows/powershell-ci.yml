@@ -10,6 +10,10 @@ jobs:
   psscriptanalyzer:
     name: PSScriptAnalyzer
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -20,17 +24,38 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          Install-Module ConvertToSARIF -Scope CurrentUser -Force
 
-      - name: Run PSScriptAnalyzer
+      - name: Run PSScriptAnalyzer (SARIF + gate)
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          & "$env:GITHUB_WORKSPACE/build/Invoke-Analyzer.ps1"
+          Import-Module PSScriptAnalyzer -Force
+          & "$env:GITHUB_WORKSPACE/build/Invoke-Analyzer.ps1" -SarifOutputPath "$env:GITHUB_WORKSPACE/results.sarif"
+
+      - name: Upload SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: ${{ (success() || failure()) && hashFiles('results.sarif') != '' }}
+        with:
+          sarif_file: results.sarif
+          category: psscriptanalyzer
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('results.sarif') != '' }}
+        with:
+          name: psscriptanalyzer-sarif
+          path: results.sarif
+          if-no-files-found: ignore
 
   pester:
     name: Pester
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      checks: write
     steps:
       - uses: actions/checkout@v4
 
@@ -54,6 +79,30 @@ jobs:
           finally {
             Pop-Location
           }
+
+      - name: Publish Pester test report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Pester Tests
+          path: TestResults.xml
+          reporter: dotnet-nunit
+          fail-on-error: false
+
+      - name: Write job summary (Pester)
+        if: success() || failure()
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          @'
+          ## Résultats Pester
+
+          - **NUnit XML :** `TestResults.xml` (racine du workspace)
+          - **Couverture JaCoCo :** `coverage.xml` (si généré par `Invoke-Tests.ps1` avec `-Coverage`)
+          - **Rapport de tests (check / annotations) :** étape *Publish Pester test report* (`dorny/test-reporter`)
+          - **Fichiers bruts téléchargeables :** artefacts **pester-test-results** et **pester-coverage**
+          '@ | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
 
       - name: Upload test results (NUnit)
         uses: actions/upload-artifact@v4

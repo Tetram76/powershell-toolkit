@@ -11,7 +11,10 @@ param(
     [string] $Settings,
 
     # Phase 1 dépôt existant : ParseError + Error. Passer aussi 'Warning' quand le dépôt est stabilisé.
-    [string[]] $Severity = @('ParseError', 'Error')
+    [string[]] $Severity = @('ParseError', 'Error'),
+
+    # Si renseigné (ex. CI), écrit un SARIF à partir de la même collecte $results avant la gate.
+    [string] $SarifOutputPath
 )
 
 Set-StrictMode -Version Latest
@@ -52,6 +55,24 @@ try {
         $chunk = Invoke-ScriptAnalyzer -Path $f.FullName @analyzerParams
         if ($chunk) {
             [void]$results.AddRange(@($chunk))
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($SarifOutputPath)) {
+        $sarifParent = Split-Path -Parent $SarifOutputPath
+        if ($sarifParent -and -not (Test-Path -LiteralPath $sarifParent)) {
+            New-Item -ItemType Directory -Path $sarifParent -Force | Out-Null
+        }
+
+        $analysisResults = @($results)
+        # ConvertTo-SARIF 1.0 : sous StrictMode Latest, certains accès aux DiagnosticRecord échouent.
+        Set-StrictMode -Off
+        try {
+            Import-Module ConvertToSARIF -Force
+            $analysisResults | ConvertTo-SARIF -FilePath $SarifOutputPath
+        }
+        finally {
+            Set-StrictMode -Version Latest
         }
     }
 
