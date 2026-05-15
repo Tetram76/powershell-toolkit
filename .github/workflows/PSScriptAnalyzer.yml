@@ -37,7 +37,9 @@ jobs:
           path: .
           recurse: true
           settings: ./build/PSScriptAnalyzerSettings.psd1
-          severity: ParseError,Error # Warnings are not of concern here
+          severity: # Warnings are not of concern here
+            ParseError
+            Error 
           output: results.sarif
           enableExit: true
 
