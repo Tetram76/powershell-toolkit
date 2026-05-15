@@ -13,45 +13,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run PSScriptAnalyzer
+      - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
 
-          $settingsPath = Join-Path $env:GITHUB_WORKSPACE '.PSScriptAnalyzerSettings.psd1'
-          $invokeParams = @{}
-          if (Test-Path -LiteralPath $settingsPath) {
-            $invokeParams.Settings = $settingsPath
-          }
-
-          $scripts = @(Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Recurse -File |
-            Where-Object {
-              $_.Extension -in @('.ps1', '.psm1', '.psd1') -and
-              $_.FullName -notmatch '(?i)[\\/]\.git[\\/]'
-            })
-
-          if ($scripts.Count -eq 0) {
-            Write-Warning 'No .ps1, .psm1, or .psd1 files found under the repository root.'
-            exit 0
-          }
-
-          $issues = foreach ($script in $scripts) {
-            Invoke-ScriptAnalyzer -Path $script.FullName @invokeParams
-          }
-
-          $failures = @($issues | Where-Object { $_.Severity -in @('ParseError', 'Error') })
-
-          if ($failures.Count -gt 0) {
-            $failures | Sort-Object Severity, RuleName, ScriptPath, Line | Format-Table -AutoSize RuleName, Severity, ScriptPath, Line, Message | Out-Host
-            Write-Host ("##[error]PSScriptAnalyzer reported {0} failing diagnostic(s) (ParseError or Error)." -f $failures.Count)
-            exit 1
-          }
-
-          Write-Host ('Analyzed {0} file(s); ParseError/Error count: {1}.' -f $scripts.Count, $failures.Count)
-          exit 0
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          & "$env:GITHUB_WORKSPACE/build/Invoke-Analyzer.ps1"
 
   pester:
     name: Pester
@@ -65,7 +40,7 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
-          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck
 
       - name: Run Pester
         shell: pwsh
