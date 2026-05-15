@@ -2,3 +2,5 @@ RecodeVideo/*
 !RecodeVideo/.keep
 reencode-errors.log
 .idea/
+/testResults.xml
+/coverage.xml

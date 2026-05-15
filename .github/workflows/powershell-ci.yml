@@ -1,0 +1,70 @@
+name: CI PowerShell
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  psscriptanalyzer:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          & "$env:GITHUB_WORKSPACE/build/Invoke-Analyzer.ps1"
+
+  pester:
+    name: Pester
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
+          Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run Pester
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          Push-Location $env:GITHUB_WORKSPACE
+          try {
+            & "$env:GITHUB_WORKSPACE/build/Invoke-Tests.ps1" -Coverage
+          }
+          finally {
+            Pop-Location
+          }
+
+      - name: Upload test results (NUnit)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pester-test-results
+          path: TestResults.xml
+
+      - name: Upload code coverage (JaCoCo)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pester-coverage
+          path: coverage.xml
