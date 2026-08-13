@@ -27,6 +27,7 @@
     VariablesToExport = @()
 
     PrivateData = @{
+        FFToolsMinVersion = '9.0.1'
         PSData = @{
             Tags = @(
                 'ffmpeg',
