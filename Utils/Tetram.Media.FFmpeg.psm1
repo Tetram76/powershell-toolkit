@@ -208,7 +208,9 @@ function Invoke-FFmpeg
     }
 
     Write-Verbose "Execution: $exe $($Arguments -join ' ')"
-    & $exe @Arguments
+    # Écarter stdout du success stream pour ne renvoyer que le code de sortie
+    # (contrat historique Start-Process → ExitCode). stderr reste visible.
+    & $exe @Arguments > $null
     return $LASTEXITCODE
 }
 
