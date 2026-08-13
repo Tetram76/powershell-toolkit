@@ -1,3 +1,10 @@
+# Étendre la suite autour du module SUD Utils/Tetram.Media.FFmpeg.psd1 (chemin ffmpeg, vérifs environnement).
+#
+# RepoRoot (deux niveaux depuis tests/Utils) : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
+# Import-Module (Join-Path $RepoRoot 'Utils/Tetram.Media.FFmpeg.psd1') -Force
+# Couverture résiliente CI : tester ffmpeg absent/présents via Mock, fixtures temp (FFToolsSearchRoot) ou FFToolsVersionReader
+# plutôt qu'un `ffmpeg` garanti sur chaque runner ; couvrir sorties erreur attendues (throw actionnable, messages).
+
 BeforeAll {
     Set-StrictMode -Version Latest
     $script:RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
@@ -5,15 +12,15 @@ BeforeAll {
     Import-Module -Name $script:ManifestPath -Force -ErrorAction Stop
 }
 
+AfterAll {
+    Remove-Module -Name 'Tetram.Media.FFmpeg' -Force -ErrorAction SilentlyContinue
+}
+
 Describe 'Tetram.Media.FFmpeg manifest' {
     It 'déclare FFToolsMinVersion = 9.0.1 dans PrivateData' {
         $data = Import-PowerShellDataFile -LiteralPath $script:ManifestPath
         $data.PrivateData.FFToolsMinVersion | Should -Be '9.0.1'
     }
-}
-
-AfterAll {
-    Remove-Module -Name 'Tetram.Media.FFmpeg' -Force -ErrorAction SilentlyContinue
 }
 
 function script:New-FakeFFBuild {
