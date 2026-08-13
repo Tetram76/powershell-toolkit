@@ -756,8 +756,7 @@ function Invoke-ReencodeMedia
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
         [Parameter(ParameterSetName = 'RewriteFromPath')]
         [Parameter(ParameterSetName = 'RewriteFromFile')]
-        [ValidateScript({ [System.IO.File]::Exists($_) }, ErrorMessage = "{0} is not a valid filename")]
-        [string] $FFMPEGPath = (Join-Path $FFToolsBase ($IsWindows ? 'ffmpeg.exe'  : 'ffmpeg')),
+        [string] $FFMPEGPath = '',
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
@@ -767,8 +766,7 @@ function Invoke-ReencodeMedia
         [Parameter(ParameterSetName = 'SetExtensionFromFile')]
         [Parameter(ParameterSetName = 'RewriteFromPath')]
         [Parameter(ParameterSetName = 'RewriteFromFile')]
-        [ValidateScript({ [System.IO.File]::Exists($_) }, ErrorMessage = "{0} is not a valid filename")]
-        [string] $FFPROBEPath = (Join-Path $FFToolsBase ($IsWindows ? 'ffprobe.exe' : 'ffprobe'))
+        [string] $FFPROBEPath = ''
     )
 
     $state = Initialize-ReencodeState -TempPath $TempPath
@@ -782,8 +780,16 @@ function Invoke-ReencodeMedia
         $upscaleHeight = [int]$parts[1]
     }
 
-    $resolvedFFmpegPath = Get-FFmpegPath -OverridePath $FFMPEGPath
-    $resolvedFFprobePath = Get-FfprobePath -OverridePath $FFPROBEPath
+    try
+    {
+        $resolvedFFmpegPath = Get-FFmpegPath -OverridePath $FFMPEGPath
+        $resolvedFFprobePath = Get-FfprobePath -OverridePath $FFPROBEPath
+    }
+    catch
+    {
+        Write-ErrorLog $_.Exception.Message
+        return
+    }
 
     $config = @{
     # Parcours / sélection
