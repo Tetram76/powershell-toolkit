@@ -182,6 +182,15 @@ Describe 'Resolve-FFToolsDefaultBase' {
         }
     }
 
+    It 'Get-FFmpegPath -OverridePath refuse un chemin inexistant (pas de fallback)' {
+        $missing = Join-Path $script:TestRoot 'no-such-ffmpeg.exe'
+        InModuleScope 'Tetram.Media.FFmpeg' -Parameters @{ Missing = $missing } {
+            param($Missing)
+
+            { Get-FFmpegPath -OverridePath $Missing } | Should -Throw -ExpectedMessage '*inexistant*'
+        }
+    }
+
     It 'throw un message actionnable si rien trouvé' {
         Mock -ModuleName Tetram.Media.FFmpeg Get-Command { $null } -ParameterFilter { $Name -eq 'ffmpeg' }
         InModuleScope 'Tetram.Media.FFmpeg' {

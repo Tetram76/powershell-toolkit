@@ -119,6 +119,7 @@ function Get-FFmpegPath
         {
             throw "OverridePath doit être un fichier exécutable, pas un dossier : '$OverridePath'"
         }
+        throw "OverridePath inexistant ou invalide : '$OverridePath'"
     }
 
     $exeName = if ($IsWindows) { 'ffmpeg.exe' } else { 'ffmpeg' }
@@ -155,6 +156,7 @@ function Get-FfprobePath
         {
             throw "OverridePath doit être un fichier exécutable, pas un dossier : '$OverridePath'"
         }
+        throw "OverridePath inexistant ou invalide : '$OverridePath'"
     }
 
     $exeName = if ($IsWindows) { 'ffprobe.exe' } else { 'ffprobe' }
