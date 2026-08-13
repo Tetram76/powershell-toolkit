@@ -180,7 +180,7 @@ function Get-FfprobePath
 function Invoke-FFmpeg
 {
     param(
-        [Parameter(Mandatory)] [string]$Arguments,
+        [Parameter(Mandatory)] [string[]]$Arguments,
         [string]$ExePath, # Permet d'injecter le chemin résolu par le script parent
         [switch]$CaptureOutput
     )
@@ -204,7 +204,7 @@ function Invoke-FFmpeg
     }
     else
     {
-        Write-Verbose "Execution: $exe $Arguments"
+        Write-Verbose "Execution: $exe $($Arguments -join ' ')"
         $proc = Start-Process -FilePath $exe -ArgumentList $Arguments -NoNewWindow -Wait -PassThru
         return $proc.ExitCode
     }

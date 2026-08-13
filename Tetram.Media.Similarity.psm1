@@ -14,7 +14,7 @@ function New-VideoSignatureFile
         '-vf', "signature=format=binary:filename='$OutputPath'"
         '-f', 'null'
     )
-    Invoke-FFmpeg -Arguments ($ffmpegArgs -join ' ')
+    Invoke-FFmpeg -Arguments $ffmpegArgs
 }
 
 function Get-SignatureConfidence
