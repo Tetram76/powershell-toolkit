@@ -47,7 +47,7 @@ function Select-VideoStreams
     try
     {
         $videoStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'video' }
-        $VideoTracks = $videoStreams | Select-Object codec_name, profile, height, width, disposition
+        $VideoTracks = $videoStreams | Select-Object codec_name, profile, height, width, disposition, color_space
         $i = -1
 
         foreach ($stream in $VideoTracks)

@@ -6,7 +6,7 @@
 
     Author = 'TRL'
     CompanyName = 'Tetram'
-    Description = 'Utilitaires pour l''analyse des flux vidéo (profondeur de bits, chroma).'
+    Description = 'Utilitaires pour l''analyse des flux vidéo (profondeur de bits, chroma, color space).'
 
     # --- Compatibilité ---
     PowerShellVersion = '7.0'
@@ -19,7 +19,8 @@
     # --- Export ---
     FunctionsToExport = @(
         'Test-Is10BitVideoStream',
-        'Get-SourceChromaMode'
+        'Get-SourceChromaMode',
+        'Get-ColorSpaceRemapFilter'
     )
     CmdletsToExport = @()
     AliasesToExport = @()

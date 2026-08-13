@@ -80,4 +80,31 @@ function Get-SourceChromaMode
     return '420'
 }
 
-Export-ModuleMember -Function Test-Is10BitVideoStream, Get-SourceChromaMode
+function Get-ColorSpaceRemapFilter
+{
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string] $ColorSpace,
+        [ValidateSet('420', '422', '444')]
+        [string] $TargetChroma = '420'
+    )
+
+    # Identity/GBR (matrix_coefficient=0) n'est valide qu'en 4:4:4 ; SVT-AV1 refuse gbr+yuv420p.
+    if ($TargetChroma -eq '444')
+    {
+        return $null
+    }
+    if ([string]::IsNullOrWhiteSpace($ColorSpace))
+    {
+        return $null
+    }
+    if ($ColorSpace -notin @('gbr', 'rgb'))
+    {
+        return $null
+    }
+
+    return 'setparams=colorspace=bt709'
+}
+
+Export-ModuleMember -Function Test-Is10BitVideoStream, Get-SourceChromaMode, Get-ColorSpaceRemapFilter
