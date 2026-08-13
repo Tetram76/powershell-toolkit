@@ -27,17 +27,9 @@ Describe 'Invoke-ReencodeMedia - résolution FFmpeg au démarrage' {
     }
 
     It "log une erreur via Write-ErrorLog et ne lève pas d'exception quand FFmpeg est introuvable" {
-        # $TestDrive peut être vide selon le runner ; un dossier temp garantit un -Path bindable.
-        $in = Join-Path ([IO.Path]::GetTempPath()) ('reencode-test-' + [guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path $in -Force | Out-Null
-        try
-        {
-            { Invoke-ReencodeMedia -Path $in -CheckOnly } | Should -Not -Throw
-            Should -Invoke -ModuleName Tetram.Media.Reencode Write-ErrorLog -Times 1
-        }
-        finally
-        {
-            Remove-Item -LiteralPath $in -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        # Utiliser $script: (pas une variable locale) : le scriptblock de Should -Not -Throw
+        # peut ne pas voir le scope parent sur certains runners.
+        { Invoke-ReencodeMedia -Path $script:RepoRootReencode -CheckOnly } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Reencode Write-ErrorLog -Times 1
     }
 }

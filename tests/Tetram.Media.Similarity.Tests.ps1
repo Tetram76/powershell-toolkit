@@ -27,16 +27,7 @@ Describe 'Test-MediaSimilarity - résolution FFmpeg au démarrage' {
     }
 
     It "log une erreur via Write-ErrorLog et ne lève pas d'exception quand FFmpeg est introuvable" {
-        $in = Join-Path ([IO.Path]::GetTempPath()) ('similarity-test-' + [guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path $in -Force | Out-Null
-        try
-        {
-            { Test-MediaSimilarity -Path $in } | Should -Not -Throw
-            Should -Invoke -ModuleName Tetram.Media.Similarity Write-ErrorLog -Times 1
-        }
-        finally
-        {
-            Remove-Item -LiteralPath $in -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        { Test-MediaSimilarity -Path $script:RepoRootSimilarity } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Similarity Write-ErrorLog -Times 1
     }
 }
