@@ -110,12 +110,21 @@ function Select-VideoStreams
 
         $chromaRank = @{ '420' = 0; '422' = 1; '444' = 2 }
         $sourceChroma = '420'
+        $sourceColorSpace = $null
         foreach ($vs in $videoStreams)
         {
             $c = Get-SourceChromaMode $vs
             if ($chromaRank[$c] -gt $chromaRank[$sourceChroma])
             {
                 $sourceChroma = $c
+            }
+            if (-not $sourceColorSpace)
+            {
+                $csProp = $vs.PSObject.Properties['color_space']
+                if ($csProp -and -not [string]::IsNullOrWhiteSpace([string]$csProp.Value))
+                {
+                    $sourceColorSpace = [string]$csProp.Value
+                }
             }
         }
 
@@ -124,6 +133,7 @@ function Select-VideoStreams
             VideoTracks = $VideoTracks
             IsSource10Bit = $isSource10Bit
             SourceChroma = $sourceChroma
+            SourceColorSpace = $sourceColorSpace
         }
     }
     catch

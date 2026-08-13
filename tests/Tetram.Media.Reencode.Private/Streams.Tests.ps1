@@ -62,3 +62,43 @@ Describe 'Select-AudioStreams' {
         }
     }
 }
+
+Describe 'Select-VideoStreams — color_space' {
+
+    It 'expose SourceColorSpace=gbr depuis ffprobe' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type  = 'video'
+                    codec_name  = 'hevc'
+                    profile     = 'Main'
+                    height      = 1080
+                    width       = 1920
+                    pix_fmt     = 'yuv420p'
+                    color_space = 'gbr'
+                    disposition = @{ attached_pic = 0 }
+                }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $result = Select-VideoStreams `
+                -FfprobeOutput $FfprobeOutput `
+                -ForceRecodeVideo $true `
+                -VideoCodec 'AV1' `
+                -AllowVideoCodecUpgrade $true `
+                -Deinterlace $false `
+                -Upscale '' `
+                -UpscaleWidth 0 `
+                -UpscaleHeight 0 `
+                -UpscaleFit '' `
+                -ConfigUpscaleWidth 0 `
+                -RewriteMode $false
+
+            $result.SourceColorSpace | Should -BeExactly 'gbr'
+            $result.SourceChroma | Should -BeExactly '420'
+        }
+    }
+}

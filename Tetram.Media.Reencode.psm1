@@ -452,6 +452,7 @@ function Invoke-ReencodeFile
             -VideoTracks $videoResult.VideoTracks `
             -IsSource10Bit $videoResult.IsSource10Bit `
             -SourceChroma $videoResult.SourceChroma `
+            -SourceColorSpace $videoResult.SourceColorSpace `
             -AudioTracks $AudioTracks `
             -SubtitleTracks $subtitleResult.SubtitleTracks `
             -AttachmentTracks $AttachmentTracks

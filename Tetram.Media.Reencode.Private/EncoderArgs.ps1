@@ -173,6 +173,9 @@ function Get-FFmpegArgs
         [object[]] $VideoTracks,
         [bool] $IsSource10Bit,
         [string] $SourceChroma,
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string] $SourceColorSpace,
         [object[]] $AudioTracks,
         [object[]] $SubtitleTracks,
         [object[]] $AttachmentTracks
@@ -266,6 +269,11 @@ function Get-FFmpegArgs
                     $targetH = Resolve-UpscaleHeight -Value $Upscale
                     $filters += ('scale={0}:{1}:flags=lanczos' -f $ConfigUpscaleWidth, $targetH)
                 }
+            }
+            $colorRemap = Get-ColorSpaceRemapFilter -ColorSpace $SourceColorSpace -TargetChroma $targetChroma
+            if ($colorRemap)
+            {
+                $filters += $colorRemap
             }
             if ($filters.Count -gt 0)
             {
