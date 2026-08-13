@@ -127,14 +127,23 @@ function Test-MediaSimilarity
     }
 
     process {
-        $files = Get-ChildItem -Path (Resolve-Path $Path) -Include $InputMasks -Recurse:$Recurse | Where-Object { -not $_.PSIsContainer }
-        $registry = @(Sync-SignatureRegistry -Files $files)
-
-        if ($UpdateOnly -or $registry.Count -lt 2)
+        try
         {
-            $results = @(); return
+            $files = Get-ChildItem -Path (Resolve-Path $Path) -Include $InputMasks -Recurse:$Recurse | Where-Object { -not $_.PSIsContainer }
+            $registry = @(Sync-SignatureRegistry -Files $files)
+
+            if ($UpdateOnly -or $registry.Count -lt 2)
+            {
+                $results = @(); return
+            }
+            $results = @(Invoke-SimilarityAnalysis -Registry $registry -Threshold $ConfidenceThreshold)
         }
-        $results = @(Invoke-SimilarityAnalysis -Registry $registry -Threshold $ConfidenceThreshold)
+        catch
+        {
+            Write-ErrorLog $_.Exception.Message
+            $results = @()
+            return
+        }
     }
 
     end {
