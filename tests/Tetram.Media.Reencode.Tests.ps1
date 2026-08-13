@@ -9,3 +9,25 @@ Describe 'Tetram.Media.Reencode (stub)' {
     It 'Stub — tests à ajouter' -Skip {
     }
 }
+
+Describe 'Invoke-ReencodeMedia - résolution FFmpeg au démarrage' {
+    BeforeAll {
+        Set-StrictMode -Version Latest
+        $script:RepoRootReencode = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+        Import-Module -Name (Join-Path $script:RepoRootReencode 'Tetram.Media.Reencode.psd1') -Force -ErrorAction Stop
+    }
+
+    AfterAll {
+        Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+    }
+
+    BeforeEach {
+        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { throw "FFmpeg introuvable (test)" }
+        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+    }
+
+    It "log une erreur via Write-ErrorLog et ne lève pas d'exception quand FFmpeg est introuvable" {
+        { Invoke-ReencodeMedia -Path $TestDrive -CheckOnly } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Reencode Write-ErrorLog -Times 1
+    }
+}

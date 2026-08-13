@@ -9,3 +9,25 @@ Describe 'Tetram.Media.Similarity (stub)' {
     It 'Stub — tests à ajouter' -Skip {
     }
 }
+
+Describe 'Test-MediaSimilarity - résolution FFmpeg au démarrage' {
+    BeforeAll {
+        Set-StrictMode -Version Latest
+        $script:RepoRootSimilarity = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+        Import-Module -Name (Join-Path $script:RepoRootSimilarity 'Tetram.Media.Similarity.psd1') -Force -ErrorAction Stop
+    }
+
+    AfterAll {
+        Remove-Module -Name 'Tetram.Media.Similarity' -Force -ErrorAction SilentlyContinue
+    }
+
+    BeforeEach {
+        Mock -ModuleName Tetram.Media.Similarity Get-FFmpegPath { throw "FFmpeg introuvable (test)" }
+        Mock -ModuleName Tetram.Media.Similarity Write-ErrorLog {}
+    }
+
+    It "log une erreur via Write-ErrorLog et ne lève pas d'exception quand FFmpeg est introuvable" {
+        { Test-MediaSimilarity -Path $TestDrive } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Similarity Write-ErrorLog -Times 1
+    }
+}

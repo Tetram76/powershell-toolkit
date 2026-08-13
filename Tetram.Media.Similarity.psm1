@@ -7,14 +7,14 @@ function New-VideoSignatureFile
         $OutputPath
     )
 
-    $args = @(
+    $ffmpegArgs = @(
         '-loglevel', 'error'
         '-y'
         '-i', $InputPath
         '-vf', "signature=format=binary:filename='$OutputPath'"
         '-f', 'null'
     )
-    Invoke-FFmpeg -Arguments $args
+    Invoke-FFmpeg -Arguments ($ffmpegArgs -join ' ')
 }
 
 function Get-SignatureConfidence
@@ -124,12 +124,30 @@ function Test-MediaSimilarity
     begin {
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $script:signaturesCreated = 0
+        $files = @()
+        $results = @()
+        $ffmpegAvailable = $true
+
+        try
+        {
+            [void](Get-FFmpegPath)
+        }
+        catch
+        {
+            Write-ErrorLog $_.Exception.Message
+            $ffmpegAvailable = $false
+        }
     }
 
     process {
+        if (-not $ffmpegAvailable)
+        {
+            return
+        }
+
         try
         {
-            $files = Get-ChildItem -Path (Resolve-Path $Path) -Include $InputMasks -Recurse:$Recurse | Where-Object { -not $_.PSIsContainer }
+            $files = @(Get-ChildItem -Path (Resolve-Path $Path) -Include $InputMasks -Recurse:$Recurse | Where-Object { -not $_.PSIsContainer })
             $registry = @(Sync-SignatureRegistry -Files $files)
 
             if ($UpdateOnly -or $registry.Count -lt 2)
@@ -155,7 +173,7 @@ function Test-MediaSimilarity
                 $res.Matches | ForEach-Object { Write-Host "  -> [$( $_.Confidence )%] $( $_.TargetFile )" -ForegroundColor Gray }
             }
         }
-        Write-InfoLog -Color Green "`nRésumé : $( $files.Count ) vidéos, $script:signaturesCreated signatures MAJ, $( $results.Count ) similitudes en $( Format-Duration $sw.Elapsed.TotalSeconds )"
+        Write-InfoLog -Color Green "`nRésumé : $( $files.Count ) vidéos, $script:signaturesCreated signatures MAJ, $( $results.Count ) similitudes en $( Format-Duration $sw.Elapsed )"
         if ($results)
         {
             return $results
