@@ -47,7 +47,7 @@ function Select-VideoStreams
     try
     {
         $videoStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'video' }
-        $VideoTracks = $videoStreams | Select-Object codec_name, profile, height, width, disposition
+        $VideoTracks = $videoStreams | Select-Object codec_name, profile, height, width, disposition, color_space
         $i = -1
 
         foreach ($stream in $VideoTracks)
@@ -110,21 +110,12 @@ function Select-VideoStreams
 
         $chromaRank = @{ '420' = 0; '422' = 1; '444' = 2 }
         $sourceChroma = '420'
-        $sourceColorSpace = $null
         foreach ($vs in $videoStreams)
         {
             $c = Get-SourceChromaMode $vs
             if ($chromaRank[$c] -gt $chromaRank[$sourceChroma])
             {
                 $sourceChroma = $c
-            }
-            if (-not $sourceColorSpace)
-            {
-                $csProp = $vs.PSObject.Properties['color_space']
-                if ($csProp -and -not [string]::IsNullOrWhiteSpace([string]$csProp.Value))
-                {
-                    $sourceColorSpace = [string]$csProp.Value
-                }
             }
         }
 
@@ -133,7 +124,6 @@ function Select-VideoStreams
             VideoTracks = $VideoTracks
             IsSource10Bit = $isSource10Bit
             SourceChroma = $sourceChroma
-            SourceColorSpace = $sourceColorSpace
         }
     }
     catch

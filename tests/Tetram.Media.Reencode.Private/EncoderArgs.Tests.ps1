@@ -18,13 +18,14 @@ AfterAll {
 
 Describe 'Get-FFmpegArgs — color space remap' {
 
-    It 'injecte setparams quand SourceColorSpace=gbr et encode AV1 en 420' {
+    It 'injecte setparams quand color_space=gbr sur la piste vidéo (AV1 420)' {
         $video = [pscustomobject]@{
             _index        = 0
             __process     = $true
             __copy        = $false
             __deinterlace = $false
             __upscale     = $false
+            color_space   = 'gbr'
         }
         $audio = [pscustomobject]@{
             _index               = 0
@@ -50,7 +51,6 @@ Describe 'Get-FFmpegArgs — color space remap' {
                 -VideoTracks @($Video) `
                 -IsSource10Bit $false `
                 -SourceChroma '420' `
-                -SourceColorSpace 'gbr' `
                 -AudioTracks @($Audio) `
                 -SubtitleTracks @() `
                 -AttachmentTracks @()
@@ -61,13 +61,14 @@ Describe 'Get-FFmpegArgs — color space remap' {
         }
     }
 
-    It 'n''injecte pas setparams quand SourceColorSpace=bt709' {
+    It 'n''injecte pas setparams quand color_space=bt709' {
         $video = [pscustomobject]@{
             _index        = 0
             __process     = $true
             __copy        = $false
             __deinterlace = $false
             __upscale     = $false
+            color_space   = 'bt709'
         }
         $audio = [pscustomobject]@{
             _index               = 0
@@ -93,12 +94,65 @@ Describe 'Get-FFmpegArgs — color space remap' {
                 -VideoTracks @($Video) `
                 -IsSource10Bit $false `
                 -SourceChroma '420' `
-                -SourceColorSpace 'bt709' `
                 -AudioTracks @($Audio) `
                 -SubtitleTracks @() `
                 -AttachmentTracks @()
 
             $args | Should -Not -Contain '-vf:v:0'
+        }
+    }
+
+    It 'applique le remap uniquement à la piste gbr (multi-vidéo)' {
+        $videos = @(
+            [pscustomobject]@{
+                _index        = 0
+                __process     = $true
+                __copy        = $false
+                __deinterlace = $false
+                __upscale     = $false
+                color_space   = 'bt709'
+            }
+            [pscustomobject]@{
+                _index        = 1
+                __process     = $true
+                __copy        = $false
+                __deinterlace = $false
+                __upscale     = $false
+                color_space   = 'gbr'
+            }
+        )
+        $audio = [pscustomobject]@{
+            _index               = 0
+            __process            = $false
+            __copy               = $true
+            __targetAudioCodec   = $null
+            __targetAudioBitrate = $null
+            __targetAudioFilter  = $null
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Videos = $videos; Audio = $audio } {
+            param($Videos, $Audio)
+
+            $args = Get-FFmpegArgs `
+                -VideoCodec 'AV1' `
+                -Quality 'Low' `
+                -Upscale '' `
+                -UpscaleWidth 0 `
+                -UpscaleHeight 0 `
+                -UpscaleFit '' `
+                -ConfigUpscaleWidth 0 `
+                -ClearStreamsTitle $false `
+                -VideoTracks $Videos `
+                -IsSource10Bit $false `
+                -SourceChroma '420' `
+                -AudioTracks @($Audio) `
+                -SubtitleTracks @() `
+                -AttachmentTracks @()
+
+            $args | Should -Not -Contain '-vf:v:0'
+            $vf1 = [array]::IndexOf($args, '-vf:v:1')
+            $vf1 | Should -BeGreaterThan -1
+            $args[$vf1 + 1] | Should -BeExactly 'setparams=colorspace=bt709'
         }
     }
 }

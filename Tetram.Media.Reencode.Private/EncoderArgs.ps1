@@ -173,9 +173,6 @@ function Get-FFmpegArgs
         [object[]] $VideoTracks,
         [bool] $IsSource10Bit,
         [string] $SourceChroma,
-        [AllowNull()]
-        [AllowEmptyString()]
-        [string] $SourceColorSpace,
         [object[]] $AudioTracks,
         [object[]] $SubtitleTracks,
         [object[]] $AttachmentTracks
@@ -243,7 +240,7 @@ function Get-FFmpegArgs
 
     $ffmpegArgs = @()
 
-    $SelectedVideoTracks = ($VideoTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __deinterlace, __upscale
+    $SelectedVideoTracks = ($VideoTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __deinterlace, __upscale, color_space
     Write-Verbose "SelectedVideoTracks:`n $( $SelectedVideoTracks | Format-List | Out-String )"
     $new_index = 0
     foreach ($stream in $SelectedVideoTracks)
@@ -270,7 +267,7 @@ function Get-FFmpegArgs
                     $filters += ('scale={0}:{1}:flags=lanczos' -f $ConfigUpscaleWidth, $targetH)
                 }
             }
-            $colorRemap = Get-ColorSpaceRemapFilter -ColorSpace $SourceColorSpace -TargetChroma $targetChroma
+            $colorRemap = Get-ColorSpaceRemapFilter -ColorSpace ([string]$stream.color_space) -TargetChroma $targetChroma
             if ($colorRemap)
             {
                 $filters += $colorRemap

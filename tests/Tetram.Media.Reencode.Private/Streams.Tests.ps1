@@ -65,7 +65,7 @@ Describe 'Select-AudioStreams' {
 
 Describe 'Select-VideoStreams — color_space' {
 
-    It 'expose SourceColorSpace=gbr depuis ffprobe' {
+    It 'conserve color_space=gbr sur chaque VideoTrack' {
         $ffprobe = @{
             streams = @(
                 [pscustomobject]@{
@@ -97,7 +97,7 @@ Describe 'Select-VideoStreams — color_space' {
                 -ConfigUpscaleWidth 0 `
                 -RewriteMode $false
 
-            $result.SourceColorSpace | Should -BeExactly 'gbr'
+            $result.VideoTracks[0].color_space | Should -BeExactly 'gbr'
             $result.SourceChroma | Should -BeExactly '420'
         }
     }
