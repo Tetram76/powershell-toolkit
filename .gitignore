@@ -4,3 +4,4 @@ reencode-errors.log
 .idea/
 /testResults.xml
 /coverage.xml
+.worktrees/
