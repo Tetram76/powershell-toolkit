@@ -57,7 +57,7 @@ Describe 'Get-FFmpegArgs — color space remap' {
 
             $vfIdx = [array]::IndexOf($args, '-vf:v:0')
             $vfIdx | Should -BeGreaterThan -1
-            $args[$vfIdx + 1] | Should -BeExactly 'setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709'
+            $args[$vfIdx + 1] | Should -BeExactly 'setparams=colorspace=bt709'
         }
     }
 

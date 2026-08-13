@@ -18,12 +18,12 @@ Describe 'Get-ColorSpaceRemapFilter' {
 
     It 'retourne setparams quand color_space=gbr et chroma 420 (cas SVT-AV1)' {
         $filter = Get-ColorSpaceRemapFilter -ColorSpace 'gbr' -TargetChroma '420'
-        $filter | Should -BeExactly 'setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709'
+        $filter | Should -BeExactly 'setparams=colorspace=bt709'
     }
 
     It 'retourne setparams pour rgb en 422' {
         $filter = Get-ColorSpaceRemapFilter -ColorSpace 'rgb' -TargetChroma '422'
-        $filter | Should -BeExactly 'setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709'
+        $filter | Should -BeExactly 'setparams=colorspace=bt709'
     }
 
     It 'ne remappe pas en 444 (identity/GBR y est valide)' {

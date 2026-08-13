@@ -104,7 +104,7 @@ function Get-ColorSpaceRemapFilter
         return $null
     }
 
-    return 'setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709'
+    return 'setparams=colorspace=bt709'
 }
 
 Export-ModuleMember -Function Test-Is10BitVideoStream, Get-SourceChromaMode, Get-ColorSpaceRemapFilter
