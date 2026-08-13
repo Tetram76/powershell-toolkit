@@ -1,41 +1,161 @@
 Set-StrictMode -Version 3.0
 
-$script:FFToolsDefaultBase = Join-Path (Split-Path -Parent $PSScriptRoot) 'RecodeVideo\ffmpeg-9.0.1-full_build\bin'
+$script:FFToolsSearchRoot = Join-Path (Split-Path -Parent $PSScriptRoot) 'RecodeVideo'
+$script:FFToolsDefaultBase = $null
+$script:FFToolsBaseResolved = $false
+$script:FFToolsMinVersionCache = $null
+# Hook tests : scriptblock (string $LiteralPath) -> [version]| $null
+$script:FFToolsVersionReader = $null
+
+function Get-FFToolsMinVersion
+{
+    if ($null -eq $script:FFToolsMinVersionCache)
+    {
+        $raw = $MyInvocation.MyCommand.Module.PrivateData.FFToolsMinVersion
+        if ([string]::IsNullOrWhiteSpace($raw))
+        {
+            $raw = '9.0.1'
+        }
+        $script:FFToolsMinVersionCache = [version]$raw
+    }
+    return $script:FFToolsMinVersionCache
+}
+
+function Get-FFmpegVersionFromBinary
+{
+    param([Parameter(Mandatory)][string]$LiteralPath)
+
+    if ($script:FFToolsVersionReader)
+    {
+        return & $script:FFToolsVersionReader $LiteralPath
+    }
+
+    if (-not (Test-Path -LiteralPath $LiteralPath))
+    {
+        return $null
+    }
+
+    try
+    {
+        $output = & $LiteralPath -version 2>&1 | Out-String
+    }
+    catch
+    {
+        return $null
+    }
+
+    if ($output -match 'ffmpeg version (?<ver>\d+(?:\.\d+)+)')
+    {
+        try { return [version]$Matches['ver'] }
+        catch { return $null }
+    }
+    return $null
+}
+
+function Resolve-FFToolsDefaultBase
+{
+    if ($script:FFToolsBaseResolved)
+    {
+        return $script:FFToolsDefaultBase
+    }
+
+    $script:FFToolsBaseResolved = $true
+    $script:FFToolsDefaultBase = $null
+
+    $root = $script:FFToolsSearchRoot
+    if (-not $root -or -not (Test-Path -LiteralPath $root))
+    {
+        return $null
+    }
+
+    $exeName = if ($IsWindows) { 'ffmpeg.exe' } else { 'ffmpeg' }
+    $min = Get-FFToolsMinVersion
+    $bestVer = $null
+    $bestBin = $null
+
+    Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like 'ffmpeg-*' } |
+        ForEach-Object {
+            $candidate = Join-Path $_.FullName 'bin' $exeName
+            if (-not (Test-Path -LiteralPath $candidate)) { return }
+            $ver = Get-FFmpegVersionFromBinary -LiteralPath $candidate
+            if ($null -eq $ver) { return }
+            if ($ver -lt $min) { return }
+            if ($null -eq $bestVer -or $ver -gt $bestVer)
+            {
+                $bestVer = $ver
+                $bestBin = Split-Path -Parent $candidate
+            }
+        }
+
+    $script:FFToolsDefaultBase = $bestBin
+    return $script:FFToolsDefaultBase
+}
+
+function Get-FFToolMissingMessage
+{
+    param([Parameter(Mandatory)][string]$ToolName)
+    $min = Get-FFToolsMinVersion
+    $root = $script:FFToolsSearchRoot
+    return "$ToolName introuvable : placez une build officielle >= $min sous 'RecodeVideo\ffmpeg-<version>-...\bin\' (racine recherchée : '$root'), ou fournissez -OverridePath / PATH."
+}
 
 function Get-FFmpegPath
 {
     param([string]$OverridePath)
 
-    if (-not [string]::IsNullOrWhiteSpace($OverridePath) -and (Test-Path $OverridePath))
+    if (-not [string]::IsNullOrWhiteSpace($OverridePath) -and (Test-Path -LiteralPath $OverridePath))
     {
         return $OverridePath
     }
 
-    $defaultPath = Join-Path $script:FFToolsDefaultBase 'ffmpeg.exe'
-    if ($script:FFToolsDefaultBase -and (Test-Path $defaultPath))
+    $exeName = if ($IsWindows) { 'ffmpeg.exe' } else { 'ffmpeg' }
+    $base = Resolve-FFToolsDefaultBase
+    if ($base)
     {
-        return $defaultPath
+        $defaultPath = Join-Path $base $exeName
+        if (Test-Path -LiteralPath $defaultPath)
+        {
+            return $defaultPath
+        }
     }
 
     $fromPath = Get-Command ffmpeg -ErrorAction SilentlyContinue
-    return $fromPath ? $fromPath.Source : $null
+    if ($fromPath)
+    {
+        return $fromPath.Source
+    }
+
+    throw (Get-FFToolMissingMessage -ToolName 'FFmpeg')
 }
 
 function Get-FfprobePath
 {
     param([string]$OverridePath)
 
-    if (-not [string]::IsNullOrWhiteSpace($OverridePath) -and (Test-Path $OverridePath))
+    if (-not [string]::IsNullOrWhiteSpace($OverridePath) -and (Test-Path -LiteralPath $OverridePath))
     {
         return $OverridePath
     }
-    $defaultPath = Join-Path $script:FFToolsDefaultBase 'ffprobe.exe'
-    if ($script:FFToolsDefaultBase -and (Test-Path $defaultPath))
+
+    $exeName = if ($IsWindows) { 'ffprobe.exe' } else { 'ffprobe' }
+    $base = Resolve-FFToolsDefaultBase
+    if ($base)
     {
-        return $defaultPath
+        $defaultPath = Join-Path $base $exeName
+        if (Test-Path -LiteralPath $defaultPath)
+        {
+            return $defaultPath
+        }
     }
+
     $fromPath = Get-Command ffprobe -ErrorAction SilentlyContinue
-    return $fromPath ? $fromPath.Source : $null
+    if ($fromPath)
+    {
+        return $fromPath.Source
+    }
+
+    throw (Get-FFToolMissingMessage -ToolName 'FFprobe')
 }
 
 function Invoke-FFmpeg
