@@ -69,6 +69,7 @@ function Resolve-FFToolsDefaultBase
     }
 
     $exeName = if ($IsWindows) { 'ffmpeg.exe' } else { 'ffmpeg' }
+    $probeName = if ($IsWindows) { 'ffprobe.exe' } else { 'ffprobe' }
     $min = Get-FFToolsMinVersion
     $bestVer = $null
     $bestBin = $null
@@ -76,15 +77,18 @@ function Resolve-FFToolsDefaultBase
     Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like 'ffmpeg-*' } |
         ForEach-Object {
-            $candidate = Join-Path $_.FullName 'bin' $exeName
-            if (-not (Test-Path -LiteralPath $candidate)) { return }
+            $binDir = Join-Path $_.FullName 'bin'
+            $candidate = Join-Path $binDir $exeName
+            $probeCandidate = Join-Path $binDir $probeName
+            if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { return }
+            if (-not (Test-Path -LiteralPath $probeCandidate -PathType Leaf)) { return }
             $ver = Get-FFmpegVersionFromBinary -LiteralPath $candidate
             if ($null -eq $ver) { return }
             if ($ver -lt $min) { return }
             if ($null -eq $bestVer -or $ver -gt $bestVer)
             {
                 $bestVer = $ver
-                $bestBin = Split-Path -Parent $candidate
+                $bestBin = $binDir
             }
         }
 

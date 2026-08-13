@@ -125,6 +125,26 @@ Describe 'Resolve-FFToolsDefaultBase' {
         $base | Should -BeNullOrEmpty
     }
 
+    It 'ignore une build ffmpeg sans ffprobe et prend une build complète plus ancienne' {
+        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.0.1-full_build' -VersionText '9.0.1'
+        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.1.0-full_build' -VersionText '9.1.0'
+        $probeName = if ($IsWindows) { 'ffprobe.exe' } else { 'ffprobe' }
+        Remove-Item -LiteralPath (Join-Path $script:TestRoot 'ffmpeg-9.1.0-full_build' 'bin' $probeName) -Force
+        if ($IsWindows) {
+            InModuleScope 'Tetram.Media.FFmpeg' {
+                $script:FFToolsVersionReader = {
+                    param($LiteralPath)
+
+                    if ($LiteralPath -match '9\.1\.0') { return [version]'9.1.0' }
+                    if ($LiteralPath -match '9\.0\.1') { return [version]'9.0.1' }
+                    return $null
+                }
+            }
+        }
+        $base = InModuleScope 'Tetram.Media.FFmpeg' { Resolve-FFToolsDefaultBase }
+        $base | Should -Match 'ffmpeg-9\.0\.1-full_build[\\/]bin$'
+    }
+
     It 'Get-FFmpegPath et Get-FfprobePath partagent le même bin' {
         New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.0.1-full_build' -VersionText '9.0.1'
         if ($IsWindows) {
