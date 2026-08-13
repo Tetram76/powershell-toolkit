@@ -198,16 +198,16 @@ function Invoke-FFmpeg
         throw "FFmpeg est introuvable sur ce système."
     }
 
+    # & + splat : conserve les frontières d'args (chemins avec espaces).
+    # Start-Process -ArgumentList joint un string[] en une seule chaîne.
     if ($CaptureOutput)
     {
-        return Start-Process -FilePath $exe -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -RedirectStandardError $null
+        return & $exe @Arguments 2>&1
     }
-    else
-    {
-        Write-Verbose "Execution: $exe $($Arguments -join ' ')"
-        $proc = Start-Process -FilePath $exe -ArgumentList $Arguments -NoNewWindow -Wait -PassThru
-        return $proc.ExitCode
-    }
+
+    Write-Verbose "Execution: $exe $($Arguments -join ' ')"
+    & $exe @Arguments
+    return $LASTEXITCODE
 }
 
 function Get-MediaFastHash
