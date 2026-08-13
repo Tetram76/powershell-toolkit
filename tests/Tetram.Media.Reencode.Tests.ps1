@@ -27,9 +27,7 @@ Describe 'Invoke-ReencodeMedia - résolution FFmpeg au démarrage' {
     }
 
     It "log une erreur via Write-ErrorLog et ne lève pas d'exception quand FFmpeg est introuvable" {
-        # Utiliser $script: (pas une variable locale) : le scriptblock de Should -Not -Throw
-        # peut ne pas voir le scope parent sur certains runners.
-        { Invoke-ReencodeMedia -Path $script:RepoRootReencode -CheckOnly } | Should -Not -Throw
+        { Invoke-ReencodeMedia -Path $TestDrive -CheckOnly } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Reencode Write-ErrorLog -Times 1
     }
 }

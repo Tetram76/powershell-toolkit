@@ -27,7 +27,7 @@ Describe 'Test-MediaSimilarity - résolution FFmpeg au démarrage' {
     }
 
     It "log une erreur via Write-ErrorLog et ne lève pas d'exception quand FFmpeg est introuvable" {
-        { Test-MediaSimilarity -Path $script:RepoRootSimilarity } | Should -Not -Throw
+        { Test-MediaSimilarity -Path $TestDrive } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Similarity Write-ErrorLog -Times 1
     }
 }

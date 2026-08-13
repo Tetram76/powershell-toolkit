@@ -728,6 +728,8 @@ function Invoke-ReencodeMedia
         [Parameter(ParameterSetName = 'RewriteFromFile')]
         [string[]] $SubTitlesToKeep = @('fr', 'fre', 'fr-FR', 'en', 'eng', 'en-US', 'en-GB'),
 
+        [Parameter(ParameterSetName = 'CheckFromPath')]
+        [Parameter(ParameterSetName = 'CheckFromFile')]
         [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
         [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
         [Parameter(ParameterSetName = 'SetExtensionFromPath')]
@@ -735,7 +737,21 @@ function Invoke-ReencodeMedia
         [Parameter(ParameterSetName = 'RewriteFromPath')]
         [Parameter(ParameterSetName = 'RewriteFromFile')]
         [ValidateScript({ [Directory]::Exists($_) }, ErrorMessage = "{0} is not a valid path")]
-        [string] $TempPath = $env:TEMP,
+        # Linux CI (GHA) n'a souvent pas $env:TEMP (seulement TMPDIR) — "" cassait Join-Path dans Initialize-ReencodeState.
+        [string] $TempPath = $(
+            $fromEnv = @($env:TEMP, $env:TMPDIR, $env:TMP) |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                Select-Object -First 1
+            if ($fromEnv)
+            {
+                $fromEnv
+            }
+            else
+            {
+                # Évite [IO.Path]::GetTempPath() si TEMP/TMP sont explicitement vidés (Windows casse alors).
+                [System.IO.Path]::GetTempPath()
+            }
+        ),
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
