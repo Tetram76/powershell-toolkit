@@ -105,9 +105,16 @@ function Get-FFmpegPath
 {
     param([string]$OverridePath)
 
-    if (-not [string]::IsNullOrWhiteSpace($OverridePath) -and (Test-Path -LiteralPath $OverridePath))
+    if (-not [string]::IsNullOrWhiteSpace($OverridePath))
     {
-        return $OverridePath
+        if (Test-Path -LiteralPath $OverridePath -PathType Leaf)
+        {
+            return $OverridePath
+        }
+        if (Test-Path -LiteralPath $OverridePath)
+        {
+            throw "OverridePath doit être un fichier exécutable, pas un dossier : '$OverridePath'"
+        }
     }
 
     $exeName = if ($IsWindows) { 'ffmpeg.exe' } else { 'ffmpeg' }
@@ -134,9 +141,16 @@ function Get-FfprobePath
 {
     param([string]$OverridePath)
 
-    if (-not [string]::IsNullOrWhiteSpace($OverridePath) -and (Test-Path -LiteralPath $OverridePath))
+    if (-not [string]::IsNullOrWhiteSpace($OverridePath))
     {
-        return $OverridePath
+        if (Test-Path -LiteralPath $OverridePath -PathType Leaf)
+        {
+            return $OverridePath
+        }
+        if (Test-Path -LiteralPath $OverridePath)
+        {
+            throw "OverridePath doit être un fichier exécutable, pas un dossier : '$OverridePath'"
+        }
     }
 
     $exeName = if ($IsWindows) { 'ffprobe.exe' } else { 'ffprobe' }

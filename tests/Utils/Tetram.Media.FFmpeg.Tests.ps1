@@ -154,6 +154,14 @@ Describe 'Resolve-FFToolsDefaultBase' {
         }
     }
 
+    It 'Get-FFmpegPath -OverridePath refuse un dossier' {
+        InModuleScope 'Tetram.Media.FFmpeg' -Parameters @{ Dir = $script:TestRoot } {
+            param($Dir)
+
+            { Get-FFmpegPath -OverridePath $Dir } | Should -Throw -ExpectedMessage '*pas un dossier*'
+        }
+    }
+
     It 'throw un message actionnable si rien trouvé' {
         Mock -ModuleName Tetram.Media.FFmpeg Get-Command { $null } -ParameterFilter { $Name -eq 'ffmpeg' }
         InModuleScope 'Tetram.Media.FFmpeg' {
