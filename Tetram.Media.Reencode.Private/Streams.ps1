@@ -196,6 +196,8 @@ function Select-AudioStreams
                     ($targetBps -gt 0 -and $currentBps -le $targetBps)
             )
 
+            # elseif obligatoire : plusieurs sorties dans un case switch
+            # produisent un Object[] truthy (ex. déjà Opus => @$false,$false).
             $recodeForQuality = switch ($Quality)
             {
                 'High'   {
@@ -209,19 +211,22 @@ function Select-AudioStreams
                     {
                         $false
                     }
-                    if ($isLossless)
+                    elseif ($isLossless)
                     {
                         $true
                     }
-                    if ($hasGain)
+                    elseif ($hasGain)
                     {
                         $true
                     }
-                    if ($likelyGainCodecs -contains ($codec.ToLowerInvariant()))
+                    elseif ($likelyGainCodecs -contains ($codec.ToLowerInvariant()))
                     {
                         $true
                     }
-                    $false
+                    else
+                    {
+                        $false
+                    }
                 }
                 default  {
                     $isLossless

@@ -5,8 +5,60 @@
 # Simuler ffmpeg/ffprobe : mocker wrappers ou lignes `-print_format json`/`ffprobe …` comme pour Probe selon signatures réelles utilisées dans Streams.ps1.
 # Fixtures : médias légers dans $TestDrive ou moquer les fichiers si la logique peut s’injecter avec des chemins factices contrôlés.
 
-Describe 'Streams (stub)' {
+BeforeAll {
+    Set-StrictMode -Version Latest
+    $script:RepoRootStreams = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
+    Import-Module -Name (Join-Path $script:RepoRootStreams 'Tetram.Media.Reencode.psd1') -Force -ErrorAction Stop
+}
 
-    It 'Stub — tests à ajouter' -Skip {
+AfterAll {
+    Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+}
+
+Describe 'Select-AudioStreams' {
+
+    It 'ne force pas le réencodage Opus quand le flux est déjà Opus (qualité Low, bitrate <= cible)' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'opus'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '96000'
+                }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -RewriteMode $false
+            $tracks[0].__recode | Should -BeFalse
+            $tracks[0].__copy | Should -BeTrue
+            $tracks[0].__process | Should -BeFalse
+        }
+    }
+
+    It 'réencode Opus en Low uniquement s''il y a un gain de bitrate' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'opus'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '256000'
+                }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -RewriteMode $false
+            $tracks[0].__recode | Should -BeTrue
+            $tracks[0].__targetAudioCodec | Should -BeExactly 'opus'
+        }
     }
 }
