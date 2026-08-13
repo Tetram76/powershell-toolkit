@@ -30,6 +30,7 @@ function script:New-FakeFFBuild {
         [string]$VersionText, # $null = script qui n'imprime pas de version
         [switch]$OmitBinary
     )
+
     $bin = Join-Path $Root $FolderName 'bin'
     New-Item -ItemType Directory -Path $bin -Force | Out-Null
     if ($OmitBinary) { return }
@@ -63,6 +64,7 @@ Describe 'Resolve-FFToolsDefaultBase' {
         New-Item -ItemType Directory -Path $script:TestRoot -Force | Out-Null
         InModuleScope 'Tetram.Media.FFmpeg' -Parameters @{ TestRoot = $script:TestRoot } {
             param($TestRoot)
+
             $script:FFToolsSearchRoot = $TestRoot
             $script:FFToolsDefaultBase = $null
             $script:FFToolsBaseResolved = $false
@@ -81,6 +83,7 @@ Describe 'Resolve-FFToolsDefaultBase' {
             InModuleScope 'Tetram.Media.FFmpeg' {
                 $script:FFToolsVersionReader = {
                     param($LiteralPath)
+
                     if ($LiteralPath -match '9\.1\.0') { return [version]'9.1.0' }
                     if ($LiteralPath -match '9\.0\.1') { return [version]'9.0.1' }
                     if ($LiteralPath -match '8\.0\.1') { return [version]'8.0.1' }
@@ -96,7 +99,11 @@ Describe 'Resolve-FFToolsDefaultBase' {
         New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-8.0.1-full_build' -VersionText '8.0.1'
         if ($IsWindows) {
             InModuleScope 'Tetram.Media.FFmpeg' {
-                $script:FFToolsVersionReader = { param($LiteralPath) [version]'8.0.1' }
+                $script:FFToolsVersionReader = {
+                    param($LiteralPath)
+
+                    [version]'8.0.1'
+                }
             }
         }
         $base = InModuleScope 'Tetram.Media.FFmpeg' { Resolve-FFToolsDefaultBase }
@@ -107,7 +114,11 @@ Describe 'Resolve-FFToolsDefaultBase' {
         New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-bogus-full_build' -VersionText $null
         if ($IsWindows) {
             InModuleScope 'Tetram.Media.FFmpeg' {
-                $script:FFToolsVersionReader = { param($LiteralPath) $null }
+                $script:FFToolsVersionReader = {
+                    param($LiteralPath)
+
+                    $null
+                }
             }
         }
         $base = InModuleScope 'Tetram.Media.FFmpeg' { Resolve-FFToolsDefaultBase }
@@ -118,7 +129,11 @@ Describe 'Resolve-FFToolsDefaultBase' {
         New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.0.1-full_build' -VersionText '9.0.1'
         if ($IsWindows) {
             InModuleScope 'Tetram.Media.FFmpeg' {
-                $script:FFToolsVersionReader = { param($LiteralPath) [version]'9.0.1' }
+                $script:FFToolsVersionReader = {
+                    param($LiteralPath)
+
+                    [version]'9.0.1'
+                }
             }
         }
         InModuleScope 'Tetram.Media.FFmpeg' {
@@ -133,6 +148,7 @@ Describe 'Resolve-FFToolsDefaultBase' {
         Set-Content -LiteralPath $fake -Value 'x'
         InModuleScope 'Tetram.Media.FFmpeg' -Parameters @{ Fake = $fake } {
             param($Fake)
+
             Get-FFmpegPath -OverridePath $Fake | Should -Be $Fake
             $script:FFToolsBaseResolved | Should -BeFalse
         }

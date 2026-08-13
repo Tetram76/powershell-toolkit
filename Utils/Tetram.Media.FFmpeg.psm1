@@ -95,6 +95,7 @@ function Resolve-FFToolsDefaultBase
 function Get-FFToolMissingMessage
 {
     param([Parameter(Mandatory)][string]$ToolName)
+
     $min = Get-FFToolsMinVersion
     $root = $script:FFToolsSearchRoot
     return "$ToolName introuvable : placez une build officielle >= $min sous 'RecodeVideo\ffmpeg-<version>-...\bin\' (racine recherchée : '$root'), ou fournissez -OverridePath / PATH."
