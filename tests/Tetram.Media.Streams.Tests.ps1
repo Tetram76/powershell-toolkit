@@ -370,6 +370,7 @@ Describe 'Merge-MediaSubtitle' {
         Mock -ModuleName Tetram.Media.Streams Move-Item { throw 'access denied' }
         { Merge-MediaSubtitle -LiteralPath $script:Mkv -Force -RemoveSidecars } | Should -Not -Throw
         Test-Path -LiteralPath $script:Srt | Should -BeTrue
+        Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
     }
 
     It 'RemoveSidecars ne supprime rien si le temp est absent' {

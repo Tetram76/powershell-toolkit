@@ -205,6 +205,9 @@ function Merge-MediaSubtitle {
         }
         catch {
             Write-ErrorLog $_.Exception.Message
+            if (Test-Path -LiteralPath $temp) {
+                if ($PSCmdlet.ShouldProcess($temp, 'Cleanup temp')) { Remove-Item -LiteralPath $temp -Force }
+            }
             return
         }
     }
