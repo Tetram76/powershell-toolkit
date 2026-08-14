@@ -41,9 +41,11 @@ Les échecs d'inspection ou de suppression sont écrits sur la console (`Write-E
 
 ## EXAMPLES
 
-### Example 1: Simuler un nettoyage complet
+### Example 1: Simuler un nettoyage
 
-Intention : lister ce qui serait effacé, y compris les parents qui ne se vident qu'après coup.
+Intention : lister les dossiers actuellement vides sans les supprimer. Sous `-WhatIf`,
+`-DeepScan` n'enchaîne pas de passages virtuels : les parents qui ne se videraient
+qu'après coup n'apparaissent pas.
 
 ```powershell
 Remove-EmptyDirs -Path 'D:\Media' -DeepScan -WhatIf

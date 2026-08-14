@@ -71,6 +71,10 @@ Les échecs d'inspection ou de suppression sont écrits sur la console (`Write-E
         <maml:description>
           <maml:para>Répète le scan tant qu'un passage a supprimé au moins un dossier. Permet de
 retirer les parents qui ne deviennent vides qu'après la suppression de leurs
+enfants.
+Répète le scan tant qu'un passage a supprimé au moins un dossier.
+Permet de
+retirer les parents qui ne deviennent vides qu'après la suppression de leurs
 enfants.</maml:para>
         </maml:description>
         <dev:type>
@@ -81,6 +85,10 @@ enfants.</maml:para>
         <maml:name>Path</maml:name>
         <maml:description>
           <maml:para>Répertoire racine à nettoyer. Doit exister et être un conteneur. Valeur par
+défaut : répertoire courant (`.`).
+Répertoire racine à nettoyer.
+Doit exister et être un conteneur.
+Valeur par
 défaut : répertoire courant (`.`).</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
@@ -109,9 +117,11 @@ Ne pas faire : l'utiliser pour effacer des fichiers ; omettre `-WhatIf` sur un a
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>--------- Example 1: Simuler un nettoyage complet ---------</maml:title>
+        <maml:title>--------- Example 1: Simuler un nettoyage ---------</maml:title>
         <maml:introduction>
-          <maml:para>Intention : lister ce qui serait effacé, y compris les parents qui ne se vident qu'après coup.</maml:para>
+          <maml:para>Intention : lister les dossiers actuellement vides sans les supprimer. Sous `-WhatIf`,
+`-DeepScan` n'enchaîne pas de passages virtuels : les parents qui ne se videraient
+qu'après coup n'apparaissent pas.</maml:para>
           <maml:para>&#x80;</maml:para>
           <maml:para>```powershell
 Remove-EmptyDirs -Path 'D:\Media' -DeepScan -WhatIf

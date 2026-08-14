@@ -45,13 +45,15 @@ function Remove-Empty-Dirs-Pass
     {
         if (Test-DirIsEmpty -Dir $d.FullName)
         {
-            $foundEmpty = $true
             if ( $PSCmdlet.ShouldProcess($d.FullName, 'Remove empty directory'))
             {
                 try
                 {
                     Remove-Item -LiteralPath $d.FullName -Force -ErrorAction Stop
                     Write-InfoLog -Color Magenta "Deleted empty directory: $( $d.FullName )"
+                    # Uniquement après suppression réelle : sous -WhatIf le dossier reste,
+                    # et DeepScan bouclerait sans fin si on comptait déjà un changement.
+                    $foundEmpty = $true
                 }
                 catch
                 {
