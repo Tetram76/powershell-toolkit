@@ -29,11 +29,13 @@ Describe 'ConvertTo / ConvertFrom-StreamFileName' {
     }
     It 'omet la langue und / vide' {
         InModuleScope 'Tetram.Media.Streams' {
-            $d = [pscustomobject]@{
-                Class = 'Audio'; Language = ''; Flags = @(); Extension = '.aac'
-                CollisionIndex = 1; AttachmentNameSanitized = ''
+            foreach ($lang in @('', 'und', 'UNK')) {
+                $d = [pscustomobject]@{
+                    Class = 'Audio'; Language = $lang; Flags = @(); Extension = '.aac'
+                    CollisionIndex = 1; AttachmentNameSanitized = ''
+                }
+                ConvertTo-StreamFileName -Basename 'film' -Descriptor $d | Should -Be 'film.aac'
             }
-            ConvertTo-StreamFileName -Basename 'film' -Descriptor $d | Should -Be 'film.aac'
         }
     }
     It 'écrit les flags dans l''ordre spec même si Flags est dans le désordre' {

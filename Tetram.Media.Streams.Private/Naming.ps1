@@ -52,6 +52,7 @@ function Get-StreamCollisionKey {
         'Chapter' { return 'Chapter' }
         default {
             $lang = if ($Descriptor.Language) { ([string]$Descriptor.Language).ToLowerInvariant() } else { '' }
+            if ($lang -in @('und', 'unk')) { $lang = '' }
             $flags = (Get-StreamsOrderedFlags $Descriptor.Flags) -join ','
             return "$($Descriptor.Class)|$lang|$flags|$ext"
         }
@@ -106,7 +107,8 @@ function ConvertTo-StreamFileName {
             if ([int]$Descriptor.CollisionIndex -ge 2) { $parts.Add([string]$Descriptor.CollisionIndex) }
         }
         default {
-            if ($Descriptor.Language) { $parts.Add([string]$Descriptor.Language) }
+            $lang = [string]$Descriptor.Language
+            if ($lang -and $lang.ToLowerInvariant() -notin @('und', 'unk')) { $parts.Add($lang) }
             foreach ($f in Get-StreamsOrderedFlags $Descriptor.Flags) { $parts.Add($f) }
             if ([int]$Descriptor.CollisionIndex -ge 2) { $parts.Add([string]$Descriptor.CollisionIndex) }
         }
