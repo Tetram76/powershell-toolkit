@@ -64,10 +64,18 @@ function Resolve-StreamCollisionIndex {
     }
 }
 
+function Get-ProbeStreamList {
+    param([hashtable] $Probe)
+    # @($h['streams']) vaut 1 élément $null si la clé manque — une itération fantôme, pas « aucun flux ».
+    $raw = Get-ProbeProperty $Probe 'streams'
+    if ($null -eq $raw) { return @() }
+    return @($raw | Where-Object { $null -ne $_ })
+}
+
 function Get-MediaStreamDescriptors {
     param([Parameter(Mandatory)][hashtable] $Probe)
     $list = [System.Collections.Generic.List[pscustomobject]]::new()
-    foreach ($st in @($Probe['streams'])) {
+    foreach ($st in (Get-ProbeStreamList -Probe $Probe)) {
         $codecType = [string](Get-ProbeProperty $st 'codec_type')
         $codecName = [string](Get-ProbeProperty $st 'codec_name')
         $index = ConvertTo-IntOrNull (Get-ProbeProperty $st 'index')
@@ -110,7 +118,7 @@ function Add-UnmappedKeepDescriptors {
         [Parameter(Mandatory)][hashtable] $Probe
     )
     $keeps = [System.Collections.Generic.List[pscustomobject]]::new()
-    foreach ($st in @($Probe['streams'])) {
+    foreach ($st in (Get-ProbeStreamList -Probe $Probe)) {
         $codecType = [string](Get-ProbeProperty $st 'codec_type')
         # A/V/S hors table : keep au mux (copie MKV). Attachment déjà décrit. Data = keep-only.
         if ($codecType -eq 'attachment') { continue }
@@ -142,7 +150,7 @@ function Add-UnmappedKeepDescriptors {
 function Get-UnmappedStreamDescriptors {
     param([Parameter(Mandatory)][hashtable] $Probe)
     $out = @()
-    foreach ($st in @($Probe['streams'])) {
+    foreach ($st in (Get-ProbeStreamList -Probe $Probe)) {
         $codecType = [string](Get-ProbeProperty $st 'codec_type')
         if ($codecType -notin @('video', 'audio', 'subtitle')) { continue }
         $codecName = [string](Get-ProbeProperty $st 'codec_name')

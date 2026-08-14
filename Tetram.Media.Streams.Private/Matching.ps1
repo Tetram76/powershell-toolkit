@@ -81,7 +81,7 @@ function Get-SidecarFiles {
 
 function Resolve-MergeActions {
     param(
-        [Parameter(Mandatory)][pscustomobject[]] $MkvDescriptors,
+        [Parameter(Mandatory)][AllowEmptyCollection()][pscustomobject[]] $MkvDescriptors,
         [Parameter(Mandatory)][AllowEmptyCollection()][pscustomobject[]] $Sidecars
     )
     $used = @{}

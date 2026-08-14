@@ -50,7 +50,7 @@ Describe 'Get-MediaStreamDescriptors collision' {
         }
     }
 
-    It 'sans StreamType ni Language : Video/Audio/Subtitle, pas Cover' {
+    It 'ignore Cover et retient A/V/S si aucun filtre n''est fourni' {
         $probe = @{
             streams = @(
                 @{ index = 0; codec_type = 'video'; codec_name = 'h264'; tags = @{}; disposition = @{ attached_pic = 0 } }
@@ -105,6 +105,20 @@ Describe 'Get-MediaStreamDescriptors collision' {
             $u = @(Get-UnmappedStreamDescriptors -Probe $Probe)
             $u.Count | Should -Be 1
             $u[0].codec_name | Should -Be 'mpeg4'
+        }
+    }
+    It 'ne throw pas si streams est absent ou codec_name vide' {
+        InModuleScope 'Tetram.Media.Streams' {
+            { Get-MediaStreamDescriptors -Probe @{ format = @{} } } | Should -Not -Throw
+            @(Get-MediaStreamDescriptors -Probe @{ format = @{} }).Count | Should -Be 0
+            @(Get-UnmappedStreamDescriptors -Probe @{ format = @{} }).Count | Should -Be 0
+            $probe = @{
+                streams = @(
+                    @{ index = 0; codec_type = 'video'; codec_name = ''; tags = @{}; disposition = @{} }
+                )
+            }
+            { Get-UnmappedStreamDescriptors -Probe $probe } | Should -Not -Throw
+            @(Get-UnmappedStreamDescriptors -Probe $probe).Count | Should -Be 1
         }
     }
     It 'ne liste pas un attached_pic comme codec A/V/S non mappé' {

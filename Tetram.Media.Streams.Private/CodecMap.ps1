@@ -2,8 +2,8 @@ Set-StrictMode -Version 3.0
 
 function Get-ElementaryExtension {
     param(
-        [Parameter(Mandatory)][string] $CodecName,
-        [Parameter(Mandatory)][string] $CodecType,
+        [Parameter(Mandatory)][AllowEmptyString()][string] $CodecName,
+        [Parameter(Mandatory)][AllowEmptyString()][string] $CodecType,
         [bool] $AttachedPic = $false
     )
     $c = $CodecName.ToLowerInvariant()

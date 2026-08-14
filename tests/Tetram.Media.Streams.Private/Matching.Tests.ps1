@@ -101,6 +101,22 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
             $sides[0].Extension | Should -Be '.srt'
         }
     }
+    It 'accepte un MKV sans descripteur mappé et n''ajoute que les sidecars' {
+        $dir = Join-Path $TestDrive 'empty-desc'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $mkv = Join-Path $dir 'film.mkv'
+        New-Item -ItemType File -Path $mkv | Out-Null
+        New-Item -ItemType File -Path (Join-Path $dir 'film.eng.srt') | Out-Null
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv } {
+            param($Dir, $Mkv)
+            $sides = @(Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv))
+            { Resolve-MergeActions -MkvDescriptors @() -Sidecars $sides } | Should -Not -Throw
+            $act = Resolve-MergeActions -MkvDescriptors @() -Sidecars $sides
+            $act.Adds.Count | Should -Be 1
+            $act.Keeps.Count | Should -Be 0
+            $act.Replaces.Count | Should -Be 0
+        }
+    }
 }
 
 Describe 'Build-MergeFFmpegArgs unmapped keep' {

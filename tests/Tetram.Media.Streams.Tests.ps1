@@ -86,7 +86,7 @@ Describe 'Split-MediaStream WhatIf' {
         Test-Path -LiteralPath (Join-Path $TestDrive 'film.fra.srt') | Should -BeFalse
     }
 
-    It 'extrait sans -StreamType ni -Language (défaut A/V/S)' {
+    It 'extrait un flux si les filtres sont omis' {
         $mkv = Join-Path $TestDrive 'film.mkv'
         Set-Content -LiteralPath $mkv -Value 'fake'
         Mock -ModuleName Tetram.Media.Streams Get-FFmpegPath { 'ffmpeg' }

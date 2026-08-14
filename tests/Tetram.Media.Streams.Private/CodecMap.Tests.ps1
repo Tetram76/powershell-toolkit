@@ -54,6 +54,7 @@ Describe 'Get-ElementaryExtension' {
             Get-ElementaryExtension -CodecName 'alac' -CodecType 'audio' -AttachedPic $false | Should -BeNullOrEmpty
             Get-ElementaryExtension -CodecName 'pcm_s16le' -CodecType 'audio' -AttachedPic $false | Should -BeNullOrEmpty
             Get-ElementaryExtension -CodecName 'pcm_s16be' -CodecType 'audio' -AttachedPic $false | Should -BeNullOrEmpty
+            Get-ElementaryExtension -CodecName '' -CodecType 'video' -AttachedPic $false | Should -BeNullOrEmpty
         }
     }
 }
