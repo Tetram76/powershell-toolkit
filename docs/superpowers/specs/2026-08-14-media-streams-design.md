@@ -102,6 +102,8 @@ FFmpeg / ffprobe : `Get-FFmpegPath` / `Get-FfprobePath`. Échec → catch au poi
 {basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}
 ```
 
+Exemples : `film.h264`, `film.eng.aac`, `film.fra.forced.srt`, `film.eng.commentary.aac`, `film.eng.hearing_impaired.srt`, `film.eng.default.2.ac3`, `film.cover.jpg`, `film.chapters.ffmeta`, `film.Arial.ttf`.
+
 Jetons de classe réservés (pas des flags de disposition) : `cover`, `chapters`. Un fichier n’est cover / chapitres que s’il porte le jeton **et** l’extension de la classe.
 
 ### Langue
