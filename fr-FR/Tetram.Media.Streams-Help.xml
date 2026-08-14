@@ -1,0 +1,404 @@
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" schema="maml" xmlns="http://msh">
+  <command:command>
+    <command:details>
+      <command:name>Merge-MediaStream</command:name>
+      <maml:description>
+        <maml:para>Réinjecte les sidecars dans le MKV (replace / add / keep).</maml:para>
+      </maml:description>
+      <command:verb>Merge</command:verb>
+      <command:noun>MediaStream</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Toujours un update du MKV passé en `-LiteralPath` (fichier `.mkv` existant). Sidecars du même basename : même clé (classe, langue, flags, extension, index) = replace ; sinon add ; piste MKV sans sidecar = keep. Pas de suppression de piste.
+
+`-Destination` optionnel (sinon in-place via `.tmp`). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
+
+Codec non mappé (`mpeg4`, `mov_text`, …) : pas de sidecar au split, keep dans le MKV au merge. Chapitres sidecar : `film.chapters.ffmeta`. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Merge-MediaStream</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>LiteralPath</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Destination</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>RemoveSidecars</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Force</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>WhatIf</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Confirm</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="cf">
+        <maml:name>Confirm</maml:name>
+        <maml:description>
+          <maml:para>Demande confirmation avant chaque `ShouldProcess` (impact Medium : pas de prompt
+sauf si `-Confirm` est passé). N'équivaut pas à `-Force` (celui-ci concerne
+`ShouldContinue` sur le MKV cible déjà présent).</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Destination</maml:name>
+        <maml:description>
+          <maml:para>Chemin `.mkv` de sortie. Omit : update in-place de `-LiteralPath` (mux vers un
+`.tmp` unique puis `Move-Item`). Si fourni, doit se terminer par `.mkv`.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Écrase le MKV cible déjà présent sans `ShouldContinue`. Sans `-Force`, une cible
+existante demande confirmation ; un refus annule tout le merge. Sans effet sur
+`-WhatIf` (rien n'est écrit).</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+        <maml:name>LiteralPath</maml:name>
+        <maml:description>
+          <maml:para>Fichier `.mkv` à mettre à jour, existant. Chemin littéral (pas de jokers).
+Obligatoire. Les sidecars sont cherchés dans le même dossier, même basename.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>RemoveSidecars</maml:name>
+        <maml:description>
+          <maml:para>Supprime les sidecars replace/add après un mux réussi seulement (après
+`Move-Item` sur la cible). Échec FFmpeg, `-WhatIf` ou `ShouldProcess` refusé :
+aucune suppression. Les pistes keep n'ont pas de sidecar à retirer.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="wi">
+        <maml:name>WhatIf</maml:name>
+        <maml:description>
+          <maml:para>Affiche la ligne FFmpeg (`Show-CommandLine`), n'écrit pas le MKV, ne crée pas de
+sortie finalisée, ne supprime pas de sidecar.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues />
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Prérequis : PowerShell 7+, ffmpeg/ffprobe (`Tetram.Media.FFmpeg`). Importer `.\Tetram.Media.Streams.psd1`. Toujours un update d'un MKV existant (pas de mux from-scratch).
+
+Ne pas faire : attendre une suppression de piste (replace / add / keep seulement) ; compter sur `-RemoveSidecars` si FFmpeg échoue ; prendre le jeton fichier `commentary` pour autre chose que le disposition FFmpeg `comment` ; croire qu'un codec non mappé disparaît (il reste keep dans le MKV).</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Réinjecter après édition d'un SRT ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Merge-MediaStream -LiteralPath 'D:\Media\film.mkv' -Force</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : round-trip. `film.fra.srt` a la même clé qu'une piste MKV → replace.
+Les autres pistes sans sidecar sont keep. Aucune piste n'est supprimée.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Ajouter une piste (film.spa.srt) ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Merge-MediaStream -LiteralPath 'D:\Media\film.mkv' -Force</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : `film.spa.srt` n'a pas de clé correspondante dans le MKV → add.
+Le mux conserve toutes les pistes existantes (keep) et ajoute l'espagnol.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 3: Supprimer les sidecars après un mux réussi ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Merge-MediaStream -LiteralPath 'D:\Media\film.mkv' -Force -RemoveSidecars</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : `-RemoveSidecars` n'agit qu'après un mux et un `Move-Item` réussis.
+En cas d'échec FFmpeg, les sidecars restent. `-Force` évite `ShouldContinue` sur
+le MKV cible.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 4: Simuler le mux ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Merge-MediaStream -LiteralPath 'D:\Media\film.mkv' -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : afficher la ligne FFmpeg sans écrire le MKV, sans créer de `.tmp`
+finalisé, sans supprimer de sidecar.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Split-MediaStream</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command>
+    <command:details>
+      <command:name>Split-MediaStream</command:name>
+      <maml:description>
+        <maml:para>Extrait des flux d'un MKV vers des sidecars à côté du fichier.</maml:para>
+      </maml:description>
+      <command:verb>Split</command:verb>
+      <command:noun>MediaStream</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Importer `Tetram.Media.Streams.psd1` (PowerShell 7+). `-LiteralPath` est un fichier `.mkv` existant.
+
+`ffprobe` lit toutes les pistes ; l'index de collision (`.2`, `.3`) est calculé sur le MKV entier avant `-StreamType` / `-Language`. Extraire seulement la 2e VO anglais produit `film.eng.2.srt`.
+
+Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Cover : `film.cover.jpg`. Chapitres : `film.chapters.ffmeta`. Polices : `film.{nom}.ttf`.
+
+Copie FFmpeg (`-c copy`). `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec non mappé : `Write-ErrorLog`, piste ignorée. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
+
+Aucun objet pipeline. Round-trip prévu avec `Merge-MediaStream` (les sidecars portent la grammaire ci-dessus).</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Split-MediaStream</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>LiteralPath</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>StreamType</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String[]</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Language</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String[]</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Force</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>WhatIf</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Confirm</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="cf">
+        <maml:name>Confirm</maml:name>
+        <maml:description>
+          <maml:para>Demande confirmation avant chaque `ShouldProcess` (impact Medium : pas de prompt
+sauf si `-Confirm` est passé). N'équivaut pas à `-Force` (celui-ci concerne
+`ShouldContinue` sur un sidecar déjà présent).</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Écrase un sidecar déjà présent sans `ShouldContinue`. Sans `-Force`, une cible
+existante demande confirmation ; un refus saute ce fichier. Sans effet sur
+`-WhatIf` (rien n'est écrit).</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Language</maml:name>
+        <maml:description>
+          <maml:para>Codes langue ISO à extraire (ex. `fra`, `eng`). Plusieurs valeurs = union.
+L'index de collision (`.2`, `.3`) est calculé sur le MKV entier avant ce filtre :
+extraire seulement la 2e VO anglais produit `film.eng.2.srt`. Omit pour toutes
+les langues.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String[]</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+        <maml:name>LiteralPath</maml:name>
+        <maml:description>
+          <maml:para>Fichier `.mkv` source, existant. Chemin littéral (pas de jokers). Obligatoire.
+Les sidecars sont écrits dans le même dossier.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>StreamType</maml:name>
+        <maml:description>
+          <maml:para>Classes à extraire : `Video`, `Audio`, `Subtitle`, `Attachment`, `Chapter`.
+Plusieurs valeurs = union. Omit pour toutes les classes mappées. Un codec non
+mappé (ex. `mpeg4`, `mov_text`) est ignoré ici (`Write-ErrorLog`) ; au merge il
+reste dans le MKV (keep).</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String[]</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="wi">
+        <maml:name>WhatIf</maml:name>
+        <maml:description>
+          <maml:para>Affiche la ligne FFmpeg (`Show-CommandLine`) et n'écrit aucun sidecar. La
+commande est montrée avant `ShouldProcess`.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues />
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Prérequis : PowerShell 7+, ffmpeg/ffprobe (`Tetram.Media.FFmpeg`). Importer `.\Tetram.Media.Streams.psd1`. Copie bit-exacte (`-c copy`), pas de réencodage.
+
+Ne pas faire : attendre une exception si ffmpeg manque ou si le chemin n'est pas un `.mkv` ; croire que `-Language` / `-StreamType` recalculent l'index `.2` (il vient du MKV source entier) ; traiter `dub` comme une langue ; prendre le jeton fichier `commentary` pour le disposition FFmpeg `comment` au split (le mapping est automatique au merge).</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Extraire les sous-titres français ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Split-MediaStream -LiteralPath 'D:\Media\film.mkv' -StreamType Subtitle -Language fra</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : n'écrire que les pistes `Subtitle` dont la langue est `fra`. L'index
+de collision a déjà été calculé sur tout le MKV : si deux SRT français existent,
+le second s'appelle `film.fra.2.srt`.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Simuler l'extraction ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Split-MediaStream -LiteralPath 'D:\Media\film.mkv' -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : afficher la ligne FFmpeg (`Show-CommandLine`) sans écrire de sidecar.
+`-WhatIf` n'empêche pas l'affichage de la commande.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 3: Écraser des sidecars déjà présents ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Split-MediaStream -LiteralPath 'D:\Media\film.mkv' -Force</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : run réel après un dry-run. `-Force` saute `ShouldContinue` sur chaque
+fichier cible existant.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 4: Extraire la 2e VO anglais (collision source) ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Split-MediaStream -LiteralPath 'D:\Media\film.mkv' -StreamType Subtitle -Language eng</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : filtrer `eng` ne renumérote pas. Si le MKV a deux pistes anglais de
+même clé, extraire seulement les sous-titres anglais écrit `film.eng.srt` et
+`film.eng.2.srt` (le `.2` vient du MKV entier, pas du filtre).</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 5: Extraire les chapitres ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Split-MediaStream -LiteralPath 'D:\Media\film.mkv' -StreamType Chapter</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : un seul sidecar `film.chapters.ffmeta` (format ffmetadata), pas un
+conteneur. Cover et polices suivent `film.cover.jpg` / `film.{nom}.ttf`.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Merge-MediaStream</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+</helpItems>
