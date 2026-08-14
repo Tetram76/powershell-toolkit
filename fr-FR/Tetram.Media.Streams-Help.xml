@@ -81,7 +81,8 @@ sauf si `-Confirm` est passé). N'équivaut pas à `-Force` (celui-ci concerne
         <maml:name>Destination</maml:name>
         <maml:description>
           <maml:para>Chemin `.mkv` de sortie. Omit : update in-place de `-LiteralPath` (mux vers un
-`.tmp` unique puis `Move-Item`). Si fourni, doit se terminer par `.mkv`.</maml:para>
+`.tmp` unique puis `Move-Item`). Si fourni, doit se terminer par `.mkv`. Un
+chemin déjà présent doit être un fichier, pas un dossier.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>

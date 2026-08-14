@@ -196,7 +196,11 @@ function Resolve-StreamsExistingPath {
 function Resolve-StreamsOutputPath {
     param([string] $LiteralPath)
     $existing = Resolve-StreamsExistingPath -LiteralPath $LiteralPath
-    if ($existing) { return $existing }
+    if ($existing) {
+        # Resolve-Path réussit aussi sur un dossier `*.mkv` ; Move-Item y rangerait le .tmp.
+        if (Test-Path -LiteralPath $existing -PathType Leaf) { return $existing }
+        return $null
+    }
     $parent = Split-Path -Parent $LiteralPath
     $leaf = Split-Path -Leaf $LiteralPath
     if (-not $parent) { $parent = '.' }

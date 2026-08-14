@@ -102,7 +102,8 @@ HelpMessage: ''
 ### -Destination
 
 Chemin `.mkv` de sortie. Omit : update in-place de `-LiteralPath` (mux vers un
-`.tmp` unique puis `Move-Item`). Si fourni, doit se terminer par `.mkv`.
+`.tmp` unique puis `Move-Item`). Si fourni, doit se terminer par `.mkv`. Un
+chemin déjà présent doit être un fichier, pas un dossier.
 
 ```yaml
 Type: System.String

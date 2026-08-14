@@ -221,7 +221,7 @@ Aucun sidecar → `Write-ErrorLog` + return.
 
 ### Destination
 
-- Si `-Destination` fourni : ce chemin (doit se terminer par `.mkv` ; sinon log + return).
+- Si `-Destination` fourni : ce chemin (doit se terminer par `.mkv` ; sinon log + return). S’il existe déjà, ce doit être un **fichier** (pas un dossier nommé `*.mkv`).
 - Sinon : le MKV d’entrée (update in-place).
 
 Overwrite de la cible (in-place ou `-Destination` déjà présent) : `-Force` ou `ShouldContinue` ; refus → return sans mux. Sous `-WhatIf` : pas de prompt `ShouldContinue`, `Show-CommandLine` du mux prévu, pas d’écriture.

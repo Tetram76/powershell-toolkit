@@ -214,6 +214,14 @@ Describe 'Merge-MediaStream' {
         Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog
     }
 
+    It 'refuse un dossier -Destination même si le nom finit par .mkv' {
+        $dirDest = Join-Path $script:Work 'out.mkv'
+        New-Item -ItemType Directory -Path $dirDest | Out-Null
+        Merge-MediaStream -LiteralPath $script:Mkv -Destination $dirDest -Force
+        Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable -Times 0
+    }
+
     It 'résout ~ avant ffprobe' {
         $name = 'streams-tilde-m-' + [guid]::NewGuid().ToString('N') + '.mkv'
         $homeMkv = Join-Path $HOME $name
