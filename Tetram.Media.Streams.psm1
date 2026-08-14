@@ -22,7 +22,7 @@ function Split-MediaStream {
     <#
 .EXTERNALHELP Tetram.Media.Streams-Help.xml
 #>
-    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium', PositionalBinding = $false)]
+    [CmdletBinding(SupportsShouldProcess = $true, PositionalBinding = $false)]
     param(
         [Parameter(Mandatory, Position = 0)]
         [string] $LiteralPath,
@@ -89,11 +89,11 @@ function Split-MediaStream {
                 Write-ErrorLog $_.Exception.Message
                 continue
             }
+            if ($null -eq $ok) { continue }
             if (-not $ok) {
                 Write-ErrorLog "ffmpeg failed extracting '$out'"
                 continue
             }
-            if ($WhatIfPreference) { continue }
             if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
                 Write-ErrorLog "Temp file missing after extract: '$temp'"
                 continue
@@ -115,7 +115,7 @@ function Merge-MediaSubtitle {
     <#
 .EXTERNALHELP Tetram.Media.Streams-Help.xml
 #>
-    [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium', PositionalBinding = $false)]
+    [CmdletBinding(SupportsShouldProcess = $true, PositionalBinding = $false)]
     param(
         [Parameter(Mandatory, Position = 0)]
         [string] $LiteralPath,
@@ -184,34 +184,31 @@ function Merge-MediaSubtitle {
             Write-ErrorLog $_.Exception.Message
             return
         }
+        if ($null -eq $ok) { return }
         if (-not $ok) {
             Write-ErrorLog "ffmpeg failed muxing '$dest'"
             return
         }
-        $moveSucceeded = $false
-        if (-not $WhatIfPreference) {
-            if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
-                Write-ErrorLog "Temp file missing after mux: '$temp'"
-                return
-            }
-            try {
-                Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
-                $moveSucceeded = $true
-            }
-            catch {
-                Write-ErrorLog $_.Exception.Message
-                return
-            }
+        if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
+            Write-ErrorLog "Temp file missing after mux: '$temp'"
+            return
         }
-        if ($RemoveSidecars -and ($WhatIfPreference -or $moveSucceeded)) {
+        $moveSucceeded = $false
+        try {
+            Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
+            $moveSucceeded = $true
+        }
+        catch {
+            Write-ErrorLog $_.Exception.Message
+            return
+        }
+        if ($RemoveSidecars -and $moveSucceeded) {
             $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })
             foreach ($p in $toRemove) {
                 if (-not $p) { continue }
                 # FullName issu de Get-ChildItem : uniquement le fichier réellement muxé, casse du FS respectée.
-                if ($PSCmdlet.ShouldProcess($p, 'Remove sidecar')) {
-                    try { Remove-Item -LiteralPath $p -ErrorAction Stop }
-                    catch { Write-ErrorLog "Unable to delete sidecar '$p': $($_.Exception.Message)" }
-                }
+                try { Remove-Item -LiteralPath $p -ErrorAction Stop }
+                catch { Write-ErrorLog "Unable to delete sidecar '$p': $($_.Exception.Message)" }
             }
         }
     }

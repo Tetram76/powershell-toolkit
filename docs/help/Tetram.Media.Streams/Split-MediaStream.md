@@ -34,7 +34,7 @@ Importer `Tetram.Media.Streams.psd1` (PowerShell 7+). `-LiteralPath` est un fich
 
 Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. `basename` vient du MKV. Lecture depuis la fin ; un jeton restant = pas un sidecar. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Uniquement vidéo, audio et sous-titres : covers, polices et chapitres restent dans le MKV.
 
-Copie FFmpeg (`-c copy`) vers un temporaire dans TEMP (`{guid}.srt`, etc.), puis `Move-Item` si succès. Le mux (`Merge-MediaSubtitle`) utilise `{guid}.mkv` dans TEMP. `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec A/V/S hors table : `Write-ErrorLog`, aucun sidecar. Flux hors A/V/S : ignorés (restent dans le MKV). Échec FFmpeg : pas de sidecar partiel. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
+Copie FFmpeg (`-c copy`) vers un temporaire dans TEMP (`{guid}.srt`, etc.), puis `Move-Item` si succès. Le mux (`Merge-MediaSubtitle`) utilise `{guid}.mkv` dans TEMP. `Show-CommandLine` s'affiche toujours avant `ShouldProcess`, qui à lui seul gouverne l'exécution de FFmpeg et le `Move-Item` (pas de prompt séparé pour la copie du résultat). Cible existante : `-Force` ou confirmation (`ShouldContinue`), sauf sous `-WhatIf` où la commande reste prévisualisée sans prompt. Codec A/V/S hors table : `Write-ErrorLog`, aucun sidecar. Flux hors A/V/S : ignorés (restent dans le MKV). Échec FFmpeg : pas de sidecar partiel. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
 
 Aucun objet pipeline. Les sous-titres extraits se réinjectent avec `Merge-MediaSubtitle`. Vidéo et audio extraits sont des fichiers de référence (pas muxés).
 
@@ -91,9 +91,11 @@ Split-MediaStream -LiteralPath 'D:\Media\film.mkv' -StreamType Audio
 
 ### -Confirm
 
-Demande confirmation avant chaque `ShouldProcess` (impact Medium : pas de prompt
-sauf si `-Confirm` est passé). N'équivaut pas à `-Force` (celui-ci concerne
-`ShouldContinue` sur un sidecar déjà présent).
+Demande confirmation avant d'exécuter FFmpeg (impact Medium : pas de prompt
+sauf si `-Confirm` est passé). Un refus est traité comme `-WhatIf` : rien n'est
+exécuté ni déplacé, aucune erreur `ffmpeg failed` n'est loguée. Distinct de la
+confirmation `ShouldContinue` déclenchée par un sidecar déjà présent sans
+`-Force`.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -117,7 +119,8 @@ HelpMessage: ''
 
 Écrase un sidecar déjà présent sans `ShouldContinue`. Sans `-Force`, une cible
 existante demande confirmation ; un refus saute ce fichier. Sans effet sur
-`-WhatIf` (rien n'est écrit).
+`-WhatIf` (rien n'est écrit ; la commande est prévisualisée même si la cible
+existe, sans aucun prompt).
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -210,7 +213,8 @@ HelpMessage: ''
 ### -WhatIf
 
 Affiche la ligne FFmpeg (`Show-CommandLine`) et n'écrit aucun sidecar. La
-commande est montrée avant `ShouldProcess`.
+commande est montrée avant `ShouldProcess`, qui gouverne à lui seul FFmpeg et
+le `Move-Item` final (un seul point de simulation, pas de prompt supplémentaire).
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter

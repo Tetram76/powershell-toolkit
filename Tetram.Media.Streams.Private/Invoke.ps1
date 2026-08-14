@@ -31,15 +31,14 @@ function Invoke-StreamsFFmpeg {
         [Parameter(Mandatory)][string] $TargetLabel
     )
     Show-CommandLine $Exe $Arguments -NoPathDetectionParameters 'metadata*', 'disposition*', 'map*'
-    if ($Cmdlet.ShouldProcess($TargetLabel, "ffmpeg on $TargetLabel")) {
-        $code = Invoke-FFmpeg -ExePath $Exe -Arguments $Arguments
-        return ($code -eq 0)
+    # ShouldProcess ne sert qu'à simuler un dry-run (-WhatIf) : il gouverne à lui seul
+    # ffmpeg + le Move-Item + la suppression des sidecars (même opération, pas de prompt séparé).
+    # $null = pas exécuté (WhatIf ou -Confirm refusé, message déjà affiché par ShouldProcess).
+    if (-not $Cmdlet.ShouldProcess($TargetLabel, "ffmpeg on $TargetLabel")) {
+        return $null
     }
-    if ($WhatIfPreference) {
-        Write-InfoLog -Color Magenta "[WhatIf] Would run ffmpeg on $TargetLabel"
-        return $true
-    }
-    return $false
+    $code = Invoke-FFmpeg -ExePath $Exe -Arguments $Arguments
+    return ($code -eq 0)
 }
 
 function Get-SplitExtractArguments {

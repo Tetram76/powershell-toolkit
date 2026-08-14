@@ -77,9 +77,11 @@ Merge-MediaSubtitle -LiteralPath 'D:\Media\film.mkv' -WhatIf
 
 ### -Confirm
 
-Demande confirmation avant chaque `ShouldProcess` (impact Medium : pas de prompt
-sauf si `-Confirm` est passé). N'équivaut pas à `-Force` (celui-ci concerne
-`ShouldContinue` sur le MKV cible déjà présent).
+Demande confirmation avant d'exécuter FFmpeg (impact Medium : pas de prompt
+sauf si `-Confirm` est passé). Un refus est traité comme `-WhatIf` : rien n'est
+exécuté ni déplacé, aucune erreur `ffmpeg failed` n'est loguée. Distinct de la
+confirmation `ShouldContinue` déclenchée par le MKV cible déjà présent sans
+`-Force`.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -126,7 +128,9 @@ HelpMessage: ''
 
 Écrase le MKV cible déjà présent sans `ShouldContinue`. Sans `-Force`, une cible
 existante demande confirmation ; un refus annule tout le merge. Sans effet sur
-`-WhatIf` (rien n'est écrit).
+`-WhatIf` (rien n'est écrit ; la commande est prévisualisée même si la cible
+existe, sans aucun prompt — nécessaire pour l'update in-place, toujours sur un
+MKV existant).
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -171,8 +175,9 @@ HelpMessage: ''
 
 Supprime uniquement les sidecars réellement muxés (replace/add), via le chemin
 énuméré, après un mux réussi (`Move-Item` ok). La casse suit le système de
-fichiers du dossier. Échec FFmpeg, `-WhatIf` ou `ShouldProcess` refusé :
-aucune suppression. Les pistes keep n'ont pas de sidecar à retirer.
+fichiers du dossier. Échec FFmpeg, `-WhatIf` ou `-Confirm` refusé (même
+`ShouldProcess` que FFmpeg, pas de prompt séparé) : aucune suppression. Les
+pistes keep n'ont pas de sidecar à retirer.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
