@@ -1,7 +1,24 @@
 Set-StrictMode -Version 3.0
 
 function Get-StreamsUniqueTempPath {
-    param([Parameter(Mandatory)][string] $FinalPath)
+    param(
+        [Parameter(Mandatory)][string] $FinalPath,
+        [switch] $KeepExtension
+    )
+    if ($KeepExtension) {
+        # FFmpeg déduit le muxer de la dernière extension ; `.srt.tmp` n'en a pas. Le merge MKV utilise `-f matroska` à la place.
+        $dir = Split-Path -Parent $FinalPath
+        if (-not $dir) { $dir = '.' }
+        $ext = [IO.Path]::GetExtension($FinalPath)
+        $stem = [IO.Path]::GetFileNameWithoutExtension($FinalPath)
+        $temp = Join-Path $dir ($stem + '.tmp' + $ext)
+        $n = 2
+        while (Test-Path -LiteralPath $temp) {
+            $temp = Join-Path $dir ($stem + ".tmp$n" + $ext)
+            $n++
+        }
+        return $temp
+    }
     $temp = $FinalPath + '.tmp'
     $n = 2
     while (Test-Path -LiteralPath $temp) {

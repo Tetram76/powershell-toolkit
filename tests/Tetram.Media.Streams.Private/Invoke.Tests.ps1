@@ -24,3 +24,21 @@ Describe 'Get-SplitExtractArguments' {
         }
     }
 }
+
+Describe 'Get-StreamsUniqueTempPath' {
+    It 'conserve l''extension sidecar (FFmpeg déduit le muxer de la dernière extension)' {
+        InModuleScope 'Tetram.Media.Streams' {
+            $final = Join-Path $TestDrive 'film.fra.srt'
+            $temp = Get-StreamsUniqueTempPath -FinalPath $final -KeepExtension
+            [IO.Path]::GetExtension($temp) | Should -Be '.srt'
+            $temp | Should -Match '\.tmp\.srt$'
+        }
+    }
+    It 'ajoute .tmp après le MKV (le muxer est -f matroska)' {
+        InModuleScope 'Tetram.Media.Streams' {
+            $final = Join-Path $TestDrive 'film.mkv'
+            $temp = Get-StreamsUniqueTempPath -FinalPath $final
+            $temp | Should -Be ($final + '.tmp')
+        }
+    }
+}

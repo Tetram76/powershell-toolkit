@@ -204,6 +204,20 @@ Describe 'Split-MediaStream extract failure' {
         Split-MediaStream -LiteralPath $script:Mkv -StreamType Subtitle -Language fra -Force
         Get-Content -LiteralPath $script:Sidecar | Should -Be 'good'
     }
+
+    It 'passe à FFmpeg un temporaire qui garde l''extension sidecar' {
+        $script:FfmpegOut = $null
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            $script:FfmpegOut = $Arguments[-1]
+            Set-Content -LiteralPath $Arguments[-1] -Value 'ok'
+            return 0
+        }
+        Split-MediaStream -LiteralPath $script:Mkv -StreamType Subtitle -Language fra -Force
+        [IO.Path]::GetExtension($script:FfmpegOut) | Should -Be '.srt'
+        $script:FfmpegOut | Should -Not -Match '\.tmp$'
+        Get-Content -LiteralPath $script:Sidecar | Should -Be 'ok'
+    }
 }
 
 Describe 'Merge-MediaStream' {
