@@ -32,7 +32,7 @@ Toujours un update du MKV passé en `-LiteralPath` (fichier `.mkv` existant). Si
 
 `-Destination` optionnel (sinon in-place via `.tmp`). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
 
-Codec non mappé (`mpeg4`, `mov_text`, …) : pas de sidecar au split, keep dans le MKV au merge. Covers, polices et chapitres : keep uniquement (pas de sidecar). Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
+Codec non mappé (`mpeg4`, `mov_text`, `alac`, …) : le split échoue ; au merge la piste reste keep dans le MKV. Covers, polices et chapitres : keep uniquement (pas de sidecar). Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
 
 ## EXAMPLES
 

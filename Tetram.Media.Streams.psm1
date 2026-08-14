@@ -40,9 +40,13 @@ function Split-MediaStream {
         return
     }
 
-    foreach ($u in @(Get-UnmappedStreamDescriptors -Probe $probe)) {
-        $cn = [string](Get-ProbeProperty $u 'codec_name')
-        Write-ErrorLog "Unmapped codec '$cn' in '$src' — skipped"
+    $unmapped = @(Get-UnmappedStreamDescriptors -Probe $probe)
+    if ($unmapped.Count -gt 0) {
+        foreach ($u in $unmapped) {
+            $cn = [string](Get-ProbeProperty $u 'codec_name')
+            Write-ErrorLog "Unmapped codec '$cn' in '$src'"
+        }
+        return
     }
 
     $all = @(Get-MediaStreamDescriptors -Probe $probe)

@@ -34,7 +34,7 @@ Importer `Tetram.Media.Streams.psd1` (PowerShell 7+). `-LiteralPath` est un fich
 
 Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Uniquement vidéo, audio et sous-titres : covers, polices et chapitres restent dans le MKV.
 
-Copie FFmpeg (`-c copy`). `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec non mappé : `Write-ErrorLog`, piste ignorée. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
+Copie FFmpeg (`-c copy`). `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec non mappé : `Write-ErrorLog`, aucun sidecar. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
 
 Aucun objet pipeline. Round-trip prévu avec `Merge-MediaStream` (les sidecars portent la grammaire ci-dessus).
 
@@ -187,7 +187,8 @@ HelpMessage: ''
 Classes à extraire : `Video`, `Audio`, `Subtitle`.
 Plusieurs valeurs = union. Omit = ces trois classes. Covers, pièces jointes et
 chapitres ne sont pas extraits. Un codec non
-mappé (ex. `mpeg4`, `mov_text`) est ignoré ici (`Write-ErrorLog`) ; au merge il
+mappé (ex. `mpeg4`, `mov_text`, `alac`) fait échouer tout le split
+(`Write-ErrorLog`, aucun sidecar) ; au merge il
 reste dans le MKV (keep).
 
 ```yaml

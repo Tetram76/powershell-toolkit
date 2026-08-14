@@ -86,6 +86,30 @@ Describe 'Split-MediaStream WhatIf' {
         Test-Path -LiteralPath (Join-Path $TestDrive 'film.fra.srt') | Should -BeFalse
     }
 
+    It 'rejette tout le split si un codec n''est pas dans la table' {
+        $mkv = Join-Path $TestDrive 'unmapped.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        Mock -ModuleName Tetram.Media.Streams Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Streams Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Streams Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Streams Write-InfoLog {}
+        $script:ShowCalled = 0
+        Mock -ModuleName Tetram.Media.Streams Show-CommandLine { $script:ShowCalled++ }
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { throw 'ne doit pas extraire' }
+        $probe = @{
+            streams = @(
+                @{ index = 0; codec_type = 'audio'; codec_name = 'alac'; tags = @{}; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+                @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fra' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+            )
+        }
+        Mock -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable { $probe }
+        Split-MediaStream -LiteralPath $mkv -StreamType Subtitle -Language fra -Force
+        Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog
+        $script:ShowCalled | Should -Be 0
+        Should -Invoke -ModuleName Tetram.Media.Streams Invoke-FFmpeg -Times 0
+        Test-Path -LiteralPath (Join-Path $TestDrive 'unmapped.fra.srt') | Should -BeFalse
+    }
+
     It 'résout ~ avant ffprobe' {
         $name = 'streams-tilde-' + [guid]::NewGuid().ToString('N') + '.mkv'
         $homeMkv = Join-Path $HOME $name

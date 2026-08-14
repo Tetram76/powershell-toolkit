@@ -28,7 +28,6 @@ Describe 'Get-ElementaryExtension' {
         @{ Codec = 'mjpeg'; Type = 'video'; Pic = $true; Ext = '.jpg'; Class = 'Cover' }
         @{ Codec = 'png'; Type = 'video'; Pic = $true; Ext = '.png'; Class = 'Cover' }
         @{ Codec = 'pcm_s16le'; Type = 'audio'; Pic = $false; Ext = '.wav'; Class = 'Audio' }
-        @{ Codec = 'alac'; Type = 'audio'; Pic = $false; Ext = '.wav'; Class = 'Audio' }
     ) {
         InModuleScope 'Tetram.Media.Streams' -Parameters $_ {
             param($Codec, $Type, $Pic, $Ext, $Class)
@@ -37,10 +36,11 @@ Describe 'Get-ElementaryExtension' {
             $r.Class | Should -Be $Class
         }
     }
-    It 'retourne null pour mpeg4 et mov_text' {
+    It 'retourne null pour mpeg4, mov_text et alac' {
         InModuleScope 'Tetram.Media.Streams' {
             Get-ElementaryExtension -CodecName 'mpeg4' -CodecType 'video' -AttachedPic $false | Should -BeNullOrEmpty
             Get-ElementaryExtension -CodecName 'mov_text' -CodecType 'subtitle' -AttachedPic $false | Should -BeNullOrEmpty
+            Get-ElementaryExtension -CodecName 'alac' -CodecType 'audio' -AttachedPic $false | Should -BeNullOrEmpty
         }
     }
 }

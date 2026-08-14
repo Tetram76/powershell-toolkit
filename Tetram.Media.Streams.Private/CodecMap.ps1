@@ -31,7 +31,6 @@ function Get-ElementaryExtension {
         'mp3' = @{ Class = 'Audio'; Extension = '.mp3' }
         'mp2' = @{ Class = 'Audio'; Extension = '.mp2' }
         'vorbis' = @{ Class = 'Audio'; Extension = '.ogg' }
-        'alac' = @{ Class = 'Audio'; Extension = '.wav' }
         'subrip' = @{ Class = 'Subtitle'; Extension = '.srt' }
         'ass' = @{ Class = 'Subtitle'; Extension = '.ass' }
         'ssa' = @{ Class = 'Subtitle'; Extension = '.ssa' }

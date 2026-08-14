@@ -47,7 +47,7 @@ Les polices, covers, chapitres et pistes non extraites restent dans le MKV grâc
 - mkvmerge, manifeste JSON, conservation d’un ordre de pistes autre que : ordre du MKV source, puis ajouts par classe.
 - Réencodage, décalage temporel (`delay`), noms de piste (`title`) dans le nom de fichier.
 - Autres flags de disposition FFmpeg (`lyrics`, `karaoke`, `captions`, `descriptions`, `clean_effects`, …) : non représentés dans le nom ; perdus au replace, conservés sur les pistes keep.
-- Codecs sans entrée dans la table (dont `mpeg4`, `mov_text`, VobSub) : skip + log au split ; ils restent dans le MKV au merge si on ne les a pas extraits.
+- Codecs sans entrée dans la table (dont `mpeg4`, `mov_text`, `alac`, VobSub) : le split **échoue** (`Write-ErrorLog` + return, aucun sidecar). Au merge, ces pistes restent keep dans le MKV.
 - Modification de `Tetram.Media.FFmpeg` / factorisation du probe Reencode.
 
 ## Architecture
@@ -162,7 +162,7 @@ Caractères interdits Windows / séparateur `.` de grammaire : remplacés par `_
 
 ## Carte codec → extension
 
-Copie uniquement. Codec absent de la table → **skip + `Write-ErrorLog`** au split (le flux n’est pas extrait ; il reste dans le MKV au merge). Pas de fichier élémentaire « fourre-tout ».
+Copie uniquement. Codec absent de la table → le split **échoue** (`Write-ErrorLog` + return, aucun sidecar). Au merge, la piste reste keep dans le MKV. Pas de fichier élémentaire « fourre-tout ».
 
 | Codec ffprobe (`codec_name`) | Ext | Classe |
 |---|---|---|
@@ -183,13 +183,13 @@ Copie uniquement. Codec absent de la table → **skip + `Write-ErrorLog`** au sp
 | `mp3` | `.mp3` | Audio |
 | `mp2` | `.mp2` | Audio |
 | `vorbis` | `.ogg` | Audio |
-| `pcm_*`, `alac` | `.wav` | Audio |
+| `pcm_*` | `.wav` | Audio |
 | `subrip` | `.srt` | Sous-titres |
 | `ass` | `.ass` | Sous-titres |
 | `ssa` | `.ssa` | Sous-titres |
 | `webvtt` | `.vtt` | Sous-titres |
 | `hdmv_pgs_subtitle` | `.sup` | Sous-titres |
-| `mpeg4`, `mov_text`, `dvd_subtitle`, `dvb_subtitle`, autres | non mappé (skip + log) | — |
+| `mpeg4`, `mov_text`, `alac`, `dvd_subtitle`, `dvb_subtitle`, autres | non mappé (split : échec de l’opération) | — |
 
 Pièces jointes (`codec_type` = `attachment`) : extension d’après `tags.filename` / mime ; défaut `.bin` si inconnue mais toujours extraite (classe pièce jointe).
 
@@ -200,14 +200,15 @@ Chapitres : présence d’entrées `chapters` dans ffprobe → un seul `basename
 1. Résoudre ffmpeg/ffprobe ; échec → `Write-ErrorLog` + return.
 2. Fichier existant, extension `.mkv` (insensible à la casse) ; sinon log + return. Le chemin est ensuite résolu via le provider (`Resolve-Path -LiteralPath`) : `~` et lecteurs PS deviennent un chemin filesystem, contrairement à `GetFullPath`.
 3. ffprobe JSON (`-show_format -show_streams -show_chapters -of json`). JSON invalide ou vide → log + return.
-4. Construire les descripteurs, **attribuer les index de collision sur l’ensemble du MKV**, puis filtrer :
+4. Codec A/V/S absent de la table → `Write-ErrorLog` + return (aucun sidecar), même si `-StreamType` / `-Language` l’aurait exclu.
+5. Construire les descripteurs, **attribuer les index de collision sur l’ensemble du MKV**, puis filtrer :
    - `-StreamType` : si omis, tout. `Chapter` = sidecar ffmeta. `Attachment` = pièces jointes (pas les covers). `Video` = pistes vidéo **y compris** `attached_pic` (covers).
    - `-Language` : comparaison insensible à la casse sur le code **tel que dans le fichier**. Les flux sans langue (indéterminés) **ne matchent pas** un filtre `-Language`. Chapitres et pièces jointes **ignorent** `-Language`.
-5. Pour chaque descripteur retenu : calculer le chemin sidecar (même dossier que le MKV).
+6. Pour chaque descripteur retenu : calculer le chemin sidecar (même dossier que le MKV).
    - Si la cible existe : `-WhatIf` → pas de prompt, on affiche quand même la commande FFmpeg prévue ; exécution réelle → `-Force` ou `ShouldContinue` ; refus → skip + `Write-InfoLog`.
    - `Show-CommandLine` puis `ShouldProcess` puis `ffmpeg -hide_banner -i <mkv> -map 0:<index> -c copy -y <sidecar>` (variante chapitres / `-dump_attachment` ou `-map 0:t:N` selon le type).
-6. Un flux en erreur FFmpeg : `Write-ErrorLog`, **continuer** les autres.
-7. Aucun flux retenu après filtre : `Write-InfoLog` (pas une erreur).
+7. Un flux en erreur FFmpeg : `Write-ErrorLog`, **continuer** les autres.
+8. Aucun flux retenu après filtre : `Write-InfoLog` (pas une erreur).
 
 Le MKV d’origine n’est pas modifié par le split.
 

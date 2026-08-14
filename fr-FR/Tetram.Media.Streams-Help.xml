@@ -14,7 +14,7 @@
 
 `-Destination` optionnel (sinon in-place via `.tmp`). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
 
-Codec non mappé (`mpeg4`, `mov_text`, …) : pas de sidecar au split, keep dans le MKV au merge. Covers, polices et chapitres : keep uniquement (pas de sidecar). Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).</maml:para>
+Codec non mappé (`mpeg4`, `mov_text`, `alac`, …) : le split échoue ; au merge la piste reste keep dans le MKV. Covers, polices et chapitres : keep uniquement (pas de sidecar). Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -209,7 +209,7 @@ finalisé, sans supprimer de sidecar.</maml:para>
 
 Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Uniquement vidéo, audio et sous-titres : covers, polices et chapitres restent dans le MKV.
 
-Copie FFmpeg (`-c copy`). `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec non mappé : `Write-ErrorLog`, piste ignorée. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
+Copie FFmpeg (`-c copy`). `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec non mappé : `Write-ErrorLog`, aucun sidecar. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
 
 Aucun objet pipeline. Round-trip prévu avec `Merge-MediaStream` (les sidecars portent la grammaire ci-dessus).</maml:para>
     </maml:description>
@@ -316,7 +316,8 @@ Les sidecars sont écrits dans le même dossier.</maml:para>
           <maml:para>Classes à extraire : `Video`, `Audio`, `Subtitle`.
 Plusieurs valeurs = union. Omit = ces trois classes. Covers, pièces jointes et
 chapitres ne sont pas extraits. Un codec non
-mappé (ex. `mpeg4`, `mov_text`) est ignoré ici (`Write-ErrorLog`) ; au merge il
+mappé (ex. `mpeg4`, `mov_text`, `alac`) fait échouer tout le split
+(`Write-ErrorLog`, aucun sidecar) ; au merge il
 reste dans le MKV (keep).</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
