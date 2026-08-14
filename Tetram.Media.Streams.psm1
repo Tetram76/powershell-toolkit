@@ -148,18 +148,25 @@ function Merge-MediaStream {
         }
         return
     }
+    $moveSucceeded = $false
     if ($PSCmdlet.ShouldProcess($dest, "Move temp over '$dest'")) {
-        if (Test-Path -LiteralPath $temp -PathType Leaf) {
-            try {
-                Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
-            }
-            catch {
-                Write-ErrorLog $_.Exception.Message
-                return
-            }
+        if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
+            Write-ErrorLog "Temp file missing after mux: '$temp'"
+            return
+        }
+        try {
+            Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
+            $moveSucceeded = $true
+        }
+        catch {
+            Write-ErrorLog $_.Exception.Message
+            return
         }
     }
-    if ($RemoveSidecars) {
+    elseif (-not $WhatIfPreference) {
+        return
+    }
+    if ($RemoveSidecars -and ($WhatIfPreference -or $moveSucceeded)) {
         $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })
         foreach ($p in $toRemove) {
             if (-not $p) { continue }

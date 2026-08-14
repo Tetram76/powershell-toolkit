@@ -161,6 +161,13 @@ Describe 'Merge-MediaStream' {
         Test-Path -LiteralPath $script:Srt | Should -BeTrue
     }
 
+    It 'RemoveSidecars ne supprime rien si le temp est absent' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { return 0 }
+        Merge-MediaStream -LiteralPath $script:Mkv -Force -RemoveSidecars
+        Test-Path -LiteralPath $script:Srt | Should -BeTrue
+        Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog -ParameterFilter { $Text -like '*Temp file missing*' }
+    }
+
     It 'ne throw pas si Invoke-StreamsFFmpeg lève une exception' {
         Mock -ModuleName Tetram.Media.Streams Invoke-StreamsFFmpeg { throw 'unexpected wrapper' }
         { Merge-MediaStream -LiteralPath $script:Mkv -Force } | Should -Not -Throw
