@@ -107,6 +107,9 @@ function Invoke-SimilarityAnalysis
 
 function Test-MediaSimilarity
 {
+    <#
+.EXTERNALHELP Tetram.Media.Similarity-Help.xml
+#>
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [Parameter(Mandatory, ValueFromPipeline)] [string] $Path,

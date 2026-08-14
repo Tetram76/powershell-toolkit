@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" schema="maml" xmlns="http://msh">
+  <command:command>
+    <command:details>
+      <command:name>Test-MediaSimilarity</command:name>
+      <maml:description>
+        <maml:para>Indexe des empreintes MPEG-7 (`.sig`) à côté des vidéos, puis signale les paires visuellement proches.</maml:para>
+      </maml:description>
+      <command:verb>Test</command:verb>
+      <command:noun>MediaSimilarity</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Importer `Tetram.Media.Similarity.psd1` (PowerShell 7+). `-Path` est obligatoire.
+
+Deux phases :
+
+1. Indexation : pour chaque fichier matching `-InputMasks`, calcule un hash rapide et maintient `Nom.hash.sig` dans le même dossier. Hash différent = anciennes `.sig` du même basename supprimées, nouvelle empreinte générée (ffmpeg `signature`).
+2. Comparaison : paires de signatures, score FFmpeg `signature=detectmode=full`. Un match est retenu si `confidence &gt;= -ConfidenceThreshold` (défaut 90).
+
+`-UpdateOnly` s'arrête après la phase 1. La phase 2 exige au moins deux signatures valides.
+
+Effet disque : crée/remplace/supprime des `.sig` à côté des médias. Ne modifie pas les vidéos. `-WhatIf` couvre création et suppression des signatures.
+
+Résultat : objets pipeline `{ SourceFile, Matches: [{ TargetFile, Confidence }] }` seulement s'il y a au moins une paire. Sinon rien dans le pipeline (un résumé console est tout de même écrit). ffmpeg introuvable : log d'erreur, pas d'exception, rien émis.
+
+Contraintes d'appel : `Get-ChildItem -Include` n'énumère les fichiers d'un dossier que si `-Recurse` est passé ou si `-Path` désigne déjà un contenu (ex. `D:\Media\*`). Sans cela, la commande peut ne trouver aucun fichier. Le bloc `process` écrase `$files`/`$results` : ne pas piper plusieurs chemins en attendant une fusion.
+
+ffmpeg : `RecodeVideo/` (build &gt;= 9.0.1) puis PATH. `ConfirmImpact` non élevé : `-Confirm` seulement si demandé.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Test-MediaSimilarity</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="1" aliases="none">
+          <maml:name>InputMasks</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String[]</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="2" aliases="none">
+          <maml:name>ConfidenceThreshold</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Recurse</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>UpdateOnly</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>WhatIf</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Confirm</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="2" aliases="none">
+        <maml:name>ConfidenceThreshold</maml:name>
+        <maml:description>
+          <maml:para>Score minimal (0-100, issu de `signature=detectmode=full`) pour retenir une
+paire. Valeur par défaut : 90.
+Score minimal (0-100, issu de `signature=detectmode=full`) pour retenir une
+paire.
+Valeur par défaut : 90.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>System.Int32</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="cf">
+        <maml:name>Confirm</maml:name>
+        <maml:description>
+          <maml:para>Prompts you for confirmation before running the cmdlet.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="1" aliases="none">
+        <maml:name>InputMasks</maml:name>
+        <maml:description>
+          <maml:para>Masques de fichiers passés à `Get-ChildItem -Include`. Valeur par défaut :
+`*.mkv`, `*.mp4`, `*.avi`, `*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`,
+`*.heic`, `*.ts`, `*.webm`.
+Masques de fichiers passés à `Get-ChildItem -Include`.
+Valeur par défaut :
+`*.mkv`, `*.mp4`, `*.avi`, `*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`,
+`*.heic`, `*.ts`, `*.webm`.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String[]</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="true (ByValue)" position="0" aliases="none">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Dossier (ou chemin résolu par `Resolve-Path`) contenant les fichiers à indexer.
+Accepte l'entrée par pipeline. Paramètre obligatoire.
+Dossier (ou chemin résolu par `Resolve-Path`) contenant les fichiers à indexer.
+Accepte l'entrée par pipeline.
+Paramètre obligatoire.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Recurse</maml:name>
+        <maml:description>
+          <maml:para>Inclut les sous-dossiers. Sur un chemin dossier sans joker, `-Recurse` (ou un
+`-Path` du type `D:\Media\*`) est nécessaire pour que `-InputMasks` trouve des
+fichiers.
+Inclut les sous-dossiers.
+Sur un chemin dossier sans joker, `-Recurse` (ou un
+`-Path` du type `D:\Media\*`) est nécessaire pour que `-InputMasks` trouve des
+fichiers.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>UpdateOnly</maml:name>
+        <maml:description>
+          <maml:para>Génère ou rafraîchit les signatures, puis s'arrête sans comparaison.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="wi">
+        <maml:name>WhatIf</maml:name>
+        <maml:description>
+          <maml:para>Runs the command in a mode that only reports what would happen without performing the actions.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>Une valeur de `-Path` (ByValue). Plusieurs objets pipeline ne sont pas fusionnés : seule la dernière itération alimente le `end`.</maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Object</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>Présent seulement s'il existe au moins une similarité. Sinon `$null` / rien (y compris `-UpdateOnly`, moins de deux `.sig`, ffmpeg absent).
+
+Propriétés : `SourceFile` (string), `Matches` (collection de `TargetFile`, `Confidence`).</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Prérequis : PowerShell 7+, ffmpeg &gt;= 9.0.1. Comparaison O(n²) sur le nombre de signatures : coûteux sur de gros corpus.
+
+Ne pas faire : attendre une exception si ffmpeg manque ; interpréter l'absence d'objets comme un échec (souvent « 0 match » ou indexation seule) ; omettre `-Recurse` sur un chemin dossier sans joker.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Comparer un arbre (cas d'usage principal) ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-MediaSimilarity -Path 'D:\Media' -Recurse</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : trouver des doublons visuels. `-Recurse` est requis pour énumérer le contenu d'un dossier.</maml:para>
+          <maml:para>Les paires s'affichent sur la console et sont renvoyées dans le pipeline.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Rafraîchir les empreintes sans comparer ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-MediaSimilarity -Path 'D:\Media' -Recurse -UpdateOnly</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : générer/nettoyer les `.sig` seulement. Aucun objet pipeline.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 3: Seuil plus strict ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-MediaSimilarity -Path 'D:\Media' -Recurse -ConfidenceThreshold 95</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : moins de faux positifs. Score entier 0-100.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 4: Dry-run des écritures `.sig` ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-MediaSimilarity -Path 'D:\Media' -Recurse -UpdateOnly -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : voir quelles signatures seraient créées ou supprimées, sans toucher au disque.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Invoke-ReencodeMedia</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+</helpItems>

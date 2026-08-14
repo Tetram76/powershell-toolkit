@@ -582,6 +582,9 @@ function Invoke-ReencodeFile
 # -----------------------------------------------------------------------------
 function Invoke-ReencodeMedia
 {
+    <#
+.EXTERNALHELP Tetram.Media.Reencode-Help.xml
+#>
     [CmdletBinding(
             PositionalBinding = $false,
             DefaultParametersetName = 'SetExtensionFromPath',
