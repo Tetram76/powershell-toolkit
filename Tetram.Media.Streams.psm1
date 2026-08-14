@@ -65,10 +65,17 @@ function Split-MediaStream {
     foreach ($d in $sel) {
         $name = ConvertTo-StreamFileName -Basename $base -Descriptor $d
         $out = Join-Path $dir $name
-        if ((Test-Path -LiteralPath $out -PathType Leaf) -and -not $WhatIfPreference) {
-            if (-not $Force -and -not $PSCmdlet.ShouldContinue($out, 'Overwrite sidecar')) {
-                Write-InfoLog "Skip existing sidecar '$out'"
+        if (Test-Path -LiteralPath $out) {
+            if (-not (Test-Path -LiteralPath $out -PathType Leaf)) {
+                # Move-Item vers un dossier range le fichier dedans : pas de sidecar mergeable.
+                Write-ErrorLog "Sidecar path is not a file: '$out'"
                 continue
+            }
+            if (-not $WhatIfPreference) {
+                if (-not $Force -and -not $PSCmdlet.ShouldContinue($out, 'Overwrite sidecar')) {
+                    Write-InfoLog "Skip existing sidecar '$out'"
+                    continue
+                }
             }
         }
         # -y sur le sidecar tronquerait un fichier déjà bon si FFmpeg échoue ensuite.

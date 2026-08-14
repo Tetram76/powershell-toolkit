@@ -231,6 +231,18 @@ Describe 'Split-MediaStream extract failure' {
         Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
         Get-Content -LiteralPath $script:Sidecar | Should -Be 'ok'
     }
+
+    It 'refuse un dossier qui occupe le chemin sidecar' {
+        if (Test-Path -LiteralPath $script:Sidecar) {
+            Remove-Item -LiteralPath $script:Sidecar -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $script:Sidecar | Out-Null
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { throw 'ne doit pas extraire' }
+        Split-MediaStream -LiteralPath $script:Mkv -StreamType Subtitle -Language fra -Force
+        Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog
+        Should -Invoke -ModuleName Tetram.Media.Streams Invoke-FFmpeg -Times 0
+        Get-ChildItem -LiteralPath $script:Sidecar -File | Should -BeNullOrEmpty
+    }
 }
 
 Describe 'Merge-MediaSubtitle' {

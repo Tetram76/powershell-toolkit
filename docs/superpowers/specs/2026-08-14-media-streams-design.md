@@ -205,7 +205,8 @@ Chapitres : présence d’entrées `chapters` dans ffprobe → un seul `basename
    - `-StreamType` : si omis, tout. `Chapter` = sidecar ffmeta. `Attachment` = pièces jointes (pas les covers). `Video` = pistes vidéo **y compris** `attached_pic` (covers).
    - `-Language` : comparaison insensible à la casse sur le code **tel que dans le fichier**. Les flux sans langue (indéterminés) **ne matchent pas** un filtre `-Language`. Chapitres et pièces jointes **ignorent** `-Language`.
 6. Pour chaque descripteur retenu : calculer le chemin sidecar (même dossier que le MKV).
-   - Si la cible existe : `-WhatIf` → pas de prompt, on affiche quand même la commande FFmpeg prévue ; exécution réelle → `-Force` ou `ShouldContinue` ; refus → skip + `Write-InfoLog`.
+   - Si la cible existe et n’est pas un fichier (dossier nommé comme le sidecar) : `Write-ErrorLog` + skip (sinon `Move-Item` rangerait le fichier dans le dossier).
+   - Si la cible est un fichier : `-WhatIf` → pas de prompt, on affiche quand même la commande FFmpeg prévue ; exécution réelle → `-Force` ou `ShouldContinue` ; refus → skip + `Write-InfoLog`.
    - `Show-CommandLine` puis `ShouldProcess` puis `ffmpeg` vers un temporaire dans le dossier TEMP (`{guid}{ext}` sidecar, ex. `{TEMP}\{guid}.srt`). Succès → `Move-Item` vers le sidecar ; échec → suppression du temporaire. Le temporaire du **merge** est `{TEMP}\{guid}.mkv` + `-f matroska`. Pas de voisin `.tmp` du MKV (Merge le prendrait pour un sidecar).
 7. Un flux en erreur FFmpeg : `Write-ErrorLog`, **continuer** les autres ; aucun sidecar partiel laissé.
 8. Aucun flux retenu après filtre : `Write-InfoLog` (pas une erreur).
