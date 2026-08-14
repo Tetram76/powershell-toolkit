@@ -62,6 +62,27 @@ function Get-MapSpecLetter {
     }
 }
 
+function Get-AttachmentMimeType {
+    param([string] $MimeType, [string] $Extension)
+    if (-not [string]::IsNullOrWhiteSpace($MimeType)) { return $MimeType }
+    switch (([string]$Extension).ToLowerInvariant()) {
+        '.ttf' { return 'font/ttf' }
+        '.otf' { return 'font/otf' }
+        '.ttc' { return 'font/collection' }
+        '.woff' { return 'font/woff' }
+        '.woff2' { return 'font/woff2' }
+        default { return 'application/octet-stream' }
+    }
+}
+
+function New-PendingAttach {
+    param($Sidecar, [string] $PreferredMime)
+    [pscustomobject]@{
+        Sidecar  = $Sidecar
+        MimeType = Get-AttachmentMimeType -MimeType $PreferredMime -Extension $Sidecar.Extension
+    }
+}
+
 function Build-MergeFFmpegArgs {
     param(
         [Parameter(Mandatory)][string] $MkvPath,
@@ -112,7 +133,7 @@ function Build-MergeFFmpegArgs {
             $r = $null
             if ($null -ne $mkv.StreamIndex) { $r = $replaceByIndex[[int]$mkv.StreamIndex] }
             if ($r) {
-                $pendingAttach.Add($r.Sidecar)
+                $pendingAttach.Add((New-PendingAttach -Sidecar $r.Sidecar -PreferredMime $r.Mkv.MimeType))
             }
             else {
                 [void]$a.Add('-map'); [void]$a.Add("0:$($mkv.StreamIndex)")
@@ -143,7 +164,7 @@ function Build-MergeFFmpegArgs {
     foreach ($add in @($Actions.Adds)) {
         if ($add.Class -eq 'Chapter') { continue }
         if ($add.Class -eq 'Attachment') {
-            $pendingAttach.Add($add)
+            $pendingAttach.Add((New-PendingAttach -Sidecar $add -PreferredMime $add.MimeType))
             continue
         }
         $letter = Get-MapSpecLetter $add.Class
@@ -160,11 +181,14 @@ function Build-MergeFFmpegArgs {
     }
     foreach ($item in $pendingAttach) {
         if ($null -eq $item) { continue }
-        [void]$a.Add('-attach'); [void]$a.Add($item.FullName)
+        $side = $item.Sidecar
+        [void]$a.Add('-attach'); [void]$a.Add($side.FullName)
         $ti = $outIdx['t']
-        $fn = $item.AttachmentName
-        if (-not $fn) { $fn = $item.AttachmentNameSanitized + $item.Extension }
+        $fn = $side.AttachmentName
+        if (-not $fn) { $fn = $side.AttachmentNameSanitized + $side.Extension }
         [void]$a.Add("-metadata:s:t:${ti}"); [void]$a.Add("filename=$fn")
+        # Matroska refuse -attach sans mimetype (spec filename/mimetype).
+        [void]$a.Add("-metadata:s:t:${ti}"); [void]$a.Add("mimetype=$($item.MimeType)")
         $outIdx['t']++
     }
     if ($null -ne $chapterInput) {

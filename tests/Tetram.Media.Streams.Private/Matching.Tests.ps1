@@ -110,7 +110,7 @@ Describe 'Build-MergeFFmpegArgs attachments t:' {
         InModuleScope 'Tetram.Media.Streams' -Parameters @{ Mkv = $mkv; Font = $font } {
             param($Mkv, $Font)
             $keep = New-StreamDescriptorObject -Class 'Attachment' -Extension '.ttf' -StreamIndex 4 -AttachmentNameSanitized 'KeepFont'
-            $repMkv = New-StreamDescriptorObject -Class 'Attachment' -Extension '.ttf' -StreamIndex 3 -AttachmentNameSanitized 'Replaced'
+            $repMkv = New-StreamDescriptorObject -Class 'Attachment' -Extension '.ttf' -StreamIndex 3 -AttachmentNameSanitized 'Replaced' -MimeType 'application/x-font-ttf'
             $side = New-StreamDescriptorObject -Class 'Attachment' -Extension '.ttf' -AttachmentNameSanitized 'Replaced' -AttachmentName 'Replaced.ttf'
             $side | Add-Member -NotePropertyName FullName -NotePropertyValue $Font -Force
             $act = [pscustomobject]@{
@@ -123,6 +123,7 @@ Describe 'Build-MergeFFmpegArgs attachments t:' {
             $hasAttach = $false
             $hasKeepMap = $false
             $filenameT = $null
+            $mimeVal = $null
             for ($i = 0; $i -lt $ffmpegArgs.Count; $i++) {
                 if ($ffmpegArgs[$i] -eq '-attach') { $hasAttach = $true }
                 if ($i -lt $ffmpegArgs.Count - 1 -and $ffmpegArgs[$i] -eq '-map' -and $ffmpegArgs[$i + 1] -eq '0:4') {
@@ -131,10 +132,14 @@ Describe 'Build-MergeFFmpegArgs attachments t:' {
                 if ($ffmpegArgs[$i] -like '-metadata:s:t:*' -and $i -lt $ffmpegArgs.Count - 1 -and $ffmpegArgs[$i + 1] -like 'filename=*') {
                     $filenameT = $ffmpegArgs[$i]
                 }
+                if ($i -lt $ffmpegArgs.Count - 1 -and $ffmpegArgs[$i + 1] -like 'mimetype=*') {
+                    $mimeVal = $ffmpegArgs[$i + 1]
+                }
             }
             $hasAttach | Should -BeTrue
             $hasKeepMap | Should -BeTrue
             $filenameT | Should -Be '-metadata:s:t:1'
+            $mimeVal | Should -Be 'mimetype=application/x-font-ttf'
         }
     }
 }
