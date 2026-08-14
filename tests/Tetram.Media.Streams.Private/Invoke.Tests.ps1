@@ -25,6 +25,22 @@ Describe 'Get-SplitExtractArguments' {
     }
 }
 
+Describe 'Remove-StreamsTempIfPresent' {
+    It 'supprime le GUID même si ShouldProcess refuse (Confirm No to All)' {
+        InModuleScope 'Tetram.Media.Streams' {
+            $temp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + '.mkv')
+            Set-Content -LiteralPath $temp -Value 'leftover'
+            try {
+                Remove-StreamsTempIfPresent -TempPath $temp
+                Test-Path -LiteralPath $temp | Should -BeFalse
+            }
+            finally {
+                if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
+            }
+        }
+    }
+}
+
 Describe 'Get-StreamsUniqueTempPath' {
     It 'utilise TEMP + GUID + extension finale (comme Reencode)' {
         InModuleScope 'Tetram.Media.Streams' {

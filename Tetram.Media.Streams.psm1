@@ -107,7 +107,7 @@ function Split-MediaStream {
             }
         }
         finally {
-            Remove-StreamsTempIfPresent -Cmdlet $PSCmdlet -TempPath $temp
+            Remove-StreamsTempIfPresent -TempPath $temp
         }
     }
 }
@@ -220,7 +220,7 @@ function Merge-MediaSubtitle {
         }
     }
     finally {
-        Remove-StreamsTempIfPresent -Cmdlet $PSCmdlet -TempPath $temp
+        Remove-StreamsTempIfPresent -TempPath $temp
     }
 }
 
