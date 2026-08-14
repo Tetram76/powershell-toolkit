@@ -27,7 +27,7 @@ Remove-EmptyDirs [[-Path] <string>] [-DeepScan] [-WhatIf] [-Confirm] [<CommonPar
 
 ## DESCRIPTION
 
-Importer `Tetram.Remove-Empty-Dirs.psd1` (PowerShell 7+). Cible : `-Path` doit être un dossier existant (défaut `.`).
+Importer `.\Tetram.Remove-Empty-Dirs` (PowerShell 7+). Cible : `-Path` doit être un dossier existant (défaut `.`).
 
 Fait : `Get-ChildItem -Directory -Recurse` sous la racine, tri par longueur de chemin décroissante (enfant avant parent), puis `Remove-Item` si le dossier n'a aucun enfant. Un `parent/child` tous deux vides : `child` puis `parent` dans le même passage. Ce n'est pas « feuilles seulement ».
 

@@ -28,7 +28,7 @@ Get-MediaStream [-MediaFile] <string> [-StreamType <string[]>] [-Language <strin
 
 ## DESCRIPTION
 
-Importer `Tetram.Media.Streams.psd1` (PowerShell 7+). `-MediaFile` est un fichier `.mkv` existant, accepte le pipeline (chaîne simple). Le MKV source n'est **jamais modifié** : la commande ne fait que lire (`ffprobe`) et copier des flux vers des fichiers de flux (`ffmpeg -c copy`), d'où le verbe `Get` plutôt que `Split`.
+Importer `.\Tetram.Media.Streams` (PowerShell 7+). `-MediaFile` est un fichier `.mkv` existant, accepte le pipeline (chaîne simple). Le MKV source n'est **jamais modifié** : la commande ne fait que lire (`ffprobe`) et copier des flux vers des fichiers de flux (`ffmpeg -c copy`), d'où le verbe `Get` plutôt que `Split`.
 
 `ffprobe` lit toutes les pistes ; l'index de collision (`.2`, `.3`) est calculé sur le MKV entier avant `-StreamType` / `-Language`. Extraire seulement la 2e VO anglais produit `film.eng.2.srt`.
 
@@ -250,7 +250,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Prérequis : PowerShell 7+, ffmpeg/ffprobe (`Tetram.Media.FFmpeg`). Importer `.\Tetram.Media.Streams.psd1`. Copie bit-exacte (`-c copy`), pas de réencodage. Le MKV source n'est jamais modifié.
+Prérequis : PowerShell 7+, ffmpeg/ffprobe (`Tetram.Media.FFmpeg`). Importer `.\Tetram.Media.Streams`. Copie bit-exacte (`-c copy`), pas de réencodage. Le MKV source n'est jamais modifié.
 
 Ne pas faire : attendre une exception si ffmpeg manque ou si le chemin n'est pas un `.mkv` ; croire que `-Language` / `-StreamType` recalculent l'index `.2` (il vient du MKV source entier) ; traiter `dub` comme une langue ; prendre le jeton fichier `commentary` pour le disposition FFmpeg `comment` au split (le mapping est automatique au merge).
 

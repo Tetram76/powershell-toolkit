@@ -28,7 +28,7 @@ Test-MediaSimilarity [-Path] <string> [[-InputMasks] <string[]>] [[-ConfidenceTh
 
 ## DESCRIPTION
 
-Importer `Tetram.Media.Similarity.psd1` (PowerShell 7+). `-Path` est obligatoire.
+Importer `.\Tetram.Media.Similarity` (PowerShell 7+). `-Path` est obligatoire.
 
 Deux phases :
 
