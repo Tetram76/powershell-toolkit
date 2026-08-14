@@ -20,7 +20,49 @@ function Split-MediaStream {
         [string[]] $Language,
         [switch] $Force
     )
-    return
+    try { $ffmpeg = Get-FFmpegPath; $ffprobe = Get-FfprobePath }
+    catch { Write-ErrorLog $_.Exception.Message; return }
+
+    if (-not (Test-StreamsMkvPath -LiteralPath $LiteralPath)) {
+        Write-ErrorLog "Not a .mkv file: '$LiteralPath'"
+        return
+    }
+
+    $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $LiteralPath
+    if ($null -eq $probe) {
+        Write-ErrorLog "Can't get media info for '$LiteralPath'"
+        return
+    }
+
+    foreach ($u in @(Get-UnmappedStreamDescriptors -Probe $probe)) {
+        $cn = [string](Get-ProbeProperty $u 'codec_name')
+        Write-ErrorLog "Unmapped codec '$cn' in '$LiteralPath' — skipped"
+    }
+
+    $all = @(Get-MediaStreamDescriptors -Probe $probe)
+    $sel = @(Select-MediaStreamDescriptors -Descriptors $all -StreamType $StreamType -Language $Language)
+    if ($sel.Count -eq 0) {
+        Write-InfoLog "No stream to extract from '$LiteralPath'"
+        return
+    }
+
+    $dir = Split-Path -Parent (Resolve-Path -LiteralPath $LiteralPath)
+    $base = [IO.Path]::GetFileNameWithoutExtension($LiteralPath)
+    foreach ($d in $sel) {
+        $name = ConvertTo-StreamFileName -Basename $base -Descriptor $d
+        $out = Join-Path $dir $name
+        if ((Test-Path -LiteralPath $out -PathType Leaf) -and -not $WhatIfPreference) {
+            if (-not $Force -and -not $PSCmdlet.ShouldContinue($out, 'Overwrite sidecar')) {
+                Write-InfoLog "Skip existing sidecar '$out'"
+                continue
+            }
+        }
+        $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $LiteralPath -OutPath $out
+        $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out
+        if (-not $ok) {
+            Write-ErrorLog "ffmpeg failed extracting '$out'"
+        }
+    }
 }
 
 function Merge-MediaStream {
