@@ -93,17 +93,16 @@ function Split-MediaStream {
                 Write-ErrorLog "ffmpeg failed extracting '$out'"
                 continue
             }
-            if ($PSCmdlet.ShouldProcess($out, "Move temp over '$out'")) {
-                if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
-                    Write-ErrorLog "Temp file missing after extract: '$temp'"
-                    continue
-                }
-                try {
-                    Move-Item -LiteralPath $temp -Destination $out -Force -ErrorAction Stop
-                }
-                catch {
-                    Write-ErrorLog $_.Exception.Message
-                }
+            if ($WhatIfPreference) { continue }
+            if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
+                Write-ErrorLog "Temp file missing after extract: '$temp'"
+                continue
+            }
+            try {
+                Move-Item -LiteralPath $temp -Destination $out -Force -ErrorAction Stop
+            }
+            catch {
+                Write-ErrorLog $_.Exception.Message
             }
         }
         finally {
@@ -190,7 +189,7 @@ function Merge-MediaSubtitle {
             return
         }
         $moveSucceeded = $false
-        if ($PSCmdlet.ShouldProcess($dest, "Move temp over '$dest'")) {
+        if (-not $WhatIfPreference) {
             if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
                 Write-ErrorLog "Temp file missing after mux: '$temp'"
                 return
@@ -203,9 +202,6 @@ function Merge-MediaSubtitle {
                 Write-ErrorLog $_.Exception.Message
                 return
             }
-        }
-        elseif (-not $WhatIfPreference) {
-            return
         }
         if ($RemoveSidecars -and ($WhatIfPreference -or $moveSucceeded)) {
             $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })

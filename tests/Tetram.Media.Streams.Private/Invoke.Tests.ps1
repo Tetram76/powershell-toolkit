@@ -55,6 +55,32 @@ Describe 'Remove-StreamsTempIfPresent' {
     }
 }
 
+Describe 'Invoke-StreamsFFmpeg' {
+    It 'retourne false si ShouldProcess refuse hors WhatIf (Confirm Non)' {
+        InModuleScope 'Tetram.Media.Streams' {
+            Mock Show-CommandLine {}
+            Mock Invoke-FFmpeg { throw 'ne doit pas tourner' }
+            $cmd = [pscustomobject]@{}
+            $cmd | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { $false }
+            $WhatIfPreference = $false
+            Invoke-StreamsFFmpeg -Cmdlet $cmd -Exe 'ffmpeg' -Arguments @('-y', 'out') -TargetLabel 'out' | Should -BeFalse
+            Should -Invoke Invoke-FFmpeg -Times 0
+        }
+    }
+    It 'retourne true sous WhatIf sans appeler ffmpeg' {
+        InModuleScope 'Tetram.Media.Streams' {
+            Mock Show-CommandLine {}
+            Mock Write-InfoLog {}
+            Mock Invoke-FFmpeg { throw 'ne doit pas tourner' }
+            $cmd = [pscustomobject]@{}
+            $cmd | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { $false }
+            $WhatIfPreference = $true
+            Invoke-StreamsFFmpeg -Cmdlet $cmd -Exe 'ffmpeg' -Arguments @('-y', 'out') -TargetLabel 'out' | Should -BeTrue
+            Should -Invoke Invoke-FFmpeg -Times 0
+        }
+    }
+}
+
 Describe 'Get-StreamsUniqueTempPath' {
     It 'utilise TEMP + GUID + extension finale (comme Reencode)' {
         InModuleScope 'Tetram.Media.Streams' {

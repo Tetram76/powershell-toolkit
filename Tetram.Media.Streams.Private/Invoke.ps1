@@ -35,8 +35,11 @@ function Invoke-StreamsFFmpeg {
         $code = Invoke-FFmpeg -ExePath $Exe -Arguments $Arguments
         return ($code -eq 0)
     }
-    Write-InfoLog -Color Magenta "[WhatIf] Would run ffmpeg on $TargetLabel"
-    return $true
+    if ($WhatIfPreference) {
+        Write-InfoLog -Color Magenta "[WhatIf] Would run ffmpeg on $TargetLabel"
+        return $true
+    }
+    return $false
 }
 
 function Get-SplitExtractArguments {
