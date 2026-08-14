@@ -37,7 +37,6 @@ function Get-ElementaryExtension {
         'webvtt' = @{ Class = 'Subtitle'; Extension = '.vtt' }
         'hdmv_pgs_subtitle' = @{ Class = 'Subtitle'; Extension = '.sup' }
     }
-    if ($c.StartsWith('pcm_')) { return [pscustomobject]@{ Class = 'Audio'; Extension = '.wav' } }
     if ($map.ContainsKey($c)) {
         return [pscustomobject]@{ Class = [string]$map[$c].Class; Extension = [string]$map[$c].Extension }
     }

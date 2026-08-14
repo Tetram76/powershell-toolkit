@@ -106,10 +106,11 @@ Describe 'ConvertTo / ConvertFrom-StreamFileName' {
             ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.ffmeta' | Should -BeNullOrEmpty
         }
     }
-    It 'ignore les conteneurs' {
+    It 'ignore les conteneurs et .wav' {
         InModuleScope 'Tetram.Media.Streams' {
             ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.mkv' | Should -BeNullOrEmpty
             ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.mp4' | Should -BeNullOrEmpty
+            ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.eng.wav' | Should -BeNullOrEmpty
         }
     }
     It 'parse une police sanitisée' {

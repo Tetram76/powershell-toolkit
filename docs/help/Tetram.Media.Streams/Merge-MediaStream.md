@@ -32,7 +32,7 @@ Toujours un update du MKV passé en `-LiteralPath` (fichier `.mkv` existant). Si
 
 `-Destination` optionnel (sinon in-place via `.tmp`). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
 
-Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, …) : split et merge s'arrêtent (`Write-ErrorLog`). Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : skip au split, keep au merge. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
+Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, `pcm_*`, …) : split et merge s'arrêtent (`Write-ErrorLog`). Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : skip au split, keep au merge. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
 
 ## EXAMPLES
 

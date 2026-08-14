@@ -14,7 +14,7 @@
 
 `-Destination` optionnel (sinon in-place via `.tmp`). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
 
-Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, …) : split et merge s'arrêtent (`Write-ErrorLog`). Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : skip au split, keep au merge. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).</maml:para>
+Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, `pcm_*`, …) : split et merge s'arrêtent (`Write-ErrorLog`). Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : skip au split, keep au merge. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -316,7 +316,7 @@ Les sidecars sont écrits dans le même dossier.</maml:para>
           <maml:para>Classes à extraire : `Video`, `Audio`, `Subtitle`.
 Plusieurs valeurs = union. Omit = ces trois classes. Covers, pièces jointes et
 chapitres ne sont pas extraits. Un codec A/V/S hors
-table (ex. `mpeg4`, `mov_text`, `alac`) fait échouer tout le split
+table (ex. `mpeg4`, `mov_text`, `alac`, `pcm_*`) fait échouer tout le split
 (`Write-ErrorLog`, aucun sidecar) — même arrêt au merge.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>

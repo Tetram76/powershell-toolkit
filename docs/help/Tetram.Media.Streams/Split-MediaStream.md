@@ -187,7 +187,7 @@ HelpMessage: ''
 Classes à extraire : `Video`, `Audio`, `Subtitle`.
 Plusieurs valeurs = union. Omit = ces trois classes. Covers, pièces jointes et
 chapitres ne sont pas extraits. Un codec A/V/S hors
-table (ex. `mpeg4`, `mov_text`, `alac`) fait échouer tout le split
+table (ex. `mpeg4`, `mov_text`, `alac`, `pcm_*`) fait échouer tout le split
 (`Write-ErrorLog`, aucun sidecar) — même arrêt au merge.
 
 ```yaml

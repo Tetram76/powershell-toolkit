@@ -47,7 +47,7 @@ Les polices, covers, chapitres et pistes non extraites restent dans le MKV grâc
 - mkvmerge, manifeste JSON, conservation d’un ordre de pistes autre que : ordre du MKV source, puis ajouts par classe.
 - Réencodage, décalage temporel (`delay`), noms de piste (`title`) dans le nom de fichier.
 - Autres flags de disposition FFmpeg (`lyrics`, `karaoke`, `captions`, `descriptions`, `clean_effects`, …) : non représentés dans le nom ; perdus au replace, conservés sur les pistes keep.
-- Codecs A/V/S sans entrée dans la table (dont `mpeg4`, `mov_text`, `alac`, VobSub) : split **et** merge **échouent** (`Write-ErrorLog` + return). Tout flux ni vidéo, ni audio, ni sous-titre (`data`, covers, polices, chapitres, …) : skip au split, keep au merge.
+- Codecs A/V/S sans entrée dans la table (dont `mpeg4`, `mov_text`, `alac`, `pcm_*`, VobSub) : split **et** merge **échouent** (`Write-ErrorLog` + return). Tout flux ni vidéo, ni audio, ni sous-titre (`data`, covers, polices, chapitres, …) : skip au split, keep au merge.
 - Modification de `Tetram.Media.FFmpeg` / factorisation du probe Reencode.
 
 ## Architecture
@@ -183,13 +183,12 @@ Copie uniquement. Codec A/V/S absent de la table → split **et** merge **échou
 | `mp3` | `.mp3` | Audio |
 | `mp2` | `.mp2` | Audio |
 | `vorbis` | `.ogg` | Audio |
-| `pcm_*` | `.wav` | Audio |
 | `subrip` | `.srt` | Sous-titres |
 | `ass` | `.ass` | Sous-titres |
 | `ssa` | `.ssa` | Sous-titres |
 | `webvtt` | `.vtt` | Sous-titres |
 | `hdmv_pgs_subtitle` | `.sup` | Sous-titres |
-| `mpeg4`, `mov_text`, `alac`, `dvd_subtitle`, `dvb_subtitle`, autres A/V/S | non mappé (split et merge : échec de l’opération) | — |
+| `mpeg4`, `mov_text`, `alac`, `pcm_*`, `dvd_subtitle`, `dvb_subtitle`, autres A/V/S | non mappé (split et merge : échec de l’opération) | — |
 
 Pièces jointes (`codec_type` = `attachment`) : extension d’après `tags.filename` / mime ; défaut `.bin` si inconnue mais toujours extraite (classe pièce jointe).
 

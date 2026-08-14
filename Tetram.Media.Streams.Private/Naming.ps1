@@ -22,7 +22,7 @@ $script:StreamsContainerExtensions = @(
 $script:StreamsExtClass = @{
     '.h264' = 'Video'; '.hevc' = 'Video'; '.ivf' = 'Video'; '.m2v' = 'Video'; '.vc1' = 'Video'
     '.aac' = 'Audio'; '.ac3' = 'Audio'; '.eac3' = 'Audio'; '.dts' = 'Audio'; '.thd' = 'Audio'
-    '.flac' = 'Audio'; '.opus' = 'Audio'; '.mp3' = 'Audio'; '.mp2' = 'Audio'; '.ogg' = 'Audio'; '.wav' = 'Audio'
+    '.flac' = 'Audio'; '.opus' = 'Audio'; '.mp3' = 'Audio'; '.mp2' = 'Audio'; '.ogg' = 'Audio'
     '.srt' = 'Subtitle'; '.ass' = 'Subtitle'; '.ssa' = 'Subtitle'; '.vtt' = 'Subtitle'; '.sup' = 'Subtitle'
     '.jpg' = 'Cover'; '.jpeg' = 'Cover'; '.png' = 'Cover'
     '.ttf' = 'Attachment'; '.otf' = 'Attachment'; '.ttc' = 'Attachment'
