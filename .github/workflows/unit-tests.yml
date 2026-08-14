@@ -32,7 +32,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Push-Location $env:GITHUB_WORKSPACE
           try {
-            & "$env:GITHUB_WORKSPACE/.github/ci/Invoke-Tests.ps1" -Coverage
+            & "$env:GITHUB_WORKSPACE/tools/Invoke-Tests.ps1" -Coverage
           }
           finally {
             Pop-Location

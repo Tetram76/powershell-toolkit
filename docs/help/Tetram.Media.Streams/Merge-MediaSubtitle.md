@@ -286,4 +286,4 @@ Ne pas faire : attendre une suppression de piste (replace / add / keep seulement
 
 ## RELATED LINKS
 
-- [Get-MediaStream]()
+- [Get-MediaStream](Get-MediaStream.md)

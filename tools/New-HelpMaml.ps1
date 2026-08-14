@@ -17,10 +17,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $MarkdownRoot) {
     $MarkdownRoot = Join-Path $repoRoot 'docs\help'
 }
-if (-not $OutputFolder) {
-    # Get-Help cherche <dossier-du-psd1>\<culture>\*-Help.xml ; les modules racine partagent donc ce dossier.
-    $OutputFolder = Join-Path $repoRoot $Locale
-}
+# Get-Help cherche <dossier-du-psd1>\<culture>\*-Help.xml. Sans -OutputFolder,
+# chaque module reçoit son propre dossier <Module>\<Locale>\.
 
 function Install-PlatyPSIfMissing {
     if (Get-Module -ListAvailable -Name Microsoft.PowerShell.PlatyPS) {
@@ -45,19 +43,22 @@ if (-not (Test-Path -LiteralPath $MarkdownRoot)) {
 }
 
 $manifests = @(
-    Get-ChildItem -LiteralPath $repoRoot -Filter '*.psd1' -File |
+    Get-ChildItem -LiteralPath $repoRoot -Directory |
+        ForEach-Object {
+            $candidate = Join-Path $_.FullName "$($_.Name).psd1"
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                Get-Item -LiteralPath $candidate
+            }
+        } |
         Sort-Object Name
 )
 if ($manifests.Count -eq 0) {
-    throw "Aucun manifeste .psd1 à la racine de $repoRoot."
-}
-
-if (-not (Test-Path -LiteralPath $OutputFolder)) {
-    New-Item -ItemType Directory -Path $OutputFolder | Out-Null
+    throw "Aucun manifeste .psd1 de module sous $repoRoot."
 }
 
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 $exported = @()
+$localeFolders = [System.Collections.Generic.List[string]]::new()
 
 foreach ($manifest in $manifests) {
     $moduleHelpDir = Join-Path $MarkdownRoot $manifest.BaseName
@@ -66,7 +67,20 @@ foreach ($manifest in $manifests) {
         continue
     }
 
-    Write-Verbose "Export MAML $($manifest.BaseName) -> $OutputFolder"
+    $moduleOutputFolder = if ($OutputFolder) {
+        $OutputFolder
+    }
+    else {
+        Join-Path $manifest.Directory.FullName $Locale
+    }
+    if (-not (Test-Path -LiteralPath $moduleOutputFolder)) {
+        New-Item -ItemType Directory -Path $moduleOutputFolder | Out-Null
+    }
+    if ($moduleOutputFolder -notin $localeFolders) {
+        [void]$localeFolders.Add($moduleOutputFolder)
+    }
+
+    Write-Verbose "Export MAML $($manifest.BaseName) -> $moduleOutputFolder"
 
     # PlatyPS 1.0.3 : accès à des propriétés optionnelles sous StrictMode Latest.
     Set-StrictMode -Off
@@ -79,7 +93,7 @@ foreach ($manifest in $manifests) {
         }
 
         $splat = @{
-            OutputFolder = $OutputFolder
+            OutputFolder = $moduleOutputFolder
             Encoding = $utf8
         }
         if ($Force) {
@@ -102,17 +116,19 @@ if ($exported.Count -eq 0) {
 
 # PlatyPS écrit <culture>\<Module>\<Module>-Help.xml ; Get-Help n'ouvre que
 # <dossier-du-psd1>\<culture>\<Module>-Help.xml.
-$xmlFiles = @(
-    Get-ChildItem -LiteralPath $OutputFolder -Recurse -Filter '*-Help.xml' -File
-)
-foreach ($xml in $xmlFiles) {
-    $dest = Join-Path $OutputFolder $xml.Name
-    if ($xml.FullName -ne $dest) {
-        Move-Item -LiteralPath $xml.FullName -Destination $dest -Force
-        $subdir = Split-Path -Parent $xml.FullName
-        $leftovers = @(Get-ChildItem -LiteralPath $subdir -Force)
-        if ($subdir -ne $OutputFolder -and $leftovers.Count -eq 0) {
-            Remove-Item -LiteralPath $subdir -Force
+foreach ($folder in $localeFolders) {
+    $xmlFiles = @(
+        Get-ChildItem -LiteralPath $folder -Recurse -Filter '*-Help.xml' -File
+    )
+    foreach ($xml in $xmlFiles) {
+        $dest = Join-Path $folder $xml.Name
+        if ($xml.FullName -ne $dest) {
+            Move-Item -LiteralPath $xml.FullName -Destination $dest -Force
+            $subdir = Split-Path -Parent $xml.FullName
+            $leftovers = @(Get-ChildItem -LiteralPath $subdir -Force)
+            if ($subdir -ne $folder -and $leftovers.Count -eq 0) {
+                Remove-Item -LiteralPath $subdir -Force
+            }
         }
     }
 }
@@ -121,7 +137,12 @@ foreach ($xml in $xmlFiles) {
 $writerSettings = [System.Xml.XmlWriterSettings]::new()
 $writerSettings.Encoding = $utf8
 $writerSettings.Indent = $true
-Get-ChildItem -LiteralPath $OutputFolder -Filter '*-Help.xml' -File | ForEach-Object {
+$allXml = @(
+    foreach ($folder in $localeFolders) {
+        Get-ChildItem -LiteralPath $folder -Filter '*-Help.xml' -File
+    }
+)
+$allXml | ForEach-Object {
     $doc = [xml](Get-Content -LiteralPath $_.FullName -Raw)
     Repair-MamlExampleCode -Document $doc
     $writer = [System.Xml.XmlWriter]::Create($_.FullName, $writerSettings)
@@ -133,4 +154,4 @@ Get-ChildItem -LiteralPath $OutputFolder -Filter '*-Help.xml' -File | ForEach-Ob
     }
 }
 
-Get-ChildItem -LiteralPath $OutputFolder -Filter '*-Help.xml' -File
+$allXml

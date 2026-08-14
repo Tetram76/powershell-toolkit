@@ -33,11 +33,17 @@ Install-PlatyPSIfMissing
 Import-Module Microsoft.PowerShell.PlatyPS -Force
 
 $manifests = @(
-    Get-ChildItem -LiteralPath $repoRoot -Filter '*.psd1' -File |
+    Get-ChildItem -LiteralPath $repoRoot -Directory |
+        ForEach-Object {
+            $candidate = Join-Path $_.FullName "$($_.Name).psd1"
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                Get-Item -LiteralPath $candidate
+            }
+        } |
         Sort-Object Name
 )
 if ($manifests.Count -eq 0) {
-    throw "Aucun manifeste .psd1 à la racine de $repoRoot."
+    throw "Aucun manifeste .psd1 de module sous $repoRoot."
 }
 
 if (-not (Test-Path -LiteralPath $OutputFolder)) {
@@ -49,7 +55,7 @@ $utf8 = [System.Text.UTF8Encoding]::new($false)
 
 foreach ($manifest in $manifests) {
     Write-Verbose "Génération de l'aide markdown pour $($manifest.BaseName)."
-    $module = Import-Module -Name $manifest.FullName -Force -PassThru
+    $module = Import-Module -Name $manifest.Directory.FullName -Force -PassThru
     $splat = @{
         ModuleInfo = $module
         OutputFolder = $OutputFolder

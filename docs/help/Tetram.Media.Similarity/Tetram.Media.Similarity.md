@@ -14,7 +14,7 @@ title: Tetram.Media.Similarity Module
 
 ## Description
 
-Détection de doublons visuels via signatures MPEG-7 (fichiers `.sig` à côté des vidéos). Une seule commande exportée. Importer `.\Tetram.Media.Similarity.psd1`. L'aide commande décrit le contrat pipeline (objets seulement s'il y a des matches) et le piège `-Include` sans `-Recurse`.
+Détection de doublons visuels via signatures MPEG-7 (fichiers `.sig` à côté des vidéos). Une seule commande exportée. Importer `.\Tetram.Media.Similarity`. L'aide commande décrit le contrat pipeline (objets seulement s'il y a des matches) et le piège `-Include` sans `-Recurse`.
 
 ## Tetram.Media.Similarity Cmdlets
 

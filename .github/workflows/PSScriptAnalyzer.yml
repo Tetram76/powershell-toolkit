@@ -36,7 +36,7 @@ jobs:
         with:
           path: .
           recurse: true
-          settings: ./.github/ci/PSScriptAnalyzerSettings.psd1
+          settings: ./tools/PSScriptAnalyzerSettings.psd1
           severity: '"ParseError","Error"'
           output: results.sarif
           enableExit: true
