@@ -1675,75 +1675,51 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
     <command:examples>
       <command:example>
         <maml:title>--------- Example 1: Dry-run avant un réencodage récursif ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -WhatIf</dev:code>
+        <dev:remarks>
           <maml:para>Intention : voir ce qui serait fait, sans modifier de fichier. Toujours préférer cet appel avant un run réel.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -WhatIf
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 2: Réencodage par défaut (HEVC, sortie .mkv) ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse</dev:code>
+        <dev:remarks>
           <maml:para>Intention : normaliser un arbre vers MKV/HEVC qualité Medium. Les originaux sont remplacés in-place.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 3: Vérifier qu'ffmpeg peut décoder, sans retravailler le média ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -CheckOnly</dev:code>
+        <dev:remarks>
           <maml:para>Intention : diagnostiquer des fichiers illisibles sans réencoder ni remuxer. Ce n'est pas un dry-run : les dates NFO (`premiered`) peuvent être écrites. Pour zéro effet disque, combiner `-WhatIf` (ou n'utiliser que `-WhatIf`). Les échecs ffmpeg vont dans `reencode-errors.log`.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -CheckOnly
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 4: Remux pour retirer des pistes, sans réencoder ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -Rewrite</dev:code>
+        <dev:remarks>
           <maml:para>Intention : filtrer sous-titres / métadonnées en copiant vidéo et audio. Ignoré si aucun filtrage n'est nécessaire.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -Rewrite
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 5: File d'attente + upgrade HEVC vers AV1 ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -UpdateList -VideoCodec AV1 -AllowVideoCodecUpgrade</dev:code>
+        <dev:remarks>
           <maml:para>Intention : traiter une liste, retirer chaque ligne après coup, réencoder les HEVC `main*` en AV1. `-ListFile` exclut `-Path`.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -UpdateList -VideoCodec AV1 -AllowVideoCodecUpgrade
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 6: Un seul sous-arbre récursif sans `-Recurse` global ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-ReencodeMedia -Path '+D:\Media\Shows'</dev:code>
+        <dev:remarks>
           <maml:para>Intention : récursion ciblée. Le `+` s'applique à cette entrée seulement.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Invoke-ReencodeMedia -Path '+D:\Media\Shows'
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
     </command:examples>
     <command:relatedLinks>

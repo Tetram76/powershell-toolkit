@@ -89,7 +89,10 @@ ffmpeg : `RecodeVideo/` (build &gt;= 9.0.1) puis PATH. `ConfirmImpact` non élev
         <maml:name>ConfidenceThreshold</maml:name>
         <maml:description>
           <maml:para>Score minimal (0-100, issu de `signature=detectmode=full`) pour retenir une
-paire. Valeur par défaut : 90.</maml:para>
+paire. Valeur par défaut : 90.
+Score minimal (0-100, issu de `signature=detectmode=full`) pour retenir une
+paire.
+Valeur par défaut : 90.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.Int32</command:parameterValue>
         <dev:type>
@@ -110,6 +113,10 @@ paire. Valeur par défaut : 90.</maml:para>
         <maml:description>
           <maml:para>Masques de fichiers passés à `Get-ChildItem -Include`. Valeur par défaut :
 `*.mkv`, `*.mp4`, `*.avi`, `*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`,
+`*.heic`, `*.ts`, `*.webm`.
+Masques de fichiers passés à `Get-ChildItem -Include`.
+Valeur par défaut :
+`*.mkv`, `*.mp4`, `*.avi`, `*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`,
 `*.heic`, `*.ts`, `*.webm`.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
@@ -121,7 +128,10 @@ paire. Valeur par défaut : 90.</maml:para>
         <maml:name>Path</maml:name>
         <maml:description>
           <maml:para>Dossier (ou chemin résolu par `Resolve-Path`) contenant les fichiers à indexer.
-Accepte l'entrée par pipeline. Paramètre obligatoire.</maml:para>
+Accepte l'entrée par pipeline. Paramètre obligatoire.
+Dossier (ou chemin résolu par `Resolve-Path`) contenant les fichiers à indexer.
+Accepte l'entrée par pipeline.
+Paramètre obligatoire.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -132,6 +142,10 @@ Accepte l'entrée par pipeline. Paramètre obligatoire.</maml:para>
         <maml:name>Recurse</maml:name>
         <maml:description>
           <maml:para>Inclut les sous-dossiers. Sur un chemin dossier sans joker, `-Recurse` (ou un
+`-Path` du type `D:\Media\*`) est nécessaire pour que `-InputMasks` trouve des
+fichiers.
+Inclut les sous-dossiers.
+Sur un chemin dossier sans joker, `-Recurse` (ou un
 `-Path` du type `D:\Media\*`) est nécessaire pour que `-InputMasks` trouve des
 fichiers.</maml:para>
         </maml:description>
@@ -190,53 +204,36 @@ Ne pas faire : attendre une exception si ffmpeg manque ; interpréter l'absence 
     <command:examples>
       <command:example>
         <maml:title>--------- Example 1: Comparer un arbre (cas d'usage principal) ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-MediaSimilarity -Path 'D:\Media' -Recurse</dev:code>
+        <dev:remarks>
           <maml:para>Intention : trouver des doublons visuels. `-Recurse` est requis pour énumérer le contenu d'un dossier.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Test-MediaSimilarity -Path 'D:\Media' -Recurse
-```</maml:para>
-          <maml:para>&#x80;</maml:para>
           <maml:para>Les paires s'affichent sur la console et sont renvoyées dans le pipeline.</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 2: Rafraîchir les empreintes sans comparer ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-MediaSimilarity -Path 'D:\Media' -Recurse -UpdateOnly</dev:code>
+        <dev:remarks>
           <maml:para>Intention : générer/nettoyer les `.sig` seulement. Aucun objet pipeline.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Test-MediaSimilarity -Path 'D:\Media' -Recurse -UpdateOnly
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 3: Seuil plus strict ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-MediaSimilarity -Path 'D:\Media' -Recurse -ConfidenceThreshold 95</dev:code>
+        <dev:remarks>
           <maml:para>Intention : moins de faux positifs. Score entier 0-100.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Test-MediaSimilarity -Path 'D:\Media' -Recurse -ConfidenceThreshold 95
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 4: Dry-run des écritures `.sig` ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-MediaSimilarity -Path 'D:\Media' -Recurse -UpdateOnly -WhatIf</dev:code>
+        <dev:remarks>
           <maml:para>Intention : voir quelles signatures seraient créées ou supprimées, sans toucher au disque.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Test-MediaSimilarity -Path 'D:\Media' -Recurse -UpdateOnly -WhatIf
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
     </command:examples>
     <command:relatedLinks>

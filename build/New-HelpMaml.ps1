@@ -117,4 +117,20 @@ foreach ($xml in $xmlFiles) {
     }
 }
 
+. (Join-Path $PSScriptRoot 'Repair-MamlExampleCode.ps1')
+$writerSettings = [System.Xml.XmlWriterSettings]::new()
+$writerSettings.Encoding = $utf8
+$writerSettings.Indent = $true
+Get-ChildItem -LiteralPath $OutputFolder -Filter '*-Help.xml' -File | ForEach-Object {
+    $doc = [xml](Get-Content -LiteralPath $_.FullName -Raw)
+    Repair-MamlExampleCode -Document $doc
+    $writer = [System.Xml.XmlWriter]::Create($_.FullName, $writerSettings)
+    try {
+        $doc.Save($writer)
+    }
+    finally {
+        $writer.Dispose()
+    }
+}
+
 Get-ChildItem -LiteralPath $OutputFolder -Filter '*-Help.xml' -File

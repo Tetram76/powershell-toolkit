@@ -115,45 +115,33 @@ Ne pas faire : l'utiliser pour effacer des fichiers ; omettre `-WhatIf` sur un a
     <command:examples>
       <command:example>
         <maml:title>--------- Example 1: Simuler un nettoyage ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Remove-EmptyDirs -Path 'D:\Media' -DeepScan -WhatIf</dev:code>
+        <dev:remarks>
           <maml:para>Intention : lister les dossiers actuellement vides sans les supprimer. Sous `-WhatIf`,
 aucune suppression n'a lieu, donc `-DeepScan` n'enchaîne pas de passages : seuls les
 dossiers déjà sans enfant apparaissent (un parent qui contient encore un enfant vide
 n'est pas listé).</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Remove-EmptyDirs -Path 'D:\Media' -DeepScan -WhatIf
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 2: Répéter jusqu'à un passage sans suppression ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Remove-EmptyDirs -Path 'D:\Media' -DeepScan</dev:code>
+        <dev:remarks>
           <maml:para>Intention : run réel après un dry-run. `-DeepScan` relance un scan complet tant qu'un
 dossier a vraiment été retiré. Pour une chaîne déjà vide, le premier passage suffit
 déjà (enfant puis parent).</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Remove-EmptyDirs -Path 'D:\Media' -DeepScan
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 3: Un seul passage ---------</maml:title>
-        <maml:introduction>
+        <maml:introduction></maml:introduction>
+        <dev:code>Remove-EmptyDirs -Path 'D:\Media'</dev:code>
+        <dev:remarks>
           <maml:para>Intention : un scan, pas de rescan. Les parents vidés pendant ce passage sont quand
 même retirés (tri du plus long chemin au plus court). Ce n'est pas limité aux feuilles.</maml:para>
-          <maml:para>&#x80;</maml:para>
-          <maml:para>```powershell
-Remove-EmptyDirs -Path 'D:\Media'
-```</maml:para>
-        </maml:introduction>
-        <dev:code />
-        <dev:remarks />
+        </dev:remarks>
       </command:example>
     </command:examples>
     <command:relatedLinks>
