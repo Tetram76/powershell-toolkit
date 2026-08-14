@@ -15,7 +15,7 @@ Deux commandes, FFmpeg uniquement (`-c copy`) :
 
 Une invocation = un fichier MKV. Pas de `-Recurse`, pas de masques, pas de reconstruction à partir des seuls sidecars.
 
-Les polices, chapitres et pistes non extraites restent dans le MKV grâce au merge-update : inutile de tout extraire pour un round-trip.
+Les polices, covers, chapitres et pistes non extraites restent dans le MKV grâce au merge-update : le round-trip sidecar ne concerne que **vidéo, audio et sous-titres**.
 
 ## Décisions validées
 
@@ -39,6 +39,7 @@ Les polices, chapitres et pistes non extraites restent dans le MKV grâce au mer
 
 ## Hors scope (v1)
 
+- Extraction / réinjection de covers (`attached_pic`), pièces jointes (polices) et chapitres : keep dans le MKV, pas de sidecar.
 - Conversion d’un autre conteneur (MP4, AVI, …) vers MKV.
 - Reconstruction d’un MKV à partir **uniquement** des sidecars (mux from-scratch).
 - Suppression de piste.
@@ -69,7 +70,7 @@ Les `.ps1` privés sont dot-sourcés depuis le root psm1 (pas en `NestedModules`
 
 ```
 Split-MediaStream -LiteralPath <fichier.mkv>
-    [-StreamType Video, Audio, Subtitle, Attachment, Chapter]
+    [-StreamType Video, Audio, Subtitle]
     [-Language <code[]>]
     [-Force] [-WhatIf] [-Confirm]
 

@@ -99,47 +99,28 @@ Describe 'Build-MergeFFmpegArgs muxer temporaire' {
     }
 }
 
-Describe 'Build-MergeFFmpegArgs attachments t:' {
-    It 'numérote filename= après l''attachment keep mappé' {
+Describe 'Build-MergeFFmpegArgs attachments keep' {
+    It 'mappe la pièce jointe MKV et ignore un sidecar .ttf' {
         $dir = Join-Path $TestDrive 'att'
         New-Item -ItemType Directory -Path $dir | Out-Null
         $mkv = Join-Path $dir 'film.mkv'
         $font = Join-Path $dir 'film.Replaced.ttf'
         New-Item -ItemType File -Path $mkv | Out-Null
         New-Item -ItemType File -Path $font | Out-Null
-        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Mkv = $mkv; Font = $font } {
-            param($Mkv, $Font)
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv } {
+            param($Dir, $Mkv)
             $keep = New-StreamDescriptorObject -Class 'Attachment' -Extension '.ttf' -StreamIndex 4 -AttachmentNameSanitized 'KeepFont'
-            $repMkv = New-StreamDescriptorObject -Class 'Attachment' -Extension '.ttf' -StreamIndex 3 -AttachmentNameSanitized 'Replaced' -MimeType 'application/x-font-ttf'
-            $side = New-StreamDescriptorObject -Class 'Attachment' -Extension '.ttf' -AttachmentNameSanitized 'Replaced' -AttachmentName 'Replaced.ttf'
-            $side | Add-Member -NotePropertyName FullName -NotePropertyValue $Font -Force
-            $act = [pscustomobject]@{
-                OrderedMkv = @($repMkv, $keep)
-                Keeps      = @($keep)
-                Replaces   = @([pscustomobject]@{ Mkv = $repMkv; Sidecar = $side })
-                Adds       = @()
-            }
+            $sides = @(Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv))
+            $sides.Count | Should -Be 0
+            $act = Resolve-MergeActions -MkvDescriptors @($keep) -Sidecars $sides
+            $act.Replaces.Count | Should -Be 0
             $ffmpegArgs = @(Build-MergeFFmpegArgs -MkvPath $Mkv -Actions $act -OutputPath ($Mkv + '.tmp'))
-            $hasAttach = $false
+            $ffmpegArgs | Should -Not -Contain '-attach'
             $hasKeepMap = $false
-            $filenameT = $null
-            $mimeVal = $null
-            for ($i = 0; $i -lt $ffmpegArgs.Count; $i++) {
-                if ($ffmpegArgs[$i] -eq '-attach') { $hasAttach = $true }
-                if ($i -lt $ffmpegArgs.Count - 1 -and $ffmpegArgs[$i] -eq '-map' -and $ffmpegArgs[$i + 1] -eq '0:4') {
-                    $hasKeepMap = $true
-                }
-                if ($ffmpegArgs[$i] -like '-metadata:s:t:*' -and $i -lt $ffmpegArgs.Count - 1 -and $ffmpegArgs[$i + 1] -like 'filename=*') {
-                    $filenameT = $ffmpegArgs[$i]
-                }
-                if ($i -lt $ffmpegArgs.Count - 1 -and $ffmpegArgs[$i + 1] -like 'mimetype=*') {
-                    $mimeVal = $ffmpegArgs[$i + 1]
-                }
+            for ($i = 0; $i -lt $ffmpegArgs.Count - 1; $i++) {
+                if ($ffmpegArgs[$i] -eq '-map' -and $ffmpegArgs[$i + 1] -eq '0:4') { $hasKeepMap = $true }
             }
-            $hasAttach | Should -BeTrue
             $hasKeepMap | Should -BeTrue
-            $filenameT | Should -Be '-metadata:s:t:1'
-            $mimeVal | Should -Be 'mimetype=application/x-font-ttf'
         }
     }
 }

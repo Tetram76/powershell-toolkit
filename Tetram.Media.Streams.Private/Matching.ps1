@@ -16,6 +16,7 @@ function Get-SidecarFiles {
         if ($exclude -contains $full) { continue }
         $parsed = ConvertFrom-StreamFileName -Basename $Basename -FileName $f.Name
         if ($null -eq $parsed) { continue }
+        if ($parsed.Class -notin @('Video', 'Audio', 'Subtitle')) { continue }
         $parsed | Add-Member -NotePropertyName FullName -NotePropertyValue $full -Force
         $out += $parsed
     }
@@ -31,6 +32,10 @@ function Resolve-MergeActions {
     $replaces = @()
     $keeps = @()
     foreach ($mkv in @($MkvDescriptors)) {
+        if ($mkv.Class -notin @('Video', 'Audio', 'Subtitle')) {
+            $keeps += $mkv
+            continue
+        }
         $hit = @($Sidecars | Where-Object {
             $_.CollisionKey -eq $mkv.CollisionKey -and [int]$_.CollisionIndex -eq [int]$mkv.CollisionIndex
         }) | Select-Object -First 1
@@ -62,27 +67,6 @@ function Get-MapSpecLetter {
     }
 }
 
-function Get-AttachmentMimeType {
-    param([string] $MimeType, [string] $Extension)
-    if (-not [string]::IsNullOrWhiteSpace($MimeType)) { return $MimeType }
-    switch (([string]$Extension).ToLowerInvariant()) {
-        '.ttf' { return 'font/ttf' }
-        '.otf' { return 'font/otf' }
-        '.ttc' { return 'font/collection' }
-        '.woff' { return 'font/woff' }
-        '.woff2' { return 'font/woff2' }
-        default { return 'application/octet-stream' }
-    }
-}
-
-function New-PendingAttach {
-    param($Sidecar, [string] $PreferredMime)
-    [pscustomobject]@{
-        Sidecar  = $Sidecar
-        MimeType = Get-AttachmentMimeType -MimeType $PreferredMime -Extension $Sidecar.Extension
-    }
-}
-
 function Build-MergeFFmpegArgs {
     param(
         [Parameter(Mandatory)][string] $MkvPath,
@@ -100,23 +84,10 @@ function Build-MergeFFmpegArgs {
     $sideForInput += @($Actions.Adds)
     foreach ($item in $sideForInput) {
         if ($null -eq $item) { continue }
-        if ($item.Class -in @('Attachment', 'Chapter')) { continue }
+        if ($item.Class -notin @('Video', 'Audio', 'Subtitle')) { continue }
         if ($inputIndex.ContainsKey($item.FullName)) { continue }
         [void]$a.Add('-i'); [void]$a.Add($item.FullName)
         $inputIndex[$item.FullName] = $n
-        $n++
-    }
-    # @($null).Count is 1 when Where-Object matches nothing; absent chapters must not become an -i input
-    $chapterHits = $Actions.Adds | Where-Object { $_.Class -eq 'Chapter' }
-    $chapter = @()
-    if ($null -ne $chapterHits) { $chapter = @($chapterHits) }
-    foreach ($r in @($Actions.Replaces)) {
-        if ($r.Mkv.Class -eq 'Chapter') { $chapter = @($r.Sidecar); break }
-    }
-    $chapterInput = $null
-    if ($chapter.Count -gt 0 -and $null -ne $chapter[0] -and $chapter[0].FullName) {
-        [void]$a.Add('-i'); [void]$a.Add($chapter[0].FullName)
-        $chapterInput = $n
         $n++
     }
     [void]$a.Add('-c'); [void]$a.Add('copy')
@@ -125,25 +96,18 @@ function Build-MergeFFmpegArgs {
     foreach ($r in @($Actions.Replaces)) {
         if ($null -ne $r.Mkv.StreamIndex) { $replaceByIndex[[int]$r.Mkv.StreamIndex] = $r }
     }
-    # FFmpeg applique -attach après tous les -map : t:0..n-1 = attachments keep, ensuite les -attach.
-    $pendingAttach = [System.Collections.Generic.List[object]]::new()
     foreach ($mkv in @($Actions.OrderedMkv)) {
         if ($mkv.Class -eq 'Chapter') { continue }
         if ($mkv.Class -eq 'Attachment') {
-            $r = $null
-            if ($null -ne $mkv.StreamIndex) { $r = $replaceByIndex[[int]$mkv.StreamIndex] }
-            if ($r) {
-                $pendingAttach.Add((New-PendingAttach -Sidecar $r.Sidecar -PreferredMime $r.Mkv.MimeType))
-            }
-            else {
-                [void]$a.Add('-map'); [void]$a.Add("0:$($mkv.StreamIndex)")
-                $outIdx['t']++
-            }
+            [void]$a.Add('-map'); [void]$a.Add("0:$($mkv.StreamIndex)")
+            $outIdx['t']++
             continue
         }
         $letter = Get-MapSpecLetter $mkv.Class
         $r = $null
-        if ($null -ne $mkv.StreamIndex) { $r = $replaceByIndex[[int]$mkv.StreamIndex] }
+        if ($mkv.Class -in @('Video', 'Audio', 'Subtitle') -and $null -ne $mkv.StreamIndex) {
+            $r = $replaceByIndex[[int]$mkv.StreamIndex]
+        }
         if ($r) {
             $in = $inputIndex[$r.Sidecar.FullName]
             [void]$a.Add('-map'); [void]$a.Add("${in}:0")
@@ -151,22 +115,15 @@ function Build-MergeFFmpegArgs {
             $lang = if ($r.Sidecar.Language) { $r.Sidecar.Language } else { 'und' }
             [void]$a.Add("-metadata:s:${letter}:${oi}"); [void]$a.Add("language=$lang")
             [void]$a.Add("-disposition:${letter}:${oi}"); [void]$a.Add((Get-FfmpegDispositionValue $r.Sidecar.Flags))
-            if ($mkv.Class -eq 'Cover') {
-                [void]$a.Add("-disposition:${letter}:${oi}"); [void]$a.Add('attached_pic')
-            }
             $outIdx[$letter]++
         }
         else {
             [void]$a.Add('-map'); [void]$a.Add("0:$($mkv.StreamIndex)")
-            $outIdx[$letter]++
+            if ($letter) { $outIdx[$letter]++ }
         }
     }
     foreach ($add in @($Actions.Adds)) {
-        if ($add.Class -eq 'Chapter') { continue }
-        if ($add.Class -eq 'Attachment') {
-            $pendingAttach.Add((New-PendingAttach -Sidecar $add -PreferredMime $add.MimeType))
-            continue
-        }
+        if ($add.Class -notin @('Video', 'Audio', 'Subtitle')) { continue }
         $letter = Get-MapSpecLetter $add.Class
         $in = $inputIndex[$add.FullName]
         [void]$a.Add('-map'); [void]$a.Add("${in}:0")
@@ -174,25 +131,7 @@ function Build-MergeFFmpegArgs {
         $lang = if ($add.Language) { $add.Language } else { 'und' }
         [void]$a.Add("-metadata:s:${letter}:${oi}"); [void]$a.Add("language=$lang")
         [void]$a.Add("-disposition:${letter}:${oi}"); [void]$a.Add((Get-FfmpegDispositionValue $add.Flags))
-        if ($add.Class -eq 'Cover') {
-            [void]$a.Add("-disposition:${letter}:${oi}"); [void]$a.Add('attached_pic')
-        }
         $outIdx[$letter]++
-    }
-    foreach ($item in $pendingAttach) {
-        if ($null -eq $item) { continue }
-        $side = $item.Sidecar
-        [void]$a.Add('-attach'); [void]$a.Add($side.FullName)
-        $ti = $outIdx['t']
-        $fn = $side.AttachmentName
-        if (-not $fn) { $fn = $side.AttachmentNameSanitized + $side.Extension }
-        [void]$a.Add("-metadata:s:t:${ti}"); [void]$a.Add("filename=$fn")
-        # Matroska refuse -attach sans mimetype (spec filename/mimetype).
-        [void]$a.Add("-metadata:s:t:${ti}"); [void]$a.Add("mimetype=$($item.MimeType)")
-        $outIdx['t']++
-    }
-    if ($null -ne $chapterInput) {
-        [void]$a.Add('-map_chapters'); [void]$a.Add([string]$chapterInput)
     }
     # La cible réelle est *.tmp (spec) : sans -f, FFmpeg ne déduit pas le muxer.
     [void]$a.Add('-f'); [void]$a.Add('matroska')

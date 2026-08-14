@@ -19,7 +19,7 @@ Extrait des flux d'un MKV vers des sidecars à côté du fichier.
 
 ### __AllParameterSets
 
-```
+```text
 Split-MediaStream [-LiteralPath] <string> [-StreamType <string[]>] [-Language <string[]>] [-Force]
  [-WhatIf] [-Confirm]
 ```
@@ -32,7 +32,7 @@ Importer `Tetram.Media.Streams.psd1` (PowerShell 7+). `-LiteralPath` est un fich
 
 `ffprobe` lit toutes les pistes ; l'index de collision (`.2`, `.3`) est calculé sur le MKV entier avant `-StreamType` / `-Language`. Extraire seulement la 2e VO anglais produit `film.eng.2.srt`.
 
-Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Cover : `film.cover.jpg`. Chapitres : `film.chapters.ffmeta`. Polices : `film.{nom}.ttf`.
+Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Uniquement vidéo, audio et sous-titres : covers, polices et chapitres restent dans le MKV.
 
 Copie FFmpeg (`-c copy`). `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec non mappé : `Write-ErrorLog`, piste ignorée. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
 
@@ -78,13 +78,13 @@ même clé, extraire seulement les sous-titres anglais écrit `film.eng.srt` et
 Split-MediaStream -LiteralPath 'D:\Media\film.mkv' -StreamType Subtitle -Language eng
 ```
 
-### Example 5: Extraire les chapitres
+### Example 5: Extraire toutes les pistes audio
 
-Intention : un seul sidecar `film.chapters.ffmeta` (format ffmetadata), pas un
-conteneur. Cover et polices suivent `film.cover.jpg` / `film.{nom}.ttf`.
+Intention : `-StreamType Audio` n'extrait pas la vidéo ni les sous-titres.
+Covers, polices et chapitres du MKV ne sont jamais extraits.
 
 ```powershell
-Split-MediaStream -LiteralPath 'D:\Media\film.mkv' -StreamType Chapter
+Split-MediaStream -LiteralPath 'D:\Media\film.mkv' -StreamType Audio
 ```
 
 ## PARAMETERS
@@ -184,8 +184,9 @@ HelpMessage: ''
 
 ### -StreamType
 
-Classes à extraire : `Video`, `Audio`, `Subtitle`, `Attachment`, `Chapter`.
-Plusieurs valeurs = union. Omit pour toutes les classes mappées. Un codec non
+Classes à extraire : `Video`, `Audio`, `Subtitle`.
+Plusieurs valeurs = union. Omit = ces trois classes. Covers, pièces jointes et
+chapitres ne sont pas extraits. Un codec non
 mappé (ex. `mpeg4`, `mov_text`) est ignoré ici (`Write-ErrorLog`) ; au merge il
 reste dans le MKV (keep).
 

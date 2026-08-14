@@ -18,12 +18,5 @@ function Invoke-StreamsFFmpeg {
 
 function Get-SplitExtractArguments {
     param([pscustomobject] $Descriptor, [string] $MkvPath, [string] $OutPath)
-    if ($Descriptor.Class -eq 'Chapter') {
-        return @('-hide_banner', '-i', $MkvPath, '-f', 'ffmetadata', '-map_chapters', '0', '-y', $OutPath)
-    }
-    # .ttf/.otf n'ont pas de muxer : -map -c copy échoue ; dump_attachment écrit le binaire brut.
-    if ($Descriptor.Class -eq 'Attachment') {
-        return @('-hide_banner', "-dump_attachment:$($Descriptor.StreamIndex)", $OutPath, '-i', $MkvPath, '-y')
-    }
     return @('-hide_banner', '-i', $MkvPath, '-map', "0:$($Descriptor.StreamIndex)", '-c', 'copy', '-y', $OutPath)
 }

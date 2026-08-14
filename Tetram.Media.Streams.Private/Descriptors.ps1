@@ -154,22 +154,19 @@ function Select-MediaStreamDescriptors {
         [string[]] $Language
     )
     $sel = @($Descriptors)
-    if (@($StreamType).Count -gt 0) {
-        $sel = @($sel | Where-Object {
-            $c = $_.Class
-            $ok = $false
-            foreach ($t in $StreamType) {
-                if ($t -eq 'Video' -and $c -in @('Video', 'Cover')) { $ok = $true }
-                elseif ($t -eq 'Attachment' -and $c -eq 'Attachment') { $ok = $true }
-                elseif ($t -eq 'Chapter' -and $c -eq 'Chapter') { $ok = $true }
-                elseif ($t -eq $c) { $ok = $true }
-            }
-            $ok
-        })
+    if (@($StreamType).Count -eq 0) {
+        $StreamType = @('Video', 'Audio', 'Subtitle')
     }
+    $sel = @($sel | Where-Object {
+        $c = $_.Class
+        $ok = $false
+        foreach ($t in $StreamType) {
+            if ($t -eq $c) { $ok = $true }
+        }
+        $ok
+    })
     if (@($Language).Count -gt 0) {
         $sel = @($sel | Where-Object {
-            if ($_.Class -in @('Attachment', 'Chapter')) { return $true }
             foreach ($l in $Language) {
                 if ($_.Language -and ($_.Language -ieq $l)) { return $true }
             }

@@ -15,7 +15,7 @@ function Split-MediaStream {
     param(
         [Parameter(Mandatory, Position = 0)]
         [string] $LiteralPath,
-        [ValidateSet('Video', 'Audio', 'Subtitle', 'Attachment', 'Chapter')]
+        [ValidateSet('Video', 'Audio', 'Subtitle')]
         [string[]] $StreamType,
         [string[]] $Language,
         [switch] $Force

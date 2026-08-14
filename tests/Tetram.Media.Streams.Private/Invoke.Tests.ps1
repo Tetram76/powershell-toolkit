@@ -11,21 +11,7 @@ BeforeAll {
 AfterAll { Remove-Module -Name 'Tetram.Media.Streams' -Force -ErrorAction SilentlyContinue }
 
 Describe 'Get-SplitExtractArguments' {
-    It 'dump_attachment avant -i pour une pièce jointe, sans -map' {
-        InModuleScope 'Tetram.Media.Streams' {
-            $d = [pscustomobject]@{ Class = 'Attachment'; StreamIndex = 5 }
-            $ffmpegArgs = @(Get-SplitExtractArguments -Descriptor $d -MkvPath 'film.mkv' -OutPath 'film.Arial.ttf')
-            $ffmpegArgs | Should -Contain '-dump_attachment:5'
-            $ffmpegArgs | Should -Not -Contain '-map'
-            $iDump = [array]::IndexOf($ffmpegArgs, '-dump_attachment:5')
-            $iInput = [array]::IndexOf($ffmpegArgs, '-i')
-            $iDump | Should -BeGreaterThan -1
-            $iInput | Should -BeGreaterThan $iDump
-            $ffmpegArgs[$iDump + 1] | Should -Be 'film.Arial.ttf'
-        }
-    }
-
-    It 'garde -map 0:idx -c copy hors pièce jointe' {
+    It 'émet -map 0:idx -c copy' {
         InModuleScope 'Tetram.Media.Streams' {
             $d = [pscustomobject]@{ Class = 'Subtitle'; StreamIndex = 3 }
             $ffmpegArgs = @(Get-SplitExtractArguments -Descriptor $d -MkvPath 'film.mkv' -OutPath 'film.eng.srt')
@@ -35,7 +21,6 @@ Describe 'Get-SplitExtractArguments' {
             }
             $pair | Should -BeTrue
             ($ffmpegArgs -join ' ') | Should -Match '-c copy'
-            $ffmpegArgs | Should -Not -Contain '-dump_attachment:3'
         }
     }
 }
