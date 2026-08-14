@@ -29,11 +29,11 @@ Remove-EmptyDirs [[-Path] <string>] [-DeepScan] [-WhatIf] [-Confirm] [<CommonPar
 
 Importer `Tetram.Remove-Empty-Dirs.psd1` (PowerShell 7+). Cible : `-Path` doit être un dossier existant (défaut `.`).
 
-Fait : `Get-ChildItem -Directory -Recurse` sous la racine, du plus profond au plus proche, puis `Remove-Item` si le dossier n'a aucun enfant.
+Fait : `Get-ChildItem -Directory -Recurse` sous la racine, tri par longueur de chemin décroissante (enfant avant parent), puis `Remove-Item` si le dossier n'a aucun enfant. Un `parent/child` tous deux vides : `child` puis `parent` dans le même passage. Ce n'est pas « feuilles seulement ».
 
 Ne fait pas : supprimer des fichiers ; suivre/supprimer les reparse points (jonctions, liens symboliques) — ils ne sont jamais « vides » au sens de cette commande ; émettre d'objets pipeline.
 
-Sans `-DeepScan` : un seul passage. Un parent qui ne devient vide qu'après la suppression de ses enfants reste. Avec `-DeepScan` : nouveaux passages tant qu'un dossier a été retiré.
+Sans `-DeepScan` : un seul passage (suffit pour une chaîne de dossiers déjà vides). Avec `-DeepScan` : nouveaux passages tant qu'une suppression réelle a eu lieu. Sous `-WhatIf`, rien n'est retiré : un parent qui a encore un enfant vide n'est pas « vide », donc n'apparaît pas.
 
 Dry-run : `-WhatIf`. `ConfirmImpact` Medium : pas de prompt sauf `-Confirm`. Chemin invalide : message d'erreur console, retour immédiat, pas d'exception.
 
@@ -44,24 +44,28 @@ Les échecs d'inspection ou de suppression sont écrits sur la console (`Write-E
 ### Example 1: Simuler un nettoyage
 
 Intention : lister les dossiers actuellement vides sans les supprimer. Sous `-WhatIf`,
-`-DeepScan` n'enchaîne pas de passages virtuels : les parents qui ne se videraient
-qu'après coup n'apparaissent pas.
+aucune suppression n'a lieu, donc `-DeepScan` n'enchaîne pas de passages : seuls les
+dossiers déjà sans enfant apparaissent (un parent qui contient encore un enfant vide
+n'est pas listé).
 
 ```powershell
 Remove-EmptyDirs -Path 'D:\Media' -DeepScan -WhatIf
 ```
 
-### Example 2: Supprimer jusqu'à ce qu'il ne reste plus de dossier vide
+### Example 2: Répéter jusqu'à un passage sans suppression
 
-Intention : run réel après un dry-run. Préférer `-DeepScan` sauf besoin d'un seul niveau de feuilles.
+Intention : run réel après un dry-run. `-DeepScan` relance un scan complet tant qu'un
+dossier a vraiment été retiré. Pour une chaîne déjà vide, le premier passage suffit
+déjà (enfant puis parent).
 
 ```powershell
 Remove-EmptyDirs -Path 'D:\Media' -DeepScan
 ```
 
-### Example 3: Un seul passage (feuilles vides seulement)
+### Example 3: Un seul passage
 
-Intention : ne pas retirer les parents nouvellement vidés.
+Intention : un scan, pas de rescan. Les parents vidés pendant ce passage sont quand
+même retirés (tri du plus long chemin au plus court). Ce n'est pas limité aux feuilles.
 
 ```powershell
 Remove-EmptyDirs -Path 'D:\Media'
@@ -93,13 +97,10 @@ HelpMessage: ''
 
 ### -DeepScan
 
-Répète le scan tant qu'un passage a supprimé au moins un dossier. Permet de
-retirer les parents qui ne deviennent vides qu'après la suppression de leurs
-enfants.
-Répète le scan tant qu'un passage a supprimé au moins un dossier.
-Permet de
-retirer les parents qui ne deviennent vides qu'après la suppression de leurs
-enfants.
+Répète le scan tant qu'un passage a réellement supprimé au moins un dossier.
+Un passage unique retire déjà les parents vidés dans ce passage (tri par
+longueur de chemin). `-DeepScan` n'est pas le moyen d'obtenir « plus que les
+feuilles ». Sous `-WhatIf`, aucun rescan : rien n'est supprimé.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -181,7 +182,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 Prérequis : PowerShell 7+. La racine `-Path` n'est jamais supprimée : le scan ne liste que ses sous-dossiers.
 
-Ne pas faire : l'utiliser pour effacer des fichiers ; omettre `-WhatIf` sur un arbre inconnu ; conclure « rien à faire » sans `-DeepScan` alors que des parents sont devenus vides.
+Ne pas faire : l'utiliser pour effacer des fichiers ; omettre `-WhatIf` sur un arbre inconnu ; prendre un passage unique pour « feuilles seulement » (les parents vidés dans ce passage partent aussi) ; conclure du `-WhatIf` la liste exacte des suppressions d'un run réel (le WhatIf ne vide pas les enfants, donc pas les parents).
 
 ## RELATED LINKS
 

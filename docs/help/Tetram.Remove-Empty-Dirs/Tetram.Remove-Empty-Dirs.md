@@ -14,7 +14,7 @@ title: Tetram.Remove-Empty-Dirs Module
 
 ## Description
 
-Nettoyage de dossiers vides uniquement (pas de fichiers). Une seule commande exportée. Importer `.\Tetram.Remove-Empty-Dirs.psd1`. Pour vider les parents qui ne le deviennent qu'après coup : `-DeepScan`. Toujours `-WhatIf` d'abord.
+Nettoyage de dossiers vides uniquement (pas de fichiers). Une seule commande exportée. Importer `.\Tetram.Remove-Empty-Dirs.psd1`. Un passage (profondeur d'abord) retire aussi les parents vidés dans ce passage ; `-DeepScan` relance jusqu'à stabilité. Toujours `-WhatIf` d'abord (le dry-run ne montre pas ces parents).
 
 ## Tetram.Remove-Empty-Dirs Cmdlets
 
