@@ -163,7 +163,7 @@ Caractères interdits Windows / séparateur `.` de grammaire : remplacés par `_
 
 ## Carte codec → extension
 
-Copie uniquement. Codec A/V/S absent de la table → split **et** merge **échouent** (`Write-ErrorLog` + return). Pas de fichier élémentaire « fourre-tout ». Flux hors A/V/S : skip au split, keep au merge.
+Copie uniquement. Codec A/V/S absent de la table → split **échoue** (`Write-ErrorLog` + return, aucun sidecar) ; merge **conserve** la piste telle quelle (`Add-UnmappedKeepDescriptors`, map depuis l'input 0, pas de sidecar). Pas de fichier élémentaire « fourre-tout ». Flux hors A/V/S : skip au split, keep au merge.
 
 | Codec ffprobe (`codec_name`) | Ext | Classe |
 |---|---|---|
@@ -190,9 +190,9 @@ Copie uniquement. Codec A/V/S absent de la table → split **et** merge **échou
 | `hdmv_pgs_subtitle` | `.sup` | Sous-titres |
 | `mpeg4`, `mov_text`, `alac`, `pcm_*`, `dvd_subtitle`, `dvb_subtitle`, autres A/V/S | non mappé (split : échec ; mux : keep MKV) | — |
 
-Pièces jointes (`codec_type` = `attachment`) : extension d’après `tags.filename` / mime ; défaut `.bin` si inconnue mais toujours extraite (classe pièce jointe).
+Pièces jointes (`codec_type` = `attachment`) : classe et extension calculées en interne (`tags.filename` / mime ; défaut `.bin`) pour le mapping de préservation au merge, mais **jamais extraites en sidecar** par `Split-MediaStream` (qui ne sélectionne que Video/Audio/Subtitle) ; toujours conservées depuis le MKV source au merge.
 
-Chapitres : présence d’entrées `chapters` dans ffprobe → un seul `basename.chapters.ffmeta` (dump `-f ffmetadata`). Un `.ffmeta` sans jeton `chapters` n’est pas un sidecar.
+Chapitres : présence d’entrées `chapters` dans ffprobe → détectée en interne pour le mapping de préservation, mais **jamais extraits en sidecar `.ffmeta`** par `Split-MediaStream` ; toujours conservés depuis le MKV source au merge. La grammaire de nommage (`.ffmeta` + jeton `chapters`) reste définie côté `Naming.ps1` mais n’est produite/consommée par aucune des deux commandes.
 
 ## Flux — Split-MediaStream
 
