@@ -198,7 +198,7 @@ Chapitres : présence d’entrées `chapters` dans ffprobe → un seul `basename
 ## Flux — Split-MediaStream
 
 1. Résoudre ffmpeg/ffprobe ; échec → `Write-ErrorLog` + return.
-2. Fichier existant, extension `.mkv` (insensible à la casse) ; sinon log + return.
+2. Fichier existant, extension `.mkv` (insensible à la casse) ; sinon log + return. Le chemin est ensuite résolu via le provider (`Resolve-Path -LiteralPath`) : `~` et lecteurs PS deviennent un chemin filesystem, contrairement à `GetFullPath`.
 3. ffprobe JSON (`-show_format -show_streams -show_chapters -of json`). JSON invalide ou vide → log + return.
 4. Construire les descripteurs, **attribuer les index de collision sur l’ensemble du MKV**, puis filtrer :
    - `-StreamType` : si omis, tout. `Chapter` = sidecar ffmeta. `Attachment` = pièces jointes (pas les covers). `Video` = pistes vidéo **y compris** `attached_pic` (covers).

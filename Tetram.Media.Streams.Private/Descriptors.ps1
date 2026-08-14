@@ -182,6 +182,29 @@ function Test-StreamsMkvPath {
     return ([IO.Path]::GetExtension($LiteralPath) -ieq '.mkv')
 }
 
+function Resolve-StreamsExistingPath {
+    param([string] $LiteralPath)
+    try {
+        # GetFullPath laisse `~` littéral ; le provider PowerShell le développe.
+        return (Resolve-Path -LiteralPath $LiteralPath).Path
+    }
+    catch {
+        return $null
+    }
+}
+
+function Resolve-StreamsOutputPath {
+    param([string] $LiteralPath)
+    $existing = Resolve-StreamsExistingPath -LiteralPath $LiteralPath
+    if ($existing) { return $existing }
+    $parent = Split-Path -Parent $LiteralPath
+    $leaf = Split-Path -Leaf $LiteralPath
+    if (-not $parent) { $parent = '.' }
+    $parentResolved = Resolve-StreamsExistingPath -LiteralPath $parent
+    if (-not $parentResolved) { return $null }
+    return (Join-Path $parentResolved $leaf)
+}
+
 function Get-StreamsProbeHashtable {
     param(
         [Parameter(Mandatory)][string] $Ffprobe,

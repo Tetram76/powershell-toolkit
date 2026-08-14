@@ -85,6 +85,32 @@ Describe 'Split-MediaStream WhatIf' {
         Should -Invoke -ModuleName Tetram.Media.Streams Invoke-FFmpeg -Times 0
         Test-Path -LiteralPath (Join-Path $TestDrive 'film.fra.srt') | Should -BeFalse
     }
+
+    It 'résout ~ avant ffprobe' {
+        $name = 'streams-tilde-' + [guid]::NewGuid().ToString('N') + '.mkv'
+        $homeMkv = Join-Path $HOME $name
+        Set-Content -LiteralPath $homeMkv -Value 'fake'
+        $expected = (Resolve-Path -LiteralPath $homeMkv).Path
+        try {
+            Mock -ModuleName Tetram.Media.Streams Get-FFmpegPath { 'ffmpeg' }
+            Mock -ModuleName Tetram.Media.Streams Get-FfprobePath { 'ffprobe' }
+            Mock -ModuleName Tetram.Media.Streams Write-ErrorLog {}
+            Mock -ModuleName Tetram.Media.Streams Write-InfoLog {}
+            Mock -ModuleName Tetram.Media.Streams Show-CommandLine {}
+            Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { throw 'ne doit pas tourner' }
+            $script:ProbePathSeen = $null
+            Mock -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable {
+                param($Ffprobe, $LiteralPath)
+                $script:ProbePathSeen = $LiteralPath
+                @{ streams = @() }
+            }
+            Split-MediaStream -LiteralPath ('~/' + $name) -WhatIf
+            $script:ProbePathSeen | Should -Be $expected
+        }
+        finally {
+            Remove-Item -LiteralPath $homeMkv -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 Describe 'Merge-MediaStream' {
@@ -186,5 +212,28 @@ Describe 'Merge-MediaStream' {
         Mock -ModuleName Tetram.Media.Streams Invoke-StreamsFFmpeg { throw 'unexpected wrapper' }
         { Merge-MediaStream -LiteralPath $script:Mkv -Force } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog
+    }
+
+    It 'résout ~ avant ffprobe' {
+        $name = 'streams-tilde-m-' + [guid]::NewGuid().ToString('N') + '.mkv'
+        $homeMkv = Join-Path $HOME $name
+        $homeSrt = Join-Path $HOME ($name -replace '\.mkv$', '.eng.srt')
+        Set-Content -LiteralPath $homeMkv -Value 'fake-mkv'
+        Set-Content -LiteralPath $homeSrt -Value '1'
+        $expected = (Resolve-Path -LiteralPath $homeMkv).Path
+        try {
+            $script:ProbePathSeen = $null
+            Mock -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable {
+                param($Ffprobe, $LiteralPath)
+                $script:ProbePathSeen = $LiteralPath
+                $script:Probe
+            }
+            Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { throw 'no ffmpeg' }
+            Merge-MediaStream -LiteralPath ('~/' + $name) -WhatIf
+            $script:ProbePathSeen | Should -Be $expected
+        }
+        finally {
+            Remove-Item -LiteralPath $homeMkv, $homeSrt -Force -ErrorAction SilentlyContinue
+        }
     }
 }

@@ -28,26 +28,32 @@ function Split-MediaStream {
         return
     }
 
-    $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $LiteralPath
+    $src = Resolve-StreamsExistingPath -LiteralPath $LiteralPath
+    if (-not $src) {
+        Write-ErrorLog "Not a .mkv file: '$LiteralPath'"
+        return
+    }
+
+    $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $src
     if ($null -eq $probe) {
-        Write-ErrorLog "Can't get media info for '$LiteralPath'"
+        Write-ErrorLog "Can't get media info for '$src'"
         return
     }
 
     foreach ($u in @(Get-UnmappedStreamDescriptors -Probe $probe)) {
         $cn = [string](Get-ProbeProperty $u 'codec_name')
-        Write-ErrorLog "Unmapped codec '$cn' in '$LiteralPath' — skipped"
+        Write-ErrorLog "Unmapped codec '$cn' in '$src' — skipped"
     }
 
     $all = @(Get-MediaStreamDescriptors -Probe $probe)
     $sel = @(Select-MediaStreamDescriptors -Descriptors $all -StreamType $StreamType -Language $Language)
     if ($sel.Count -eq 0) {
-        Write-InfoLog "No stream to extract from '$LiteralPath'"
+        Write-InfoLog "No stream to extract from '$src'"
         return
     }
 
-    $dir = Split-Path -Parent (Resolve-Path -LiteralPath $LiteralPath)
-    $base = [IO.Path]::GetFileNameWithoutExtension($LiteralPath)
+    $dir = Split-Path -Parent $src
+    $base = [IO.Path]::GetFileNameWithoutExtension($src)
     foreach ($d in $sel) {
         $name = ConvertTo-StreamFileName -Basename $base -Descriptor $d
         $out = Join-Path $dir $name
@@ -57,7 +63,7 @@ function Split-MediaStream {
                 continue
             }
         }
-        $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $LiteralPath -OutPath $out
+        $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $src -OutPath $out
         try {
             $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out
         }
@@ -91,13 +97,21 @@ function Merge-MediaStream {
         return
     }
 
-    $src = [IO.Path]::GetFullPath($LiteralPath)
+    $src = Resolve-StreamsExistingPath -LiteralPath $LiteralPath
+    if (-not $src) {
+        Write-ErrorLog "Not a .mkv file: '$LiteralPath'"
+        return
+    }
     if ($Destination) {
         if ([IO.Path]::GetExtension($Destination) -ine '.mkv') {
             Write-ErrorLog "Destination must be a .mkv path: '$Destination'"
             return
         }
-        $dest = [IO.Path]::GetFullPath($Destination)
+        $dest = Resolve-StreamsOutputPath -LiteralPath $Destination
+        if (-not $dest) {
+            Write-ErrorLog "Destination must be a .mkv path: '$Destination'"
+            return
+        }
     }
     else { $dest = $src }
 
