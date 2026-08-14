@@ -26,19 +26,16 @@ Describe 'Get-SplitExtractArguments' {
 }
 
 Describe 'Get-StreamsUniqueTempPath' {
-    It 'conserve l''extension sidecar (FFmpeg déduit le muxer de la dernière extension)' {
+    It 'utilise TEMP + GUID + extension finale (comme Reencode)' {
         InModuleScope 'Tetram.Media.Streams' {
             $final = Join-Path $TestDrive 'film.fra.srt'
-            $temp = Get-StreamsUniqueTempPath -FinalPath $final -KeepExtension
-            [IO.Path]::GetExtension($temp) | Should -Be '.srt'
-            $temp | Should -Match '\.tmp\.srt$'
-        }
-    }
-    It 'ajoute .tmp après le MKV (le muxer est -f matroska)' {
-        InModuleScope 'Tetram.Media.Streams' {
-            $final = Join-Path $TestDrive 'film.mkv'
             $temp = Get-StreamsUniqueTempPath -FinalPath $final
-            $temp | Should -Be ($final + '.tmp')
+            [IO.Path]::GetExtension($temp) | Should -Be '.srt'
+            $gotDir = [IO.Path]::GetFullPath((Split-Path -Parent $temp)).TrimEnd('\', '/')
+            $wantDir = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+            $gotDir | Should -Be $wantDir
+            [IO.Path]::GetFileNameWithoutExtension($temp) | Should -Match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+            [IO.Path]::GetFileName($temp) | Should -Not -Match 'film'
         }
     }
 }

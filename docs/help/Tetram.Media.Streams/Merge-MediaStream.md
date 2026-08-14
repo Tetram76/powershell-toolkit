@@ -30,7 +30,7 @@ Merge-MediaStream [-LiteralPath] <string> [-Destination <string>] [-RemoveSideca
 
 Toujours un update du MKV passé en `-LiteralPath` (fichier `.mkv` existant). Sidecars = même basename **que le MKV**, jetons lus depuis la fin (s'il en reste, ce n'est pas un sidecar). Même clé (classe, langue, flags, extension, index) = replace ; sinon add ; piste MKV sans sidecar = keep. Pas de suppression de piste.
 
-`-Destination` optionnel (sinon in-place via `.tmp`). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
+`-Destination` optionnel (sinon in-place via un temporaire dans TEMP). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
 
 Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, `pcm_*`, …) : split et merge s'arrêtent (`Write-ErrorLog`). Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : skip au split, keep au merge. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
 
@@ -66,7 +66,7 @@ Merge-MediaStream -LiteralPath 'D:\Media\film.mkv' -Force -RemoveSidecars
 
 ### Example 4: Simuler le mux
 
-Intention : afficher la ligne FFmpeg sans écrire le MKV, sans créer de `.tmp`
+Intention : afficher la ligne FFmpeg sans écrire le MKV, sans créer de temporaire
 finalisé, sans supprimer de sidecar.
 
 ```powershell
@@ -102,7 +102,7 @@ HelpMessage: ''
 ### -Destination
 
 Chemin `.mkv` de sortie. Omit : update in-place de `-LiteralPath` (mux vers un
-`.tmp` unique puis `Move-Item`). Si fourni, doit se terminer par `.mkv`. Un
+`{guid}.mkv` dans TEMP puis `Move-Item`). Si fourni, doit se terminer par `.mkv`. Un
 chemin déjà présent doit être un fichier, pas un dossier.
 
 ```yaml

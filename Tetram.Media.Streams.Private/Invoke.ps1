@@ -2,28 +2,13 @@ Set-StrictMode -Version 3.0
 
 function Get-StreamsUniqueTempPath {
     param(
-        [Parameter(Mandatory)][string] $FinalPath,
-        [switch] $KeepExtension
+        [Parameter(Mandatory)][string] $FinalPath
     )
-    if ($KeepExtension) {
-        # FFmpeg déduit le muxer de la dernière extension ; `.srt.tmp` n'en a pas. Le merge MKV utilise `-f matroska` à la place.
-        $dir = Split-Path -Parent $FinalPath
-        if (-not $dir) { $dir = '.' }
-        $ext = [IO.Path]::GetExtension($FinalPath)
-        $stem = [IO.Path]::GetFileNameWithoutExtension($FinalPath)
-        $temp = Join-Path $dir ($stem + '.tmp' + $ext)
-        $n = 2
-        while (Test-Path -LiteralPath $temp) {
-            $temp = Join-Path $dir ($stem + ".tmp$n" + $ext)
-            $n++
-        }
-        return $temp
-    }
-    $temp = $FinalPath + '.tmp'
-    $n = 2
-    while (Test-Path -LiteralPath $temp) {
-        $temp = $FinalPath + ".tmp$n"
-        $n++
+    # Comme Reencode : TEMP + GUID + extension réelle — FFmpeg déduit le muxer, Merge ne prend pas le fichier pour un sidecar.
+    $ext = [IO.Path]::GetExtension($FinalPath)
+    $temp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + $ext)
+    if (Test-Path -LiteralPath $temp -PathType Leaf) {
+        Remove-Item -LiteralPath $temp -Force
     }
     return $temp
 }

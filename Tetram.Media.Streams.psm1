@@ -72,7 +72,7 @@ function Split-MediaStream {
             }
         }
         # -y sur le sidecar tronquerait un fichier déjà bon si FFmpeg échoue ensuite.
-        $temp = Get-StreamsUniqueTempPath -FinalPath $out -KeepExtension
+        $temp = Get-StreamsUniqueTempPath -FinalPath $out
         $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $src -OutPath $temp
         try {
             $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out

@@ -34,7 +34,7 @@ Importer `Tetram.Media.Streams.psd1` (PowerShell 7+). `-LiteralPath` est un fich
 
 Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. `basename` vient du MKV. Lecture depuis la fin ; un jeton restant = pas un sidecar. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Uniquement vidéo, audio et sous-titres : covers, polices et chapitres restent dans le MKV.
 
-Copie FFmpeg (`-c copy`) vers un temporaire qui **garde l'extension** du sidecar (`film.fra.tmp.srt`), puis `Move-Item` si succès. Le merge utilise un temporaire MKV (`film.mkv.tmp`), pas un temporaire sidecar. `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec A/V/S hors table : `Write-ErrorLog`, aucun sidecar. Flux hors A/V/S : ignorés (restent dans le MKV). Échec FFmpeg : pas de sidecar partiel. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
+Copie FFmpeg (`-c copy`) vers un temporaire dans TEMP (`{guid}.srt`, etc.), puis `Move-Item` si succès. Le merge utilise `{guid}.mkv` dans TEMP. `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec A/V/S hors table : `Write-ErrorLog`, aucun sidecar. Flux hors A/V/S : ignorés (restent dans le MKV). Échec FFmpeg : pas de sidecar partiel. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
 
 Aucun objet pipeline. Round-trip prévu avec `Merge-MediaStream` (les sidecars portent la grammaire ci-dessus).
 

@@ -183,14 +183,23 @@ Describe 'Split-MediaStream extract failure' {
         Mock -ModuleName Tetram.Media.Streams Show-CommandLine {}
     }
 
+    AfterEach {
+        if ($script:FfmpegOut -and (Test-Path -LiteralPath $script:FfmpegOut)) {
+            Remove-Item -LiteralPath $script:FfmpegOut -Force -ErrorAction SilentlyContinue
+        }
+        $script:FfmpegOut = $null
+    }
+
     It 'ne laisse pas de sidecar si ffmpeg échoue' {
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)
+            $script:FfmpegOut = $Arguments[-1]
             Set-Content -LiteralPath $Arguments[-1] -Value 'partial'
             return 1
         }
         Split-MediaStream -LiteralPath $script:Mkv -StreamType Subtitle -Language fra -Force
         Test-Path -LiteralPath $script:Sidecar | Should -BeFalse
+        Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
         Get-ChildItem -LiteralPath $TestDrive -Filter '*.tmp*' -File | Should -BeNullOrEmpty
     }
 
@@ -198,6 +207,7 @@ Describe 'Split-MediaStream extract failure' {
         Set-Content -LiteralPath $script:Sidecar -Value 'good'
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)
+            $script:FfmpegOut = $Arguments[-1]
             Set-Content -LiteralPath $Arguments[-1] -Value 'partial'
             return 1
         }
@@ -205,7 +215,7 @@ Describe 'Split-MediaStream extract failure' {
         Get-Content -LiteralPath $script:Sidecar | Should -Be 'good'
     }
 
-    It 'passe à FFmpeg un temporaire qui garde l''extension sidecar' {
+    It 'écrit FFmpeg dans TEMP (GUID + extension sidecar), pas à côté du MKV' {
         $script:FfmpegOut = $null
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)
@@ -215,7 +225,10 @@ Describe 'Split-MediaStream extract failure' {
         }
         Split-MediaStream -LiteralPath $script:Mkv -StreamType Subtitle -Language fra -Force
         [IO.Path]::GetExtension($script:FfmpegOut) | Should -Be '.srt'
-        $script:FfmpegOut | Should -Not -Match '\.tmp$'
+        $gotDir = [IO.Path]::GetFullPath((Split-Path -Parent $script:FfmpegOut)).TrimEnd('\', '/')
+        $wantDir = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+        $gotDir | Should -Be $wantDir
+        Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
         Get-Content -LiteralPath $script:Sidecar | Should -Be 'ok'
     }
 }
@@ -246,6 +259,31 @@ Describe 'Merge-MediaStream' {
         Mock -ModuleName Tetram.Media.Streams Write-ErrorLog {}
         Mock -ModuleName Tetram.Media.Streams Write-InfoLog {}
         Mock -ModuleName Tetram.Media.Streams Show-CommandLine {}
+        $script:FfmpegOut = $null
+    }
+    AfterEach {
+        if ($script:FfmpegOut -and (Test-Path -LiteralPath $script:FfmpegOut)) {
+            Remove-Item -LiteralPath $script:FfmpegOut -Force -ErrorAction SilentlyContinue
+        }
+        $script:FfmpegOut = $null
+    }
+
+    It 'écrit FFmpeg dans TEMP (GUID + .mkv), pas à côté du MKV' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            $script:FfmpegOut = $Arguments[-1]
+            Set-Content -LiteralPath $Arguments[-1] -Value 'muxed'
+            return 0
+        }
+        Merge-MediaStream -LiteralPath $script:Mkv -Force
+        [IO.Path]::GetExtension($script:FfmpegOut) | Should -Be '.mkv'
+        $gotDir = [IO.Path]::GetFullPath((Split-Path -Parent $script:FfmpegOut)).TrimEnd('\', '/')
+        $wantDir = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+        $gotDir | Should -Be $wantDir
+        [IO.Path]::GetFileName($script:FfmpegOut) | Should -Not -Match 'film'
+        Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
+        Get-Content -LiteralPath $script:Mkv | Should -Be 'muxed'
+        Test-Path -LiteralPath ($script:Mkv + '.tmp') | Should -BeFalse
     }
 
     It 'WhatIf affiche la commande et ne touche pas aux sidecars' {
@@ -267,8 +305,8 @@ Describe 'Merge-MediaStream' {
     It 'RemoveSidecars après succès supprime le srt' {
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)
-            $out = $Arguments[-1]
-            Set-Content -LiteralPath $out -Value 'muxed'
+            $script:FfmpegOut = $Arguments[-1]
+            Set-Content -LiteralPath $script:FfmpegOut -Value 'muxed'
             return 0
         }
         Merge-MediaStream -LiteralPath $script:Mkv -Force -RemoveSidecars
@@ -281,8 +319,8 @@ Describe 'Merge-MediaStream' {
         Set-Content -LiteralPath $other -Value 'keep'
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)
-            $out = $Arguments[-1]
-            Set-Content -LiteralPath $out -Value 'muxed'
+            $script:FfmpegOut = $Arguments[-1]
+            Set-Content -LiteralPath $script:FfmpegOut -Value 'muxed'
             return 0
         }
         Merge-MediaStream -LiteralPath $script:Mkv -Force -RemoveSidecars
@@ -299,8 +337,8 @@ Describe 'Merge-MediaStream' {
     It 'RemoveSidecars ne supprime rien si Move-Item échoue' {
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)
-            $out = $Arguments[-1]
-            Set-Content -LiteralPath $out -Value 'muxed'
+            $script:FfmpegOut = $Arguments[-1]
+            Set-Content -LiteralPath $script:FfmpegOut -Value 'muxed'
             return 0
         }
         Mock -ModuleName Tetram.Media.Streams Move-Item { throw 'access denied' }

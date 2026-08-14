@@ -186,7 +186,7 @@ function Build-MergeFFmpegArgs {
         [void]$a.Add("-disposition:${letter}:${oi}"); [void]$a.Add((Get-FfmpegDispositionValue $add.Flags))
         $outIdx[$letter]++
     }
-    # La cible réelle est *.tmp (spec) : sans -f, FFmpeg ne déduit pas le muxer.
+    # Muxer explicite : le nom du temporaire (GUID.mkv) ne doit pas être la seule source de vérité.
     [void]$a.Add('-f'); [void]$a.Add('matroska')
     [void]$a.Add($OutputPath)
     return @($a)
