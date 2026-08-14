@@ -7,6 +7,17 @@ $PrivateRoot = Join-Path $PSScriptRoot 'Tetram.Media.Streams.Private'
 . (Join-Path $PrivateRoot 'Matching.ps1')
 . (Join-Path $PrivateRoot 'Invoke.ps1')
 
+function Test-StreamsUnmappedAvCodec {
+    param($Probe, [string] $SourcePath)
+    $unmapped = @(Get-UnmappedStreamDescriptors -Probe $Probe)
+    if ($unmapped.Count -eq 0) { return $false }
+    foreach ($u in $unmapped) {
+        $cn = [string](Get-ProbeProperty $u 'codec_name')
+        Write-ErrorLog "Unmapped codec '$cn' in '$SourcePath'"
+    }
+    return $true
+}
+
 function Split-MediaStream {
     <#
 .EXTERNALHELP Tetram.Media.Streams-Help.xml
@@ -40,14 +51,7 @@ function Split-MediaStream {
         return
     }
 
-    $unmapped = @(Get-UnmappedStreamDescriptors -Probe $probe)
-    if ($unmapped.Count -gt 0) {
-        foreach ($u in $unmapped) {
-            $cn = [string](Get-ProbeProperty $u 'codec_name')
-            Write-ErrorLog "Unmapped codec '$cn' in '$src'"
-        }
-        return
-    }
+    if (Test-StreamsUnmappedAvCodec -Probe $probe -SourcePath $src) { return }
 
     $all = @(Get-MediaStreamDescriptors -Probe $probe)
     $sel = @(Select-MediaStreamDescriptors -Descriptors $all -StreamType $StreamType -Language $Language)
@@ -124,6 +128,8 @@ function Merge-MediaStream {
         Write-ErrorLog "Can't get media info for '$src'"
         return
     }
+
+    if (Test-StreamsUnmappedAvCodec -Probe $probe -SourcePath $src) { return }
 
     $dir = Split-Path -Parent $src
     $base = [IO.Path]::GetFileNameWithoutExtension($src)

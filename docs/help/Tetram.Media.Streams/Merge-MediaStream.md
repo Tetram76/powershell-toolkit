@@ -32,7 +32,7 @@ Toujours un update du MKV passé en `-LiteralPath` (fichier `.mkv` existant). Si
 
 `-Destination` optionnel (sinon in-place via `.tmp`). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
 
-Codec non mappé (`mpeg4`, `mov_text`, `alac`, …) : le split échoue ; au merge la piste reste keep dans le MKV. Covers, polices et chapitres : keep uniquement (pas de sidecar). Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
+Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, …) : split et merge s'arrêtent (`Write-ErrorLog`). Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : skip au split, keep au merge. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
 
 ## EXAMPLES
 
@@ -229,7 +229,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 Prérequis : PowerShell 7+, ffmpeg/ffprobe (`Tetram.Media.FFmpeg`). Importer `.\Tetram.Media.Streams.psd1`. Toujours un update d'un MKV existant (pas de mux from-scratch).
 
-Ne pas faire : attendre une suppression de piste (replace / add / keep seulement) ; compter sur `-RemoveSidecars` si FFmpeg échoue ; prendre le jeton fichier `commentary` pour autre chose que le disposition FFmpeg `comment` ; croire qu'un codec non mappé disparaît (il reste keep dans le MKV).
+Ne pas faire : attendre une suppression de piste (replace / add / keep seulement) ; compter sur `-RemoveSidecars` si FFmpeg échoue ; prendre le jeton fichier `commentary` pour autre chose que le disposition FFmpeg `comment` ; merger (ou splitter) un MKV dont un flux A/V/S a un codec hors table (les deux commandes s'arrêtent).
 
 ## RELATED LINKS
 

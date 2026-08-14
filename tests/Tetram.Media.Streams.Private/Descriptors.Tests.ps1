@@ -89,6 +89,46 @@ Describe 'Get-MediaStreamDescriptors collision' {
             $u[0].codec_name | Should -Be 'mpeg4'
         }
     }
+    It 'ne liste pas un flux data comme codec A/V/S non mappé' {
+        $probe = @{
+            streams = @(
+                @{ index = 1; codec_type = 'data'; codec_name = 'bin_data'; tags = @{}; disposition = @{} }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            @(Get-UnmappedStreamDescriptors -Probe $Probe).Count | Should -Be 0
+        }
+    }
+    It 'ajoute un keep hors A/V/S pour un flux data' {
+        $probe = @{
+            streams = @(
+                @{ index = 1; codec_type = 'data'; codec_name = 'bin_data'; tags = @{}; disposition = @{} }
+                @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'eng' }; disposition = @{} }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $desc = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $desc = @(Add-UnmappedKeepDescriptors -Descriptors $desc -Probe $Probe)
+            $data = @($desc | Where-Object { $_.StreamIndex -eq 1 })
+            $data.Count | Should -Be 1
+            $data[0].Class | Should -Not -BeIn @('Video', 'Audio', 'Subtitle')
+        }
+    }
+    It 'n''ajoute pas de keep pour un codec A/V/S inconnu' {
+        $probe = @{
+            streams = @(
+                @{ index = 0; codec_type = 'video'; codec_name = 'mpeg4'; tags = @{}; disposition = @{} }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $desc = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $desc = @(Add-UnmappedKeepDescriptors -Descriptors $desc -Probe $Probe)
+            @($desc | Where-Object { $_.StreamIndex -eq 0 }).Count | Should -Be 0
+        }
+    }
     It 'force .bin si l''extension d''attachement n''est pas dans l''allowlist' {
         $probe = @{
             streams = @(

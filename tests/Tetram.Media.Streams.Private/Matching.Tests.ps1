@@ -73,7 +73,7 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
 }
 
 Describe 'Build-MergeFFmpegArgs unmapped keep' {
-    It 'émet -map 0:2 pour une piste mpeg4 keep intercalée' {
+    It 'émet -map 0:2 pour un flux data keep intercalé' {
         $dir = Join-Path $TestDrive 'um'
         New-Item -ItemType Directory -Path $dir | Out-Null
         $mkv = Join-Path $dir 'film.mkv'
@@ -81,7 +81,7 @@ Describe 'Build-MergeFFmpegArgs unmapped keep' {
         New-Item -ItemType File -Path (Join-Path $dir 'film.eng.srt') | Out-Null
         $probe = @{
             streams = @(
-                @{ index = 2; codec_type = 'video'; codec_name = 'mpeg4'; tags = @{}; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+                @{ index = 2; codec_type = 'data'; codec_name = 'bin_data'; tags = @{}; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
                 @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
             )
         }

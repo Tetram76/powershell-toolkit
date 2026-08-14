@@ -14,7 +14,7 @@
 
 `-Destination` optionnel (sinon in-place via `.tmp`). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
 
-Codec non mappé (`mpeg4`, `mov_text`, `alac`, …) : le split échoue ; au merge la piste reste keep dans le MKV. Covers, polices et chapitres : keep uniquement (pas de sidecar). Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).</maml:para>
+Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, …) : split et merge s'arrêtent (`Write-ErrorLog`). Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : skip au split, keep au merge. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -140,7 +140,7 @@ sortie finalisée, ne supprime pas de sidecar.</maml:para>
       <maml:alert>
         <maml:para>Prérequis : PowerShell 7+, ffmpeg/ffprobe (`Tetram.Media.FFmpeg`). Importer `.\Tetram.Media.Streams.psd1`. Toujours un update d'un MKV existant (pas de mux from-scratch).
 
-Ne pas faire : attendre une suppression de piste (replace / add / keep seulement) ; compter sur `-RemoveSidecars` si FFmpeg échoue ; prendre le jeton fichier `commentary` pour autre chose que le disposition FFmpeg `comment` ; croire qu'un codec non mappé disparaît (il reste keep dans le MKV).</maml:para>
+Ne pas faire : attendre une suppression de piste (replace / add / keep seulement) ; compter sur `-RemoveSidecars` si FFmpeg échoue ; prendre le jeton fichier `commentary` pour autre chose que le disposition FFmpeg `comment` ; merger (ou splitter) un MKV dont un flux A/V/S a un codec hors table (les deux commandes s'arrêtent).</maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -209,7 +209,7 @@ finalisé, sans supprimer de sidecar.</maml:para>
 
 Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Uniquement vidéo, audio et sous-titres : covers, polices et chapitres restent dans le MKV.
 
-Copie FFmpeg (`-c copy`). `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec non mappé : `Write-ErrorLog`, aucun sidecar. FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
+Copie FFmpeg (`-c copy`). `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec A/V/S hors table : `Write-ErrorLog`, aucun sidecar. Flux hors A/V/S : ignorés (restent dans le MKV). FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
 
 Aucun objet pipeline. Round-trip prévu avec `Merge-MediaStream` (les sidecars portent la grammaire ci-dessus).</maml:para>
     </maml:description>
@@ -315,10 +315,9 @@ Les sidecars sont écrits dans le même dossier.</maml:para>
         <maml:description>
           <maml:para>Classes à extraire : `Video`, `Audio`, `Subtitle`.
 Plusieurs valeurs = union. Omit = ces trois classes. Covers, pièces jointes et
-chapitres ne sont pas extraits. Un codec non
-mappé (ex. `mpeg4`, `mov_text`, `alac`) fait échouer tout le split
-(`Write-ErrorLog`, aucun sidecar) ; au merge il
-reste dans le MKV (keep).</maml:para>
+chapitres ne sont pas extraits. Un codec A/V/S hors
+table (ex. `mpeg4`, `mov_text`, `alac`) fait échouer tout le split
+(`Write-ErrorLog`, aucun sidecar) — même arrêt au merge.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
         <dev:type>
