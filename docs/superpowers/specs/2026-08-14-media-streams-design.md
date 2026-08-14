@@ -102,7 +102,7 @@ FFmpeg / ffprobe : `Get-FFmpegPath` / `Get-FfprobePath`. Échec → catch au poi
 {basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}
 ```
 
-Exemples : `film.h264`, `film.eng.aac`, `film.fra.forced.srt`, `film.eng.commentary.aac`, `film.eng.hearing_impaired.srt`, `film.eng.default.2.ac3`, `film.cover.jpg`, `film.Arial.ttf`, `film.ffmeta`.
+Jetons de classe réservés (pas des flags de disposition) : `cover`, `chapters`. Un fichier n’est cover / chapitres que s’il porte le jeton **et** l’extension de la classe.
 
 ### Langue
 
@@ -136,7 +136,7 @@ Clé selon la classe :
 - A/V/S : `(classe, langue normalisée, ensemble des flags ci-dessus, extension)`
 - Cover : `(cover, extension)` — le jeton `cover` est fixe
 - Pièce jointe : `(attachment, nom d’origine sanitisé, extension)`
-- Chapitres : singleton (un seul `basename.ffmeta`)
+- Chapitres : singleton — jeton réservé `chapters` + `.ffmeta`
 
 Parmi les pistes du **MKV source** qui partagent cette clé, index 1, 2, 3… dans l’ordre ffprobe. L’index 1 **n’apparaît pas** dans le nom ; à partir de 2 : `.2`, `.3`, … Un split filtré qui n’extrait que la 2ᵉ piste anglaise produit `film.eng.2.srt`, pas `film.eng.srt`.
 
@@ -149,7 +149,7 @@ Le parse commence par l’extension (allowlist). Selon la classe :
 | Vidéo / audio / sous-titres | voir table codec | langue, flags de disposition, n |
 | Cover | `.jpg`, `.jpeg`, `.png` **et** jeton réservé `cover` | `cover`, n optionnel — pas de langue |
 | Pièce jointe (police, etc.) | `.ttf`, `.otf`, `.ttc`, `.woff`, `.woff2`, `.bin` | pas de langue / flags ; tous les jetons restants (sauf n) = nom d’origine sanitisé, recollés par `.` |
-| Chapitres | `.ffmeta` | aucun jeton de piste ; le fichier entier est le sidecar chapitres |
+| Chapitres | `.ffmeta` **et** jeton réservé `chapters` | `chapters` — pas de langue / flags / n |
 
 Les conteneurs (`.mkv`, `.mp4`, `.avi`, `.mov`, `.webm`, `.m4v`, `.wmv`, `.flv`, `.mpeg`, `.mpg`, `.ts`) ne sont **jamais** des sidecars.
 
@@ -190,7 +190,7 @@ Copie uniquement. Codec absent de la table → **skip + `Write-ErrorLog`** au sp
 
 Pièces jointes (`codec_type` = `attachment`) : extension d’après `tags.filename` / mime ; défaut `.bin` si inconnue mais toujours extraite (classe pièce jointe).
 
-Chapitres : présence d’entrées `chapters` dans ffprobe → un seul `basename.ffmeta` (dump `-f ffmetadata`).
+Chapitres : présence d’entrées `chapters` dans ffprobe → un seul `basename.chapters.ffmeta` (dump `-f ffmetadata`). Un `.ffmeta` sans jeton `chapters` n’est pas un sidecar.
 
 ## Flux — Split-MediaStream
 
@@ -234,7 +234,7 @@ Pour chaque piste du MKV (ordre ffprobe) :
 
 Sidecars sans match → mappés en plus (**add**), après les pistes d’origine, ordre de classes : vidéo (covers en dernier parmi la vidéo, disposition `attached_pic`), audio, sous-titres, pièces jointes (`-attach` + metadata filename/mimetype), chapitres.
 
-Chapitres : si `basename.ffmeta` présent → remplace les chapitres ; sinon conserve ceux du MKV.
+Chapitres : si `basename.chapters.ffmeta` présent → remplace les chapitres ; sinon conserve ceux du MKV.
 
 Chaque piste **issue d’un sidecar** (replace ou add) reçoit **explicitement** :
 
@@ -288,7 +288,7 @@ Tag `Integration` pour tout appel au vrai FFmpeg (exclu du CI, cf. `Invoke-Tests
 | Langue `und` / absente | Pas de jeton langue |
 | Collision 2 pistes `eng`+`.srt` | `.srt` et `.2.srt` |
 | Split filtré sur la 2ᵉ | Fichier `.2.srt` (index source) |
-| Cover / police / ffmeta | Parse de classe, pas de langue sur police |
+| Cover / police / `chapters.ffmeta` | Parse de classe ; `film.ffmeta` sans jeton `chapters` ignoré |
 | Matching : replace / add / keep | Clés stables |
 | FFmpeg introuvable | `Write-ErrorLog`, pas de throw |
 | `-WhatIf` | Aucune écriture disque ; `Show-CommandLine` invoqué |
