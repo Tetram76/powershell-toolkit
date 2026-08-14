@@ -138,7 +138,7 @@ HelpMessage: ''
 
 ### -Language
 
-Codes langue ISO à extraire (ex. `fra`, `eng`). Plusieurs valeurs = union.
+Codes langue à extraire, tels quels (ex. `fra`, `eng`, `pt-BR`). Plusieurs valeurs = union.
 L'index de collision (`.2`, `.3`) est calculé sur le MKV entier avant ce filtre :
 extraire seulement la 2e VO anglais produit `film.eng.2.srt`. Omit pour toutes
 les langues.

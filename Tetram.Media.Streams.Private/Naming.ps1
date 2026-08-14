@@ -156,7 +156,8 @@ function ConvertFrom-StreamFileName {
         $n = 0
         if ([int]::TryParse($tok, [ref]$n) -and $n -ge 2) { $collision = $n; continue }
         if ($low -in @('und', 'unk')) { continue }
-        if ($classHint -in @('Video', 'Audio', 'Subtitle') -and $tok.Length -in 2, 3 -and $tok -match '^[A-Za-z]{2,3}$') {
+        # Jeton langue = tag ffprobe tel quel (ISO 639 ou BCP-47 `pt-BR`) : le `.` du nom ne le casse pas.
+        if ($classHint -in @('Video', 'Audio', 'Subtitle') -and $tok -match '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$') {
             $language = $tok
             continue
         }

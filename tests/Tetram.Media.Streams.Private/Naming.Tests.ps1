@@ -27,6 +27,20 @@ Describe 'ConvertTo / ConvertFrom-StreamFileName' {
             $p.Class | Should -Be 'Subtitle'
         }
     }
+    It 'round-trip un tag langue tel quel (BCP-47)' {
+        InModuleScope 'Tetram.Media.Streams' {
+            $d = [pscustomobject]@{
+                Class = 'Subtitle'; Language = 'pt-BR'
+                Flags = @(); Extension = '.srt'
+                CollisionIndex = 1; AttachmentNameSanitized = ''
+            }
+            $name = ConvertTo-StreamFileName -Basename 'film' -Descriptor $d
+            $name | Should -Be 'film.pt-BR.srt'
+            $p = ConvertFrom-StreamFileName -Basename 'film' -FileName $name
+            $p | Should -Not -BeNullOrEmpty
+            $p.Language | Should -Be 'pt-BR'
+        }
+    }
     It 'omet la langue und / vide' {
         InModuleScope 'Tetram.Media.Streams' {
             foreach ($lang in @('', 'und', 'UNK')) {

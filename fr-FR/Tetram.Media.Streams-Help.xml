@@ -287,7 +287,7 @@ existante demande confirmation ; un refus saute ce fichier. Sans effet sur
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Language</maml:name>
         <maml:description>
-          <maml:para>Codes langue ISO à extraire (ex. `fra`, `eng`). Plusieurs valeurs = union.
+          <maml:para>Codes langue à extraire, tels quels (ex. `fra`, `eng`, `pt-BR`). Plusieurs valeurs = union.
 L'index de collision (`.2`, `.3`) est calculé sur le MKV entier avant ce filtre :
 extraire seulement la 2e VO anglais produit `film.eng.2.srt`. Omit pour toutes
 les langues.</maml:para>
