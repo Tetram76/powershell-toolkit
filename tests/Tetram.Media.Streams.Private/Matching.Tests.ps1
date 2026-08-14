@@ -10,55 +10,6 @@ BeforeAll {
 }
 AfterAll { Remove-Module -Name 'Tetram.Media.Streams' -Force -ErrorAction SilentlyContinue }
 
-Describe 'Get-StreamsFlippedCasePath' {
-    It 'inverse la casse de tous les caracteres du nom, pas seulement le premier' {
-        $p = Join-Path $TestDrive 'film.mkv'
-        InModuleScope 'Tetram.Media.Streams' -Parameters @{ P = $p } {
-            param($P)
-            Split-Path -Leaf (Get-StreamsFlippedCasePath -Path $P) | Should -BeExactly 'FILM.MKV'
-        }
-    }
-    It 'ne produit pas de chemin alternatif si aucun caractere n''a de casse' {
-        $p = Join-Path $TestDrive ([char]0x5F71)
-        InModuleScope 'Tetram.Media.Streams' -Parameters @{ P = $p } {
-            param($P)
-            Get-StreamsFlippedCasePath -Path $P | Should -BeNullOrEmpty
-        }
-    }
-}
-
-Describe 'Test-StreamsDirectoryCaseSensitive' {
-    It 'declare le FS sensible si les deux casses sont deux inodes distincts' {
-        $dir = Join-Path $TestDrive 'two-ino'
-        New-Item -ItemType Directory -Path $dir | Out-Null
-        $lower = Join-Path $dir 'film.mkv'
-        $upper = Join-Path $dir 'FILM.MKV'
-        New-Item -ItemType File -Path $lower | Out-Null
-        try { New-Item -ItemType File -Path $upper -ErrorAction Stop | Out-Null }
-        catch {
-            Set-ItResult -Skipped -Because 'le FS n''a pas accepte une 2e casse'
-            return
-        }
-        $names = @(Get-ChildItem -LiteralPath $dir -File | ForEach-Object Name)
-        $hasLower = @($names | Where-Object { $_ -ceq 'film.mkv' }).Count -eq 1
-        $hasUpper = @($names | Where-Object { $_ -ceq 'FILM.MKV' }).Count -eq 1
-        if (-not ($hasLower -and $hasUpper)) {
-            Set-ItResult -Skipped -Because 'une seule entree disque pour les deux casses'
-            return
-        }
-        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Lower = $lower } {
-            param($Lower)
-            $idHere = Get-StreamsFileIdentity -Path $Lower
-            $idOther = Get-StreamsFileIdentity -Path (Get-StreamsFlippedCasePath -Path $Lower)
-            $idHere | Should -Not -BeNullOrEmpty
-            $idOther | Should -Not -BeNullOrEmpty
-            ($idHere -cne $idOther) | Should -BeTrue
-            Test-StreamsDirectoryCaseSensitive -ExistingPath $Lower | Should -BeTrue
-            Get-StreamsNameComparison -ExistingPath $Lower | Should -Be ([StringComparison]::Ordinal)
-        }
-    }
-}
-
 Describe 'Get-SidecarFiles / Resolve-MergeActions' {
     It 'exclut film.mkv, remplace les deux eng, ajoute spa' {
         $dir = Join-Path $TestDrive 'm'
@@ -90,20 +41,7 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
             ($ffmpegArgs -join ' ') | Should -Match 'language=spa'
         }
     }
-    It 'n''associe pas un sidecar dont le basename diffère seulement par la casse si le FS est sensible' {
-        $dir = Join-Path $TestDrive 'cs'
-        New-Item -ItemType Directory -Path $dir | Out-Null
-        $mkv = Join-Path $dir 'film.mkv'
-        $other = Join-Path $dir 'Film.eng.srt'
-        New-Item -ItemType File -Path $mkv | Out-Null
-        New-Item -ItemType File -Path $other | Out-Null
-        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv; Other = $other } {
-            param($Dir, $Mkv, $Other)
-            $sides = @(Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv) -NameComparison ([StringComparison]::Ordinal))
-            $sides.Count | Should -Be 0
-        }
-    }
-    It 'reste insensible si LiteralPath et le nom disque ne different que par la casse' {
+    It 'trouve un sidecar si LiteralPath et le nom disque ne different que par la casse' {
         $dir = Join-Path $TestDrive 'altcase'
         New-Item -ItemType Directory -Path $dir | Out-Null
         New-Item -ItemType File -Path (Join-Path $dir 'Film.mkv') | Out-Null
@@ -115,13 +53,12 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
         }
         InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Caller = $caller } {
             param($Dir, $Caller)
-            Get-StreamsNameComparison -ExistingPath $Caller | Should -Be ([StringComparison]::OrdinalIgnoreCase)
             $base = [IO.Path]::GetFileNameWithoutExtension($Caller)
-            $sides = @(Get-SidecarFiles -Directory $Dir -Basename $base -ExcludePath @($Caller) -ExistingPath $Caller)
+            $sides = @(Get-SidecarFiles -Directory $Dir -Basename $base -ExcludePath @($Caller))
             $sides.Count | Should -Be 1
         }
     }
-    It 'trouve un sidecar dont seul la casse du basename diffère si le FS est insensible' {
+    It 'trouve un sidecar dont seul la casse du basename diffère' {
         $dir = Join-Path $TestDrive 'ci'
         New-Item -ItemType Directory -Path $dir | Out-Null
         $mkv = Join-Path $dir 'film.mkv'
@@ -130,13 +67,11 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
         New-Item -ItemType File -Path $side | Out-Null
         InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv } {
             param($Dir, $Mkv)
-            if (-not $IsWindows) { return }
-            Get-StreamsNameComparison -ExistingPath $Mkv | Should -Be ([StringComparison]::OrdinalIgnoreCase)
-            $sides = @(Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv) -ExistingPath $Mkv)
+            $sides = @(Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv))
             $sides.Count | Should -Be 1
         }
     }
-    It 'sonde la casse via le MKV existant sans créer de fichier' {
+    It 'ne laisse pas de fichier sonde en listant les sidecars' {
         $dir = Join-Path $TestDrive 'probe'
         New-Item -ItemType Directory -Path $dir | Out-Null
         $mkv = Join-Path $dir 'film.mkv'
@@ -145,9 +80,7 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
         InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv } {
             param($Dir, $Mkv)
             $before = @(Get-ChildItem -LiteralPath $Dir -File | ForEach-Object Name | Sort-Object)
-            $null = Test-StreamsDirectoryCaseSensitive -ExistingPath $Mkv
-            $null = Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv) -ExistingPath $Mkv
-            Get-ChildItem -LiteralPath $Dir -Filter '*.tmp' -File | Should -BeNullOrEmpty
+            $null = Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv)
             $after = @(Get-ChildItem -LiteralPath $Dir -File | ForEach-Object Name | Sort-Object)
             $after | Should -Be $before
         }

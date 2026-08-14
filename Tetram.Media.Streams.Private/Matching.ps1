@@ -1,117 +1,17 @@
 Set-StrictMode -Version 3.0
 
-function Get-StreamsFlippedCasePath {
-    param([string] $Path)
-    $dir = Split-Path -Parent $Path
-    $name = Split-Path -Leaf $Path
-    if (-not $name) { return $null }
-    $chars = $name.ToCharArray()
-    $changed = $false
-    for ($i = 0; $i -lt $chars.Length; $i++) {
-        $c = $chars[$i]
-        $alt = if ([char]::IsUpper($c)) { [char]::ToLowerInvariant($c) } else { [char]::ToUpperInvariant($c) }
-        if ($alt -cne $c) {
-            $chars[$i] = $alt
-            $changed = $true
-        }
-    }
-    # Aucune 2e casse possible (chiffres, CJK, …) : Ordinal et IgnoreCase coincident.
-    if (-not $changed) { return $null }
-    $flipped = -join $chars
-    if (-not $dir) { return $flipped }
-    return (Join-Path $dir $flipped)
-}
-
-function Get-StreamsFileIdentity {
-    param([string] $Path)
-    if ($IsWindows) {
-        try {
-            $fs = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
-        }
-        catch { return $null }
-        try {
-            if (-not ('Tetram.Streams.FileIndex' -as [type])) {
-                Add-Type -TypeDefinition @'
-using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
-namespace Tetram.Streams {
-    [StructLayout(LayoutKind.Sequential)]
-    public struct ByHandleFileInformation {
-        public uint FileAttributes;
-        public long CreationTime;
-        public long LastAccessTime;
-        public long LastWriteTime;
-        public uint VolumeSerialNumber;
-        public uint FileSizeHigh;
-        public uint FileSizeLow;
-        public uint NumberOfLinks;
-        public uint FileIndexHigh;
-        public uint FileIndexLow;
-    }
-    public static class FileIndex {
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern bool GetFileInformationByHandle(SafeFileHandle hFile, out ByHandleFileInformation info);
-        public static bool TryGet(SafeFileHandle hFile, out ByHandleFileInformation info) {
-            return GetFileInformationByHandle(hFile, out info);
-        }
-    }
-}
-'@
-            }
-            $info = New-Object Tetram.Streams.ByHandleFileInformation
-            if (-not [Tetram.Streams.FileIndex]::TryGet($fs.SafeFileHandle, [ref]$info)) { return $null }
-            return ('{0:x8}:{1:x8}{2:x8}' -f $info.VolumeSerialNumber, $info.FileIndexHigh, $info.FileIndexLow)
-        }
-        finally { $fs.Dispose() }
-    }
-    $out = if ($IsMacOS) { & stat -f '%d:%i' -- $Path 2>$null } else { & stat -c '%d:%i' -- $Path 2>$null }
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace("$out")) { return $null }
-    return "$out".Trim()
-}
-
-function Test-StreamsDirectoryCaseSensitive {
-    param([Parameter(Mandatory)][string] $ExistingPath)
-    $flipped = Get-StreamsFlippedCasePath -Path $ExistingPath
-    if (-not $flipped) { return -not $IsWindows }
-    # Les deux casses peuvent coexister. Meme inode = insensible ; autre inode ou identite absente = sensible.
-    $here = Get-StreamsFileIdentity -Path $ExistingPath
-    $other = Get-StreamsFileIdentity -Path $flipped
-    if ($null -eq $other) { return $true }
-    if ($null -eq $here) { return -not $IsWindows }
-    return $here -cne $other
-}
-
-function Get-StreamsNameComparison {
-    param([string] $ExistingPath)
-    if ($ExistingPath -and (Test-StreamsDirectoryCaseSensitive -ExistingPath $ExistingPath)) {
-        return [StringComparison]::Ordinal
-    }
-    return [StringComparison]::OrdinalIgnoreCase
-}
-
 function Get-SidecarFiles {
     param(
         [Parameter(Mandatory)][string] $Directory,
         [Parameter(Mandatory)][string] $Basename,
-        [string[]] $ExcludePath = @(),
-        [Nullable[StringComparison]] $NameComparison,
-        [string] $ExistingPath
+        [string[]] $ExcludePath = @()
     )
     $exclude = @()
     foreach ($p in @($ExcludePath)) {
         if ($p) { $exclude += [IO.Path]::GetFullPath($p) }
     }
-    $cmp = $NameComparison
-    if ($null -eq $cmp) {
-        $probe = $ExistingPath
-        if (-not $probe) {
-            foreach ($e in $exclude) {
-                if ($e -and (Test-Path -LiteralPath $e -PathType Leaf)) { $probe = $e; break }
-            }
-        }
-        $cmp = Get-StreamsNameComparison -ExistingPath $probe
-    }
-    else { $cmp = [StringComparison]$cmp }
+    # v1 : toujours insensible. Pas de sonde inode / casse.
+    $cmp = [StringComparison]::OrdinalIgnoreCase
     $out = @()
     foreach ($f in @(Get-ChildItem -LiteralPath $Directory -File -ErrorAction SilentlyContinue)) {
         $full = [IO.Path]::GetFullPath($f.FullName)

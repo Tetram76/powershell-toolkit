@@ -55,6 +55,19 @@ Describe 'Split-MediaStream erreurs' {
         { Split-MediaStream -LiteralPath $mkv } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog -Times 1
     }
+
+    It 's''arrete si le dossier destination n''est pas inscriptible' {
+        Mock -ModuleName Tetram.Media.Streams Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Streams Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Streams Test-StreamsDirectoryWritable { $false }
+        Mock -ModuleName Tetram.Media.Streams Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable { throw 'ne doit pas sondre' }
+        $mkv = Join-Path $TestDrive 'film.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        { Split-MediaStream -LiteralPath $mkv } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog -Times 1 -ParameterFilter { $Text -like '*write*' }
+        Should -Invoke -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable -Times 0
+    }
 }
 
 Describe 'Split-MediaStream WhatIf' {
@@ -508,6 +521,15 @@ Describe 'Merge-MediaSubtitle' {
         Merge-MediaSubtitle -LiteralPath $script:Mkv -Destination $dirDest -Force
         Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog -Times 1
         Should -Invoke -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable -Times 0
+    }
+
+    It 's''arrete si le dossier destination n''est pas inscriptible' {
+        Mock -ModuleName Tetram.Media.Streams Test-StreamsDirectoryWritable { $false }
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { throw 'ne doit pas muxer' }
+        { Merge-MediaSubtitle -LiteralPath $script:Mkv -Force } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog -Times 1 -ParameterFilter { $Text -like '*write*' }
+        Should -Invoke -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Streams Invoke-FFmpeg -Times 0
     }
 
     It 'résout ~ avant ffprobe' {

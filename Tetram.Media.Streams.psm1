@@ -44,6 +44,11 @@ function Split-MediaStream {
         Write-ErrorLog "Not a .mkv file: '$LiteralPath'"
         return
     }
+    $dir = Split-Path -Parent $src
+    if (-not (Test-StreamsDirectoryWritable -Directory $dir)) {
+        Write-ErrorLog "Can't write to directory '$dir'"
+        return
+    }
 
     $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $src
     if ($null -eq $probe) {
@@ -60,7 +65,6 @@ function Split-MediaStream {
         return
     }
 
-    $dir = Split-Path -Parent $src
     $base = [IO.Path]::GetFileNameWithoutExtension($src)
     foreach ($d in $sel) {
         $name = ConvertTo-StreamFileName -Basename $base -Descriptor $d
@@ -149,6 +153,11 @@ function Merge-MediaSubtitle {
         }
     }
     else { $dest = $src }
+    $destDir = Split-Path -Parent $dest
+    if (-not (Test-StreamsDirectoryWritable -Directory $destDir)) {
+        Write-ErrorLog "Can't write to directory '$destDir'"
+        return
+    }
 
     $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $src
     if ($null -eq $probe) {
@@ -158,7 +167,7 @@ function Merge-MediaSubtitle {
 
     $dir = Split-Path -Parent $src
     $base = [IO.Path]::GetFileNameWithoutExtension($src)
-    $sides = @(Get-SidecarFiles -Directory $dir -Basename $base -ExcludePath @($src, $dest) -ExistingPath $src)
+    $sides = @(Get-SidecarFiles -Directory $dir -Basename $base -ExcludePath @($src, $dest))
     if ($sides.Count -eq 0) {
         Write-ErrorLog "No sidecar files found for '$base'"
         return

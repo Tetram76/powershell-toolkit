@@ -55,6 +55,29 @@ Describe 'Remove-StreamsTempIfPresent' {
     }
 }
 
+Describe 'Test-StreamsDirectoryWritable' {
+    It 'accepte un dossier inscriptible et ne laisse aucun fichier sonde' {
+        $dir = Join-Path $TestDrive 'writable'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $before = @(Get-ChildItem -LiteralPath $dir -Force | ForEach-Object Name | Sort-Object)
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir } {
+            param($Dir)
+            Test-StreamsDirectoryWritable -Directory $Dir | Should -BeTrue
+        }
+        $after = @(Get-ChildItem -LiteralPath $dir -Force | ForEach-Object Name | Sort-Object)
+        $after | Should -Be $before
+    }
+    It 'refuse un chemin qui n''est pas un dossier' {
+        $file = Join-Path $TestDrive 'not-a-dir.mkv'
+        Set-Content -LiteralPath $file -Value 'x'
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ File = $file } {
+            param($File)
+            Test-StreamsDirectoryWritable -Directory $File | Should -BeFalse
+            Test-StreamsDirectoryWritable -Directory (Join-Path $File 'missing') | Should -BeFalse
+        }
+    }
+}
+
 Describe 'Get-StreamsUniqueTempPath' {
     It 'utilise TEMP + GUID + extension finale (comme Reencode)' {
         InModuleScope 'Tetram.Media.Streams' {
