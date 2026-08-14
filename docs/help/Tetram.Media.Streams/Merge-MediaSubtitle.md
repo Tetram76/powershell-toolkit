@@ -48,7 +48,7 @@ Les autres pistes du MKV (vidéo, audio, sous-titres non concernés, polices, ch
 
 Pas de `-Destination` : toujours in-place via un temporaire dans TEMP. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas. `commentary` fichier = `comment` FFmpeg.
 
-Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, `pcm_*`, …) présent dans le MKV : pas d'échec au mux, la piste est conservée telle quelle. Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : keep. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
+Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, `pcm_*`, …) présent dans le MKV : pas d'échec au mux, la piste est conservée telle quelle. Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : keep. Aucun objet pipeline. Importer `.\Tetram.Media.Streams` (PowerShell 7+).
 
 ## EXAMPLES
 
@@ -280,10 +280,10 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Prérequis : PowerShell 7+, ffmpeg/ffprobe (`Tetram.Media.FFmpeg`). Importer `.\Tetram.Media.Streams.psd1`. Toujours un update d'un MKV existant (pas de mux from-scratch). Un appel = un seul sous-titre ; pour en réinjecter plusieurs, appeler la commande plusieurs fois de suite sur le même MKV.
+Prérequis : PowerShell 7+, ffmpeg/ffprobe (`Tetram.Media.FFmpeg`). Importer `.\Tetram.Media.Streams`. Toujours un update d'un MKV existant (pas de mux from-scratch). Un appel = un seul sous-titre ; pour en réinjecter plusieurs, appeler la commande plusieurs fois de suite sur le même MKV.
 
 Ne pas faire : attendre une suppression de piste (replace / add / keep seulement) ; compter sur la commande pour supprimer `-Path` après succès (à faire soi-même) ; fournir `-Add` et `-Update` ensemble ou aucun des deux (erreur de paramètre) ; prendre le jeton fichier `commentary` pour autre chose que le disposition FFmpeg `comment` ; attendre que le mux réinjecte un `.h264` / `.aac` (référence split seulement).
 
 ## RELATED LINKS
 
-- [Get-MediaStream]()
+- [Get-MediaStream](Get-MediaStream.md)

@@ -14,7 +14,7 @@ title: Tetram.Media.Streams Module
 
 ## Description
 
-Round-trip MKV : extraire des fichiers de flux (A/V/S) ; réinjecter uniquement les sous-titres. Deux commandes exportées. Importer `.\Tetram.Media.Streams.psd1`.
+Round-trip MKV : extraire des fichiers de flux (A/V/S) ; réinjecter uniquement les sous-titres. Deux commandes exportées. Importer `.\Tetram.Media.Streams`.
 
 ## Tetram.Media.Streams Cmdlets
 

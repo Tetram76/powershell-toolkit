@@ -99,7 +99,7 @@ Invoke-ReencodeMedia -ListFile <string> -CheckOnly [-UpdateList] [-Sort <string>
 
 ## DESCRIPTION
 
-Point d'entrée unique du module. Importer `Tetram.Media.Reencode.psd1` (PowerShell 7+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
+Point d'entrée unique du module. Importer `.\Tetram.Media.Reencode` (PowerShell 7+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
 
 Choisir exactement un mode (jeux de paramètres exclusifs) :
 
@@ -118,7 +118,7 @@ Effet disque :
 
 Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-Rewrite`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion`. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
 
-ffmpeg/ffprobe : `-FFMPEGPath` / `-FFPROBEPath`, sinon dossier `RecodeVideo/` à la racine du dépôt (build ffmpeg >= 9.0.1), sinon PATH. Ne pas utiliser `-FFToolsBase` pour pointer les binaires : le paramètre est validé mais ignoré.
+ffmpeg/ffprobe : `-FFMPEGPath` / `-FFPROBEPath`, sinon dossier `Tetram.Media.FFmpeg\ffmpeg\` (build ffmpeg >= 9.0.1), sinon PATH. Ne pas utiliser `-FFToolsBase` pour pointer les binaires : le paramètre est validé mais ignoré.
 
 Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`). Une exception peut quand même écrire `reencode-errors.log`. `ConfirmImpact` est Medium : pas de prompt sauf `-Confirm`.
 
@@ -416,13 +416,13 @@ HelpMessage: ''
 ### -FFMPEGPath
 
 Chemin explicite vers l'exécutable ffmpeg. Chaîne vide : découverte automatique
-(`RecodeVideo/`, puis PATH).
+(`Tetram.Media.FFmpeg\ffmpeg\`, puis PATH).
 Chemin explicite vers l'exécutable ffmpeg.
 Chaîne vide : découverte automatique
-(`RecodeVideo/`, puis PATH).
+(`Tetram.Media.FFmpeg\ffmpeg\`, puis PATH).
 Chemin explicite vers l'exécutable ffmpeg.
 Chaîne vide : découverte automatique
-(`RecodeVideo/`, puis PATH).
+(`Tetram.Media.FFmpeg\ffmpeg\`, puis PATH).
 
 ```yaml
 Type: System.String
@@ -1628,7 +1628,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Prérequis : PowerShell 7+, module chargé depuis son `.psd1` (NestedModules `Utils\`). ffmpeg/ffprobe >= 9.0.1.
+Prérequis : PowerShell 7+, module chargé depuis son `.psd1`. ffmpeg/ffprobe >= 9.0.1.
 
 Ne pas faire : passer `-FFToolsBase` pour changer les binaires ; combiner `-Path` et `-ListFile` ; combiner les modes `-CheckOnly` / `-Rewrite` / `-KeepExtension` ; prendre `-CheckOnly` pour un dry-run ; prendre `-WhatIf` pour « aucune écriture disque » (`reencode-errors.log` reste possible) ; attendre un code de retour par fichier (la commande continue).
 

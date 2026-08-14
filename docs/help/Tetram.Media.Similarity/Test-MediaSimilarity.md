@@ -28,7 +28,7 @@ Test-MediaSimilarity [-Path] <string> [[-InputMasks] <string[]>] [[-ConfidenceTh
 
 ## DESCRIPTION
 
-Importer `Tetram.Media.Similarity.psd1` (PowerShell 7+). `-Path` est obligatoire.
+Importer `.\Tetram.Media.Similarity` (PowerShell 7+). `-Path` est obligatoire.
 
 Deux phases :
 
@@ -43,7 +43,7 @@ Résultat : objets pipeline `{ SourceFile, Matches: [{ TargetFile, Confidence }]
 
 Contraintes d'appel : `Get-ChildItem -Include` n'énumère les fichiers d'un dossier que si `-Recurse` est passé ou si `-Path` désigne déjà un contenu (ex. `D:\Media\*`). Sans cela, la commande peut ne trouver aucun fichier. Le bloc `process` écrase `$files`/`$results` : ne pas piper plusieurs chemins en attendant une fusion.
 
-ffmpeg : `RecodeVideo/` (build >= 9.0.1) puis PATH. `ConfirmImpact` non élevé : `-Confirm` seulement si demandé.
+ffmpeg : `Tetram.Media.FFmpeg\ffmpeg\` (build >= 9.0.1) puis PATH. `ConfirmImpact` non élevé : `-Confirm` seulement si demandé.
 
 ## EXAMPLES
 
