@@ -17,17 +17,63 @@ function Get-StreamsFlippedCasePath {
     return $null
 }
 
+function Get-StreamsFileIdentity {
+    param([string] $Path)
+    if ($IsWindows) {
+        try {
+            $fs = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+        }
+        catch { return $null }
+        try {
+            if (-not ('Tetram.Streams.FileIndex' -as [type])) {
+                Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+namespace Tetram.Streams {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ByHandleFileInformation {
+        public uint FileAttributes;
+        public long CreationTime;
+        public long LastAccessTime;
+        public long LastWriteTime;
+        public uint VolumeSerialNumber;
+        public uint FileSizeHigh;
+        public uint FileSizeLow;
+        public uint NumberOfLinks;
+        public uint FileIndexHigh;
+        public uint FileIndexLow;
+    }
+    public static class FileIndex {
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetFileInformationByHandle(SafeFileHandle hFile, out ByHandleFileInformation info);
+        public static bool TryGet(SafeFileHandle hFile, out ByHandleFileInformation info) {
+            return GetFileInformationByHandle(hFile, out info);
+        }
+    }
+}
+'@
+            }
+            $info = New-Object Tetram.Streams.ByHandleFileInformation
+            if (-not [Tetram.Streams.FileIndex]::TryGet($fs.SafeFileHandle, [ref]$info)) { return $null }
+            return ('{0:x8}:{1:x8}{2:x8}' -f $info.VolumeSerialNumber, $info.FileIndexHigh, $info.FileIndexLow)
+        }
+        finally { $fs.Dispose() }
+    }
+    $out = if ($IsMacOS) { & stat -f '%d:%i' -- $Path 2>$null } else { & stat -c '%d:%i' -- $Path 2>$null }
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace("$out")) { return $null }
+    return "$out".Trim()
+}
+
 function Test-StreamsDirectoryCaseSensitive {
     param([Parameter(Mandatory)][string] $ExistingPath)
     $flipped = Get-StreamsFlippedCasePath -Path $ExistingPath
     if (-not $flipped) { return -not $IsWindows }
-    if (-not (Test-Path -LiteralPath $flipped)) { return $true }
-    # Get-Item.FullName reflète le chemin demandé, pas la casse disque (NTFS).
-    $dir = Split-Path -Parent $ExistingPath
-    $flippedLeaf = Split-Path -Leaf $flipped
-    $hits = @(Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -ceq $flippedLeaf })
-    return $hits.Count -gt 0
+    # Noms : NTFS ouvre film.mkv et Film.mkv. Inode identique = insensible ; absent / autre fichier = sensible.
+    $here = Get-StreamsFileIdentity -Path $ExistingPath
+    $other = Get-StreamsFileIdentity -Path $flipped
+    if ($null -eq $other) { return $true }
+    if ($null -eq $here) { return -not $IsWindows }
+    return $here -cne $other
 }
 
 function Get-StreamsNameComparison {
