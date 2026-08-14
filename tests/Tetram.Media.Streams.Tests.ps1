@@ -13,7 +13,7 @@ BeforeAll {
 
 Describe 'Tetram.Media.Streams manifest' {
     It 'passe Test-ModuleManifest' {
-        { Test-ModuleManifest -Path $script:ManifestStreams } | Should -Not -Throw
+        { Test-ModuleManifest -Path $script:ManifestStreams -ErrorAction Stop } | Should -Not -Throw
     }
 }
 

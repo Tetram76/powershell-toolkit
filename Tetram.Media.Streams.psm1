@@ -20,6 +20,7 @@ function Split-MediaStream {
         [string[]] $Language,
         [switch] $Force
     )
+    return
 }
 
 function Merge-MediaStream {
@@ -34,6 +35,7 @@ function Merge-MediaStream {
         [switch] $RemoveSidecars,
         [switch] $Force
     )
+    return
 }
 
 Export-ModuleMember -Function Split-MediaStream, Merge-MediaStream
