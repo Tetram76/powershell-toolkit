@@ -63,7 +63,7 @@ function Split-MediaStream {
         }
         catch {
             Write-ErrorLog $_.Exception.Message
-            return
+            continue
         }
         if (-not $ok) {
             Write-ErrorLog "ffmpeg failed extracting '$out'"
@@ -141,7 +141,6 @@ function Merge-MediaStream {
         Write-ErrorLog $_.Exception.Message
         return
     }
-    if ($WhatIfPreference) { return }
     if (-not $ok) {
         Write-ErrorLog "ffmpeg failed muxing '$dest'"
         if (Test-Path -LiteralPath $temp) {
@@ -149,15 +148,16 @@ function Merge-MediaStream {
         }
         return
     }
-    if (-not $PSCmdlet.ShouldProcess($dest, "Move temp over '$dest'")) {
-        return
-    }
-    try {
-        Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
-    }
-    catch {
-        Write-ErrorLog $_.Exception.Message
-        return
+    if ($PSCmdlet.ShouldProcess($dest, "Move temp over '$dest'")) {
+        if (Test-Path -LiteralPath $temp -PathType Leaf) {
+            try {
+                Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
+            }
+            catch {
+                Write-ErrorLog $_.Exception.Message
+                return
+            }
+        }
     }
     if ($RemoveSidecars) {
         $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })

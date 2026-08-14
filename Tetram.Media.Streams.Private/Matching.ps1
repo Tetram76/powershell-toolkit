@@ -104,18 +104,15 @@ function Build-MergeFFmpegArgs {
     foreach ($r in @($Actions.Replaces)) {
         if ($null -ne $r.Mkv.StreamIndex) { $replaceByIndex[[int]$r.Mkv.StreamIndex] = $r }
     }
+    # FFmpeg applique -attach après tous les -map : t:0..n-1 = attachments keep, ensuite les -attach.
+    $pendingAttach = [System.Collections.Generic.List[object]]::new()
     foreach ($mkv in @($Actions.OrderedMkv)) {
         if ($mkv.Class -eq 'Chapter') { continue }
         if ($mkv.Class -eq 'Attachment') {
             $r = $null
             if ($null -ne $mkv.StreamIndex) { $r = $replaceByIndex[[int]$mkv.StreamIndex] }
             if ($r) {
-                [void]$a.Add('-attach'); [void]$a.Add($r.Sidecar.FullName)
-                $ti = $outIdx['t']
-                $fn = $r.Sidecar.AttachmentName
-                if (-not $fn) { $fn = $r.Sidecar.AttachmentNameSanitized + $r.Sidecar.Extension }
-                [void]$a.Add("-metadata:s:t:${ti}"); [void]$a.Add("filename=$fn")
-                $outIdx['t']++
+                $pendingAttach.Add($r.Sidecar)
             }
             else {
                 [void]$a.Add('-map'); [void]$a.Add("0:$($mkv.StreamIndex)")
@@ -146,11 +143,7 @@ function Build-MergeFFmpegArgs {
     foreach ($add in @($Actions.Adds)) {
         if ($add.Class -eq 'Chapter') { continue }
         if ($add.Class -eq 'Attachment') {
-            [void]$a.Add('-attach'); [void]$a.Add($add.FullName)
-            $ti = $outIdx['t']
-            $fn = $add.AttachmentNameSanitized + $add.Extension
-            [void]$a.Add("-metadata:s:t:${ti}"); [void]$a.Add("filename=$fn")
-            $outIdx['t']++
+            $pendingAttach.Add($add)
             continue
         }
         $letter = Get-MapSpecLetter $add.Class
@@ -165,9 +158,20 @@ function Build-MergeFFmpegArgs {
         }
         $outIdx[$letter]++
     }
+    foreach ($item in $pendingAttach) {
+        if ($null -eq $item) { continue }
+        [void]$a.Add('-attach'); [void]$a.Add($item.FullName)
+        $ti = $outIdx['t']
+        $fn = $item.AttachmentName
+        if (-not $fn) { $fn = $item.AttachmentNameSanitized + $item.Extension }
+        [void]$a.Add("-metadata:s:t:${ti}"); [void]$a.Add("filename=$fn")
+        $outIdx['t']++
+    }
     if ($null -ne $chapterInput) {
         [void]$a.Add('-map_chapters'); [void]$a.Add([string]$chapterInput)
     }
+    # La cible réelle est *.tmp (spec) : sans -f, FFmpeg ne déduit pas le muxer.
+    [void]$a.Add('-f'); [void]$a.Add('matroska')
     [void]$a.Add($OutputPath)
     return @($a)
 }

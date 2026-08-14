@@ -123,6 +123,14 @@ Describe 'Merge-MediaStream' {
         Test-Path -LiteralPath ($script:Mkv + '.tmp') | Should -BeFalse
     }
 
+    It 'WhatIf -RemoveSidecars laisse les sidecars et n''appelle pas Move-Item' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { throw 'no ffmpeg' }
+        Mock -ModuleName Tetram.Media.Streams Move-Item { throw 'WhatIf ne doit pas déplacer' }
+        Merge-MediaStream -LiteralPath $script:Mkv -WhatIf -RemoveSidecars
+        Test-Path -LiteralPath $script:Srt | Should -BeTrue
+        Should -Invoke -ModuleName Tetram.Media.Streams Move-Item -Times 0
+    }
+
     It 'RemoveSidecars après succès supprime le srt' {
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)

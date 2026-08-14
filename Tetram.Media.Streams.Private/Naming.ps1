@@ -163,6 +163,11 @@ function ConvertFrom-StreamFileName {
         $attachParts += $tok
     }
 
+    # Seules les pièces jointes ont un nom libre ; un jeton restant n'est pas de la grammaire A/V/S/cover/chapitres.
+    if ($classHint -ne 'Attachment' -and @($attachParts).Count -gt 0) {
+        return $null
+    }
+
     if ($extLower -eq '.ffmeta') {
         if (-not $hasChapters) { return $null }
         return New-StreamDescriptorObject -Class 'Chapter' -Extension '.ffmeta' -CollisionIndex 1

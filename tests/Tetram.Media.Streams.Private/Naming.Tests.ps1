@@ -89,4 +89,15 @@ Describe 'ConvertTo / ConvertFrom-StreamFileName' {
             $p.AttachmentNameSanitized | Should -Be 'Arial_Bold'
         }
     }
+    It 'rejette un jeton libre sur sous-titre, pas sur la grammaire connue' {
+        InModuleScope 'Tetram.Media.Streams' {
+            ConvertFrom-StreamFileName -Basename 'Movie' -FileName 'Movie.Part2.eng.srt' | Should -BeNullOrEmpty
+            $p = ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.eng.forced.commentary.2.srt'
+            $p | Should -Not -BeNullOrEmpty
+            $p.Class | Should -Be 'Subtitle'
+            $p.Language | Should -Be 'eng'
+            $p.Flags | Should -Be @('forced', 'commentary')
+            $p.CollisionIndex | Should -Be 2
+        }
+    }
 }
