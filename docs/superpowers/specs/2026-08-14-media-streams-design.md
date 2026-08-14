@@ -215,7 +215,7 @@ Le MKV d’origine n’est pas modifié par le split.
 
 `-LiteralPath` = le MKV à mettre à jour (fichier `.mkv` existant). Répertoire, stem, autre extension → `Write-ErrorLog` + return.
 
-Basename = nom sans extension, dossier = parent. Ramasser les fichiers du dossier dont le nom commence par `{basename}.` **ou** égalité `{basename}.{ext}`, extension dans l’allowlist sidecar, parse de grammaire réussi. **Toujours exclure** le MKV d’entrée, `-Destination`, et toute extension conteneur.
+Basename = nom sans extension, dossier = parent. Ramasser les fichiers du dossier dont le nom commence par `{basename}.` **ou** égalité `{basename}.{ext}`, extension dans l’allowlist sidecar, parse de grammaire réussi. La comparaison de casse du préfixe **suit le système de fichiers du dossier** (sensible ⇔ `Ordinal`, insensible ⇔ `OrdinalIgnoreCase` ; un répertoire NTFS marqué case-sensitive est traité comme sensible). **Toujours exclure** le MKV d’entrée, `-Destination`, et toute extension conteneur.
 
 Aucun sidecar → `Write-ErrorLog` + return.
 
@@ -252,7 +252,7 @@ Un sidecar manquant n’enlève jamais une piste.
 
 ### `-RemoveSidecars`
 
-Après un mux **réussi** seulement : supprimer les sidecars **effectivement retenus** pour ce merge (ceux ramassés et parsés, pas un glob aveugle). Le MKV source/cible n’est jamais dans cette liste.
+Après un mux **réussi** seulement : supprimer uniquement les sidecars **effectivement muxés** (replace + add), via leur `FullName` issu de l’énumération du dossier — jamais un nom reconstruit ni un glob. Un fichier du dossier non retenu (autre basename, y compris si seule la casse diffère sur un FS sensible) n’est pas touché. Le MKV source/cible n’est jamais dans cette liste.
 
 - Échec FFmpeg / `Move-Item` → aucune suppression.
 - Chaque suppression passe par `ShouldProcess` (donc `-WhatIf` affiche sans effacer).

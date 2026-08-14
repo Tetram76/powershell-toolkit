@@ -168,8 +168,9 @@ HelpMessage: ''
 
 ### -RemoveSidecars
 
-Supprime les sidecars replace/add après un mux réussi seulement (après
-`Move-Item` sur la cible). Échec FFmpeg, `-WhatIf` ou `ShouldProcess` refusé :
+Supprime uniquement les sidecars réellement muxés (replace/add), via le chemin
+énuméré, après un mux réussi (`Move-Item` ok). La casse suit le système de
+fichiers du dossier. Échec FFmpeg, `-WhatIf` ou `ShouldProcess` refusé :
 aucune suppression. Les pistes keep n'ont pas de sidecar à retirer.
 
 ```yaml

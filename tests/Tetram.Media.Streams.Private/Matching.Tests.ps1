@@ -41,6 +41,19 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
             ($ffmpegArgs -join ' ') | Should -Match 'language=spa'
         }
     }
+    It 'n''associe pas un sidecar dont le basename diffère seulement par la casse si le FS est sensible' {
+        $dir = Join-Path $TestDrive 'cs'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $mkv = Join-Path $dir 'film.mkv'
+        $other = Join-Path $dir 'Film.eng.srt'
+        New-Item -ItemType File -Path $mkv | Out-Null
+        New-Item -ItemType File -Path $other | Out-Null
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv; Other = $other } {
+            param($Dir, $Mkv, $Other)
+            $sides = @(Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv) -NameComparison ([StringComparison]::Ordinal))
+            $sides.Count | Should -Be 0
+        }
+    }
 }
 
 Describe 'Build-MergeFFmpegArgs unmapped keep' {

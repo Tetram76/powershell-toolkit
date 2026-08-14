@@ -1,11 +1,41 @@
 Set-StrictMode -Version 3.0
 
+function Test-StreamsDirectoryCaseSensitive {
+    param([string] $Directory)
+    $id = [guid]::NewGuid().ToString('N')
+    $lower = Join-Path $Directory "a$id.tmp"
+    $upper = Join-Path $Directory "A$id.tmp"
+    try {
+        [IO.File]::WriteAllBytes($lower, [byte[]]@())
+        # Exists(upper) vrai ⇔ le FS a replié la casse sur le même fichier.
+        return -not [IO.File]::Exists($upper)
+    }
+    catch {
+        return -not $IsWindows
+    }
+    finally {
+        if ([IO.File]::Exists($lower)) {
+            try { [IO.File]::Delete($lower) } catch { }
+        }
+    }
+}
+
+function Get-StreamsNameComparison {
+    param([string] $Directory)
+    if (Test-StreamsDirectoryCaseSensitive -Directory $Directory) {
+        return [StringComparison]::Ordinal
+    }
+    return [StringComparison]::OrdinalIgnoreCase
+}
+
 function Get-SidecarFiles {
     param(
         [Parameter(Mandatory)][string] $Directory,
         [Parameter(Mandatory)][string] $Basename,
-        [string[]] $ExcludePath = @()
+        [string[]] $ExcludePath = @(),
+        [Nullable[StringComparison]] $NameComparison
     )
+    $cmp = if ($null -ne $NameComparison) { [StringComparison]$NameComparison } else { Get-StreamsNameComparison -Directory $Directory }
     $exclude = @()
     foreach ($p in @($ExcludePath)) {
         if ($p) { $exclude += [IO.Path]::GetFullPath($p) }
@@ -13,8 +43,12 @@ function Get-SidecarFiles {
     $out = @()
     foreach ($f in @(Get-ChildItem -LiteralPath $Directory -File -ErrorAction SilentlyContinue)) {
         $full = [IO.Path]::GetFullPath($f.FullName)
-        if ($exclude -contains $full) { continue }
-        $parsed = ConvertFrom-StreamFileName -Basename $Basename -FileName $f.Name
+        $excluded = $false
+        foreach ($e in $exclude) {
+            if ([string]::Equals($e, $full, $cmp)) { $excluded = $true; break }
+        }
+        if ($excluded) { continue }
+        $parsed = ConvertFrom-StreamFileName -Basename $Basename -FileName $f.Name -Comparison $cmp
         if ($null -eq $parsed) { continue }
         if ($parsed.Class -notin @('Video', 'Audio', 'Subtitle')) { continue }
         $parsed | Add-Member -NotePropertyName FullName -NotePropertyValue $full -Force

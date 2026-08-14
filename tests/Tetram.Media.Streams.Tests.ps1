@@ -143,6 +143,20 @@ Describe 'Merge-MediaStream' {
         Test-Path -LiteralPath $script:Mkv | Should -BeTrue
     }
 
+    It 'RemoveSidecars ne supprime pas un sidecar non muxé' {
+        $other = Join-Path $script:Work 'other.eng.srt'
+        Set-Content -LiteralPath $other -Value 'keep'
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            $out = $Arguments[-1]
+            Set-Content -LiteralPath $out -Value 'muxed'
+            return 0
+        }
+        Merge-MediaStream -LiteralPath $script:Mkv -Force -RemoveSidecars
+        Test-Path -LiteralPath $script:Srt | Should -BeFalse
+        Test-Path -LiteralPath $other | Should -BeTrue
+    }
+
     It 'RemoveSidecars ne supprime rien si ffmpeg échoue' {
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { return 1 }
         Merge-MediaStream -LiteralPath $script:Mkv -Force -RemoveSidecars

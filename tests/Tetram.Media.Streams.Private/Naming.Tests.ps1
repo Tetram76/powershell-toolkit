@@ -41,6 +41,15 @@ Describe 'ConvertTo / ConvertFrom-StreamFileName' {
             $p.Language | Should -Be 'pt-BR'
         }
     }
+    It 'aligne le préfixe basename sur la sensibilité du système de fichiers' {
+        InModuleScope 'Tetram.Media.Streams' {
+            $ignore = ConvertFrom-StreamFileName -Basename 'film' -FileName 'Film.eng.srt' -Comparison ([StringComparison]::OrdinalIgnoreCase)
+            $ignore | Should -Not -BeNullOrEmpty
+            $ignore.Language | Should -Be 'eng'
+            $ordinal = ConvertFrom-StreamFileName -Basename 'film' -FileName 'Film.eng.srt' -Comparison ([StringComparison]::Ordinal)
+            $ordinal | Should -BeNullOrEmpty
+        }
+    }
     It 'omet la langue und / vide' {
         InModuleScope 'Tetram.Media.Streams' {
             foreach ($lang in @('', 'und', 'UNK')) {

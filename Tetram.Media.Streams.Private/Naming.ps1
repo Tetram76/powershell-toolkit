@@ -119,7 +119,8 @@ function ConvertTo-StreamFileName {
 function ConvertFrom-StreamFileName {
     param(
         [Parameter(Mandatory)][string] $Basename,
-        [Parameter(Mandatory)][string] $FileName
+        [Parameter(Mandatory)][string] $FileName,
+        [StringComparison] $Comparison = [StringComparison]::OrdinalIgnoreCase
     )
     $name = [IO.Path]::GetFileName($FileName)
     $ext = [IO.Path]::GetExtension($name)
@@ -128,7 +129,7 @@ function ConvertFrom-StreamFileName {
     if ($script:StreamsContainerExtensions -contains $extLower) { return $null }
     if (-not $script:StreamsExtClass.ContainsKey($extLower)) { return $null }
     $prefix = $Basename + '.'
-    if ($name.Length -le $prefix.Length -or -not $name.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+    if ($name.Length -le $prefix.Length -or -not $name.StartsWith($prefix, $Comparison)) {
         return $null
     }
     $stem = $name.Substring(0, $name.Length - $ext.Length)

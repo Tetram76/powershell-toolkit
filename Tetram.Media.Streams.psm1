@@ -170,6 +170,7 @@ function Merge-MediaStream {
         $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })
         foreach ($p in $toRemove) {
             if (-not $p) { continue }
+            # FullName issu de Get-ChildItem : uniquement le fichier réellement muxé, casse du FS respectée.
             if ($PSCmdlet.ShouldProcess($p, 'Remove sidecar')) {
                 try { Remove-Item -LiteralPath $p -ErrorAction Stop }
                 catch { Write-ErrorLog "Unable to delete sidecar '$p': $($_.Exception.Message)" }
