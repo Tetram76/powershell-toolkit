@@ -6,21 +6,21 @@ Locale: fr-FR
 Module Name: Tetram.Media.Streams
 ms.date: 08/14/2026
 PlatyPS schema version: 2024-05-01
-title: Merge-MediaStream
+title: Merge-MediaSubtitle
 ---
 
-# Merge-MediaStream
+# Merge-MediaSubtitle
 
 ## SYNOPSIS
 
-Réinjecte les sidecars dans le MKV (replace / add / keep).
+Réinjecte les sous-titres sidecar dans le MKV (replace / add / keep).
 
 ## SYNTAX
 
 ### __AllParameterSets
 
 ```
-Merge-MediaStream [-LiteralPath] <string> [-Destination <string>] [-RemoveSidecars] [-Force]
+Merge-MediaSubtitle [-LiteralPath] <string> [-Destination <string>] [-RemoveSidecars] [-Force]
  [-WhatIf] [-Confirm]
 ```
 
@@ -28,11 +28,11 @@ Merge-MediaStream [-LiteralPath] <string> [-Destination <string>] [-RemoveSideca
 
 ## DESCRIPTION
 
-Toujours un update du MKV passé en `-LiteralPath` (fichier `.mkv` existant). Sidecars = même basename **que le MKV**, jetons lus depuis la fin (s'il en reste, ce n'est pas un sidecar). Même clé (classe, langue, flags, extension, index) = replace ; sinon add ; piste MKV sans sidecar = keep. Pas de suppression de piste.
+Toujours un update du MKV passé en `-LiteralPath` (fichier `.mkv` existant). Seuls les sidecars **sous-titres** (`.srt` `.ass` `.ssa` `.vtt` `.sup`) sont muxés. Vidéo/audio extraits au split sont des fichiers de référence, ignorés. Même clé (classe, langue, flags, extension, index) = replace ; sinon add ; piste MKV sans sidecar sous-titre = keep. Pas de suppression de piste.
 
 `-Destination` optionnel (sinon in-place via un temporaire dans TEMP). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
 
-Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, `pcm_*`, …) : split et merge s'arrêtent (`Write-ErrorLog`). Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : skip au split, keep au merge. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
+Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, `pcm_*`, …) : le **split** s'arrête (`Write-ErrorLog`). Le mux copie ces pistes depuis le MKV (pas d'échec). Tout flux ni vidéo, ni audio, ni sous-titre (covers, polices, chapitres, `data`, …) : skip au split, keep au mux. Aucun objet pipeline. Importer `Tetram.Media.Streams.psd1` (PowerShell 7+).
 
 ## EXAMPLES
 
@@ -42,7 +42,7 @@ Intention : round-trip. `film.fra.srt` a la même clé qu'une piste MKV → repl
 Les autres pistes sans sidecar sont keep. Aucune piste n'est supprimée.
 
 ```powershell
-Merge-MediaStream -LiteralPath 'D:\Media\film.mkv' -Force
+Merge-MediaSubtitle -LiteralPath 'D:\Media\film.mkv' -Force
 ```
 
 ### Example 2: Ajouter une piste (film.spa.srt)
@@ -51,7 +51,7 @@ Intention : `film.spa.srt` n'a pas de clé correspondante dans le MKV → add.
 Le mux conserve toutes les pistes existantes (keep) et ajoute l'espagnol.
 
 ```powershell
-Merge-MediaStream -LiteralPath 'D:\Media\film.mkv' -Force
+Merge-MediaSubtitle -LiteralPath 'D:\Media\film.mkv' -Force
 ```
 
 ### Example 3: Supprimer les sidecars après un mux réussi
@@ -61,7 +61,7 @@ En cas d'échec FFmpeg, les sidecars restent. `-Force` évite `ShouldContinue` s
 le MKV cible.
 
 ```powershell
-Merge-MediaStream -LiteralPath 'D:\Media\film.mkv' -Force -RemoveSidecars
+Merge-MediaSubtitle -LiteralPath 'D:\Media\film.mkv' -Force -RemoveSidecars
 ```
 
 ### Example 4: Simuler le mux
@@ -70,7 +70,7 @@ Intention : afficher la ligne FFmpeg sans écrire le MKV, sans créer de tempora
 finalisé, sans supprimer de sidecar.
 
 ```powershell
-Merge-MediaStream -LiteralPath 'D:\Media\film.mkv' -WhatIf
+Merge-MediaSubtitle -LiteralPath 'D:\Media\film.mkv' -WhatIf
 ```
 
 ## PARAMETERS
@@ -229,7 +229,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 Prérequis : PowerShell 7+, ffmpeg/ffprobe (`Tetram.Media.FFmpeg`). Importer `.\Tetram.Media.Streams.psd1`. Toujours un update d'un MKV existant (pas de mux from-scratch).
 
-Ne pas faire : attendre une suppression de piste (replace / add / keep seulement) ; compter sur `-RemoveSidecars` si FFmpeg échoue ; prendre le jeton fichier `commentary` pour autre chose que le disposition FFmpeg `comment` ; merger (ou splitter) un MKV dont un flux A/V/S a un codec hors table (les deux commandes s'arrêtent).
+Ne pas faire : attendre une suppression de piste (replace / add / keep seulement) ; compter sur `-RemoveSidecars` si FFmpeg échoue ; prendre le jeton fichier `commentary` pour autre chose que le disposition FFmpeg `comment` ; attendre que le mux réinjecte un `.h264` / `.aac` (référence split seulement).
 
 ## RELATED LINKS
 

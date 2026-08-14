@@ -116,7 +116,7 @@ Describe 'Get-MediaStreamDescriptors collision' {
             $data[0].Class | Should -Not -BeIn @('Video', 'Audio', 'Subtitle')
         }
     }
-    It 'n''ajoute pas de keep pour un codec A/V/S inconnu' {
+    It 'ajoute un keep pour un codec A/V/S inconnu (le mux copie la piste MKV)' {
         $probe = @{
             streams = @(
                 @{ index = 0; codec_type = 'video'; codec_name = 'mpeg4'; tags = @{}; disposition = @{} }
@@ -126,7 +126,9 @@ Describe 'Get-MediaStreamDescriptors collision' {
             param($Probe)
             $desc = @(Get-MediaStreamDescriptors -Probe $Probe)
             $desc = @(Add-UnmappedKeepDescriptors -Descriptors $desc -Probe $Probe)
-            @($desc | Where-Object { $_.StreamIndex -eq 0 }).Count | Should -Be 0
+            $keep = @($desc | Where-Object { $_.StreamIndex -eq 0 })
+            $keep.Count | Should -Be 1
+            $keep[0].Class | Should -Be 'Video'
         }
     }
     It 'force .bin si l''extension d''attachement n''est pas dans l''allowlist' {

@@ -69,7 +69,8 @@ function Get-SidecarFiles {
         if ($excluded) { continue }
         $parsed = ConvertFrom-StreamFileName -Basename $Basename -FileName $f.Name -Comparison $cmp
         if ($null -eq $parsed) { continue }
-        if ($parsed.Class -notin @('Video', 'Audio', 'Subtitle')) { continue }
+        # Mux = sous-titres seulement ; vidéo/audio extraits au split restent des fichiers de référence.
+        if ($parsed.Class -ne 'Subtitle') { continue }
         $parsed | Add-Member -NotePropertyName FullName -NotePropertyValue $full -Force
         $out += $parsed
     }

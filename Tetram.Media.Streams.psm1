@@ -106,7 +106,7 @@ function Split-MediaStream {
     }
 }
 
-function Merge-MediaStream {
+function Merge-MediaSubtitle {
     <#
 .EXTERNALHELP Tetram.Media.Streams-Help.xml
 #>
@@ -149,8 +149,6 @@ function Merge-MediaStream {
         Write-ErrorLog "Can't get media info for '$src'"
         return
     }
-
-    if (Test-StreamsUnmappedAvCodec -Probe $probe -SourcePath $src) { return }
 
     $dir = Split-Path -Parent $src
     $base = [IO.Path]::GetFileNameWithoutExtension($src)
@@ -219,4 +217,4 @@ function Merge-MediaStream {
     }
 }
 
-Export-ModuleMember -Function Split-MediaStream, Merge-MediaStream
+Export-ModuleMember -Function Split-MediaStream, Merge-MediaSubtitle

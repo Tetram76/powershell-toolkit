@@ -112,11 +112,25 @@ function Add-UnmappedKeepDescriptors {
     $keeps = [System.Collections.Generic.List[pscustomobject]]::new()
     foreach ($st in @($Probe['streams'])) {
         $codecType = [string](Get-ProbeProperty $st 'codec_type')
-        # A/V/S inconnu = abort commande ; attachment déjà décrit. Le reste (data, …) est keep-only.
-        if ($codecType -in @('video', 'audio', 'subtitle', 'attachment')) { continue }
+        # A/V/S hors table : keep au mux (copie MKV). Attachment déjà décrit. Data = keep-only.
+        if ($codecType -eq 'attachment') { continue }
         $index = ConvertTo-IntOrNull (Get-ProbeProperty $st 'index')
         if ($null -eq $index) { continue }
         $codec = [string](Get-ProbeProperty $st 'codec_name')
+        if ($codecType -in @('video', 'audio', 'subtitle')) {
+            $disp = Get-ProbeProperty $st 'disposition'
+            $attached = ((Get-ProbeProperty $disp 'attached_pic') -eq 1)
+            if ($null -ne (Get-ElementaryExtension -CodecName $codec -CodecType $codecType -AttachedPic $attached)) {
+                continue
+            }
+            $class = switch ($codecType) {
+                'video' { 'Video' }
+                'audio' { 'Audio' }
+                default { 'Subtitle' }
+            }
+            $keeps.Add((New-StreamDescriptorObject -Class $class -StreamIndex $index -Codec $codec -Extension ''))
+            continue
+        }
         $keeps.Add((New-StreamDescriptorObject -Class 'Data' -StreamIndex $index -Codec $codec -Extension ''))
     }
     $mapped = @($Descriptors | Where-Object { $null -ne $_ -and $_.Class -ne 'Chapter' })

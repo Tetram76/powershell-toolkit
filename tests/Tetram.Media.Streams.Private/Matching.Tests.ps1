@@ -70,6 +70,22 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
             $after | Should -Be $before
         }
     }
+    It 'ignore les sidecars vidéo/audio (référence split, pas de mux)' {
+        $dir = Join-Path $TestDrive 'ref'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $mkv = Join-Path $dir 'film.mkv'
+        New-Item -ItemType File -Path $mkv | Out-Null
+        New-Item -ItemType File -Path (Join-Path $dir 'film.h264') | Out-Null
+        New-Item -ItemType File -Path (Join-Path $dir 'film.eng.aac') | Out-Null
+        New-Item -ItemType File -Path (Join-Path $dir 'film.eng.srt') | Out-Null
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv } {
+            param($Dir, $Mkv)
+            $sides = @(Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv))
+            $sides.Count | Should -Be 1
+            $sides[0].Class | Should -Be 'Subtitle'
+            $sides[0].Extension | Should -Be '.srt'
+        }
+    }
 }
 
 Describe 'Build-MergeFFmpegArgs unmapped keep' {
