@@ -139,48 +139,49 @@ function ConvertFrom-StreamFileName {
     if ($rest) { $tokens = @($rest.Split('.', [StringSplitOptions]::RemoveEmptyEntries)) }
 
     $classHint = $script:StreamsExtClass[$extLower]
-    $hasCover = $false
-    $hasChapters = $false
-    $flags = @()
-    $language = ''
-    $collision = 1
-    $attachParts = @()
     $flagLookup = @{}
     foreach ($row in $script:StreamsDispositionFlags) { $flagLookup[[string]$row.FileToken] = [string]$row.FileToken }
     foreach ($alias in $script:StreamsFlagAlias.Keys) { $flagLookup[$alias] = [string]$script:StreamsFlagAlias[$alias] }
 
-    foreach ($tok in $tokens) {
-        $low = $tok.ToLowerInvariant()
-        if ($low -eq 'cover') { $hasCover = $true; continue }
-        if ($low -eq 'chapters') { $hasChapters = $true; continue }
-        if ($flagLookup.ContainsKey($low)) { $flags += $flagLookup[$low]; continue }
-        $n = 0
-        if ([int]::TryParse($tok, [ref]$n) -and $n -ge 2) { $collision = $n; continue }
-        if ($low -in @('und', 'unk')) { continue }
-        # Premier jeton restant = tag ffprobe tel quel ; un 2e jeton libre n'est pas de la grammaire A/V/S.
-        if ($classHint -in @('Video', 'Audio', 'Subtitle') -and -not $language) {
-            $language = $tok
-            continue
-        }
-        $attachParts += $tok
-    }
+    $queue = [System.Collections.Generic.List[string]]::new()
+    foreach ($t in $tokens) { $queue.Add($t) }
 
-    # Seules les pièces jointes ont un nom libre ; un jeton restant n'est pas de la grammaire A/V/S/cover/chapitres.
-    if ($classHint -ne 'Attachment' -and @($attachParts).Count -gt 0) {
-        return $null
+    # Suffixe : n, puis flags, puis au plus une langue. Tout jeton encore présent = pas un sidecar de ce MKV.
+    $collision = 1
+    if ($queue.Count -gt 0) {
+        $n = 0
+        $last = $queue[$queue.Count - 1]
+        if ([int]::TryParse($last, [ref]$n) -and $n -ge 2) {
+            $collision = $n
+            $queue.RemoveAt($queue.Count - 1)
+        }
     }
 
     if ($extLower -eq '.ffmeta') {
-        if (-not $hasChapters) { return $null }
+        if ($queue.Count -ne 1 -or $queue[0].ToLowerInvariant() -ne 'chapters') { return $null }
         return New-StreamDescriptorObject -Class 'Chapter' -Extension '.ffmeta' -CollisionIndex 1
     }
     if ($classHint -eq 'Cover') {
-        if (-not $hasCover) { return $null }
+        if ($queue.Count -ne 1 -or $queue[0].ToLowerInvariant() -ne 'cover') { return $null }
         return New-StreamDescriptorObject -Class 'Cover' -Extension $extLower -CollisionIndex $collision
     }
     if ($classHint -eq 'Attachment') {
-        $san = $attachParts -join '.'
+        $san = @($queue) -join '.'
         return New-StreamDescriptorObject -Class 'Attachment' -Extension $extLower -CollisionIndex $collision -AttachmentNameSanitized $san
+    }
+
+    $flags = @()
+    while ($queue.Count -gt 0) {
+        $low = $queue[$queue.Count - 1].ToLowerInvariant()
+        if (-not $flagLookup.ContainsKey($low)) { break }
+        $flags += $flagLookup[$low]
+        $queue.RemoveAt($queue.Count - 1)
+    }
+    if ($queue.Count -gt 1) { return $null }
+    $language = ''
+    if ($queue.Count -eq 1) {
+        $tok = $queue[0]
+        if ($tok.ToLowerInvariant() -notin @('und', 'unk')) { $language = $tok }
     }
     return New-StreamDescriptorObject -Class $classHint -Language $language -Flags $flags -Extension $extLower -CollisionIndex $collision
 }

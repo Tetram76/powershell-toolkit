@@ -32,7 +32,7 @@ Importer `Tetram.Media.Streams.psd1` (PowerShell 7+). `-LiteralPath` est un fich
 
 `ffprobe` lit toutes les pistes ; l'index de collision (`.2`, `.3`) est calculé sur le MKV entier avant `-StreamType` / `-Language`. Extraire seulement la 2e VO anglais produit `film.eng.2.srt`.
 
-Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Uniquement vidéo, audio et sous-titres : covers, polices et chapitres restent dans le MKV.
+Noms : `{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}`. `basename` vient du MKV. Lecture depuis la fin ; un jeton restant = pas un sidecar. Langue omise si `und`/`unk`/absente. `dub` est un flag, pas une langue. Uniquement vidéo, audio et sous-titres : covers, polices et chapitres restent dans le MKV.
 
 Copie FFmpeg (`-c copy`). `Show-CommandLine` avant `ShouldProcess` (y compris `-WhatIf`). Cible existante : `-Force` ou confirmation. Codec A/V/S hors table : `Write-ErrorLog`, aucun sidecar. Flux hors A/V/S : ignorés (restent dans le MKV). FFmpeg manquant : `Write-ErrorLog`, pas d'exception.
 

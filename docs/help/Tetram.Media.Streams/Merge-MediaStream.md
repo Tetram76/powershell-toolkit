@@ -28,7 +28,7 @@ Merge-MediaStream [-LiteralPath] <string> [-Destination <string>] [-RemoveSideca
 
 ## DESCRIPTION
 
-Toujours un update du MKV passé en `-LiteralPath` (fichier `.mkv` existant). Sidecars du même basename : même clé (classe, langue, flags, extension, index) = replace ; sinon add ; piste MKV sans sidecar = keep. Pas de suppression de piste.
+Toujours un update du MKV passé en `-LiteralPath` (fichier `.mkv` existant). Sidecars = même basename **que le MKV**, jetons lus depuis la fin (s'il en reste, ce n'est pas un sidecar). Même clé (classe, langue, flags, extension, index) = replace ; sinon add ; piste MKV sans sidecar = keep. Pas de suppression de piste.
 
 `-Destination` optionnel (sinon in-place via `.tmp`). `-RemoveSidecars` après mux réussi seulement. `-WhatIf` affiche la ligne FFmpeg, n'écrit pas, ne supprime pas. `commentary` fichier = `comment` FFmpeg.
 

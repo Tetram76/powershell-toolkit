@@ -112,7 +112,7 @@ Jetons de classe réservés (pas des flags de disposition) : `cover`, `chapters`
 - Source : `tags.language` ffprobe.
 - **Omise** si absente, vide, ou équivalente à indéterminée : `und`, `unk` (comparaison insensible à la casse).
 - Écriture : code tel quel (ISO 639 ou BCP-47, ex. `pt-BR`). Pas de normalisation `fre`↔`fra` ni `en`↔`eng`.
-- Parse (flux A/V/S uniquement) : même tag, sans transformation ni validation de forme ; un jeton reste un seul segment (tiret, pas de `.`). `dub` est un flag, jamais une langue. `und` / `unk` ne sont jamais écrits et, s’ils apparaissent, sont traités comme « pas de langue ». Deux jetons libres (ex. `Part2` + `eng`) → pas un sidecar.
+- Parse (flux A/V/S) : depuis la **fin** du nom (suffixe `n`, puis flags, puis au plus un tag langue tel quel). Basename = celui du MKV, jamais du sidecar. S’il reste un jeton → ce n’était pas un sidecar. `dub` est un flag. `und` / `unk` = pas de langue.
 
 ### Flags
 
@@ -128,7 +128,7 @@ Présents seulement quand le bit ffprobe correspondant vaut 1 (mot délimité pa
 | `hearing_impaired` | `hearing_impaired` | `hearing_impaired` |
 | `visual_impaired` | `visual_impaired` | `visual_impaired` |
 
-Parse : d’abord les jetons réservés (insensible à la casse), puis `n` ≥ 2, puis la langue. Ordre des flags indifférent à la lecture. Alias acceptés à la lecture seulement : `comment` et `comments` → `commentary`.
+Parse : depuis la fin (insensible à la casse) : `n` ≥ 2, puis les flags (ordre indifférent), puis au plus un tag langue. Alias lecture seulement : `comment` et `comments` → `commentary`. Jeton restant → pas un sidecar de ce MKV.
 
 Écriture : toujours langue, puis les flags **présents** dans l’ordre du tableau, puis `n`.
 
