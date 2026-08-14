@@ -112,7 +112,7 @@ Jetons de classe réservés (pas des flags de disposition) : `cover`, `chapters`
 - Source : `tags.language` ffprobe.
 - **Omise** si absente, vide, ou équivalente à indéterminée : `und`, `unk` (comparaison insensible à la casse).
 - Écriture : code tel quel (ISO 639 ou BCP-47, ex. `pt-BR`). Pas de normalisation `fre`↔`fra` ni `en`↔`eng`.
-- Parse (flux A/V/S uniquement) : même tag, sans transformation ; un jeton BCP-47 reste un seul segment (tiret, pas de `.`). `dub` est un flag, jamais une langue. `und` / `unk` ne sont jamais écrits et, s’ils apparaissent, sont traités comme « pas de langue ».
+- Parse (flux A/V/S uniquement) : même tag, sans transformation ni validation de forme ; un jeton reste un seul segment (tiret, pas de `.`). `dub` est un flag, jamais une langue. `und` / `unk` ne sont jamais écrits et, s’ils apparaissent, sont traités comme « pas de langue ». Deux jetons libres (ex. `Part2` + `eng`) → pas un sidecar.
 
 ### Flags
 

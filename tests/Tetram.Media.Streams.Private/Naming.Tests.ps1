@@ -41,6 +41,20 @@ Describe 'ConvertTo / ConvertFrom-StreamFileName' {
             $p.Language | Should -Be 'pt-BR'
         }
     }
+    It 'round-trip un tag langue tel quel (private-use)' {
+        InModuleScope 'Tetram.Media.Streams' {
+            $d = [pscustomobject]@{
+                Class = 'Subtitle'; Language = 'x-klingon'
+                Flags = @(); Extension = '.srt'
+                CollisionIndex = 1; AttachmentNameSanitized = ''
+            }
+            $name = ConvertTo-StreamFileName -Basename 'film' -Descriptor $d
+            $name | Should -Be 'film.x-klingon.srt'
+            $p = ConvertFrom-StreamFileName -Basename 'film' -FileName $name
+            $p | Should -Not -BeNullOrEmpty
+            $p.Language | Should -Be 'x-klingon'
+        }
+    }
     It 'aligne le préfixe basename sur la sensibilité du système de fichiers' {
         InModuleScope 'Tetram.Media.Streams' {
             $ignore = ConvertFrom-StreamFileName -Basename 'film' -FileName 'Film.eng.srt' -Comparison ([StringComparison]::OrdinalIgnoreCase)
