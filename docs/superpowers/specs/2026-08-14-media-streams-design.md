@@ -30,7 +30,7 @@ Les polices, chapitres et pistes non extraites restent dans le MKV grâce au mer
 | Index de collision | Calculé sur **toutes** les pistes du MKV **source**, même si le split est filtré |
 | Merge sortie | `-Destination` optionnel ; sinon le MKV d’entrée (in-place via temporaire) |
 | Suppression de piste | Hors v1 (un sidecar manquant = keep) |
-| Sidecars après merge | Jamais supprimés |
+| Sidecars après merge | Conservés par défaut ; `-RemoveSidecars` les supprime après un mux **réussi** |
 | Overwrite | `-Force` écrit ; sinon `ShouldContinue` ; refus = skip |
 | WhatIf | Pas d’écriture ; **la ligne FFmpeg est quand même affichée** (`Show-CommandLine` avant `ShouldProcess`, comme Reencode) |
 | Erreurs publiques | `Write-ErrorLog` puis return/continue ; pas d’exception vers l’appelant |
@@ -43,7 +43,6 @@ Les polices, chapitres et pistes non extraites restent dans le MKV grâce au mer
 - Suppression de piste.
 - Traitement d’un dossier / `-Recurse` / `-InputMasks` / stem sans fichier.
 - mkvmerge, manifeste JSON, conservation d’un ordre de pistes autre que : ordre du MKV source, puis ajouts par classe.
-- Suppression automatique des sidecars après mux.
 - Réencodage, décalage temporel (`delay`), noms de piste (`title`) dans le nom de fichier.
 - Codecs sans entrée dans la table (dont `mpeg4`, `mov_text`, VobSub) : skip + log au split ; ils restent dans le MKV au merge si on ne les a pas extraits.
 - Modification de `Tetram.Media.FFmpeg` / factorisation du probe Reencode.
@@ -74,6 +73,7 @@ Split-MediaStream -LiteralPath <fichier.mkv>
 
 Merge-MediaStream -LiteralPath <fichier.mkv>
     [-Destination <fichier.mkv>]
+    [-RemoveSidecars]
     [-Force] [-WhatIf] [-Confirm]
 ```
 
@@ -234,6 +234,14 @@ Les pistes **keep** conservent métadonnées et dispositions du MKV source (pas 
 
 Un sidecar manquant n’enlève jamais une piste.
 
+### `-RemoveSidecars`
+
+Après un mux **réussi** seulement : supprimer les sidecars **effectivement retenus** pour ce merge (ceux ramassés et parsés, pas un glob aveugle). Le MKV source/cible n’est jamais dans cette liste.
+
+- Échec FFmpeg / `Move-Item` → aucune suppression.
+- Chaque suppression passe par `ShouldProcess` (donc `-WhatIf` affiche sans effacer).
+- `-Force` n’est pas requis pour ces sidecars : ce sont des fichiers de travail que l’utilisateur a demandé d’enlever ; un sidecar en lecture seule → `Write-ErrorLog` et on continue les autres.
+
 ## Journalisation
 
 - `Show-CommandLine` pour **chaque** invocation FFmpeg, y compris WhatIf, **avant** `ShouldProcess`.
@@ -248,9 +256,9 @@ Pas de `Write-InfoLog -Force` : les infos suivent le Verbose / préférence par 
 Livrable **complet**, généré/tenu via `tools/New-HelpMarkdown.ps1` (découverte auto des `.psd1` racine) puis rédaction manuelle du fond (fr-FR), comme les autres modules :
 
 - Synopsis, description (round-trip MKV, grammaire, collision source, replace/add/keep).
-- Tous les paramètres, y compris WhatIf / Confirm / Force.
-- Exemples : split `-StreamType Subtitle -Language fra` ; merge (replace) ; merge (add d’un `.srt` posé à la main) ; `-WhatIf` (la commande FFmpeg s’affiche).
-- Notes : le MKV n’est pas un sidecar ; le merge ne supprime pas de piste ; codecs non mappés restent dans le MKV.
+- Tous les paramètres, y compris WhatIf / Confirm / Force / RemoveSidecars.
+- Exemples : split `-StreamType Subtitle -Language fra` ; merge (replace) ; merge (add d’un `.srt` posé à la main) ; merge `-RemoveSidecars` ; `-WhatIf` (la commande FFmpeg s’affiche).
+- Notes : le MKV n’est pas un sidecar ; le merge ne supprime pas de piste ; `-RemoveSidecars` uniquement après mux réussi ; codecs non mappés restent dans le MKV.
 
 Commentaires d’aide `.EXTERNALHELP Tetram.Media.Streams-Help.xml` sur les deux fonctions exportées.
 
@@ -273,6 +281,9 @@ Tag `Integration` pour tout appel au vrai FFmpeg (exclu du CI, cf. `Invoke-Tests
 | `-WhatIf` | Aucune écriture disque ; `Show-CommandLine` invoqué |
 | Cible existante sans `-Force` | `ShouldContinue` mocké refus → pas d’écriture |
 | Allowlist merge | `film.mkv` non ramassé comme sidecar |
+| `-RemoveSidecars` après succès | Sidecars retenus absents ; MKV intact |
+| `-RemoveSidecars` + mux échoué | Sidecars toujours présents |
+| `-RemoveSidecars -WhatIf` | Sidecars toujours présents |
 
 Les tests de grammaire passent des descripteurs / noms de fichiers synthétiques, pas de médias réels.
 
@@ -280,6 +291,7 @@ Les tests de grammaire passent des descripteurs / noms de fichiers synthétiques
 
 - Extraire un `.srt` (y compris la 2ᵉ piste d’une langue), l’éditer, merger : la bonne piste est remplacée ; vidéo, audio, polices et chapitres non extraits sont intacts.
 - Poser un nouveau `film.spa.srt` à côté et merger : la piste est **ajoutée**, le reste inchangé.
+- `Merge -RemoveSidecars` après succès : les sidecars retenus disparaissent ; le MKV reste. Échec mux ou `-WhatIf` : sidecars intacts.
 - `-WhatIf` affiche les lignes FFmpeg via `Show-CommandLine` et ne crée/écrase aucun fichier.
 - `-Force` écrase ; sans `-Force`, une cible existante demande confirmation.
 - L’aide `Get-Help Split-MediaStream` / `Merge-MediaStream` est exploitable (pas un stub).
