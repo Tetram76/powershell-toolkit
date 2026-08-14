@@ -2,8 +2,8 @@
 #
 # RepoRoot : (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 # Import-Module Tetram.Media.Streams.psd1 ; InModuleScope
-# Merge-MediaSubtitle traite un seul sidecar explicite (-Path) : plus de scan de dossier
-# (Get-SidecarFiles a disparu). Les sidecars de test sont construits via ConvertFrom-StreamFileName.
+# Merge-MediaSubtitle traite un seul fichier de flux explicite (-Path) : plus de scan de dossier
+# (Get-SidecarFiles a disparu). Les fichiers de flux de test sont construits via ConvertFrom-StreamFileName.
 
 BeforeAll {
     Set-StrictMode -Version Latest
@@ -28,8 +28,8 @@ Describe 'Resolve-MergeActions' {
                 (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.eng.2.srt')
                 (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.spa.srt')
             )
-            for ($i = 0; $i -lt $sides.Count; $i++) { $sides[$i] | Add-Member -NotePropertyName FullName -NotePropertyValue "sidecar$i" -Force }
-            $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars $sides
+            for ($i = 0; $i -lt $sides.Count; $i++) { $sides[$i] | Add-Member -NotePropertyName FullName -NotePropertyValue "streamfile$i" -Force }
+            $act = Resolve-MergeActions -MkvDescriptors $desc -StreamFiles $sides
             $act.Replaces.Count | Should -Be 2
             $act.Keeps.Count | Should -Be 0
             $act.Adds.Count | Should -Be 1
@@ -43,8 +43,8 @@ Describe 'Resolve-MergeActions' {
     It 'ajoute film.spa.2.srt meme sans film.spa.srt (pas de collision = ajout, quel que soit l''index)' {
         InModuleScope 'Tetram.Media.Streams' {
             $side = ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.spa.2.srt'
-            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'sidecar0' -Force
-            $act = Resolve-MergeActions -MkvDescriptors @() -Sidecars @($side)
+            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'streamfile0' -Force
+            $act = Resolve-MergeActions -MkvDescriptors @() -StreamFiles @($side)
             $act.Adds.Count | Should -Be 1
         }
     }
@@ -54,12 +54,12 @@ Describe 'Resolve-MergeActions' {
                 (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.spa.srt')
                 (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.spa.2.srt')
             )
-            for ($i = 0; $i -lt $sides.Count; $i++) { $sides[$i] | Add-Member -NotePropertyName FullName -NotePropertyValue "sidecar$i" -Force }
-            $act = Resolve-MergeActions -MkvDescriptors @() -Sidecars $sides
+            for ($i = 0; $i -lt $sides.Count; $i++) { $sides[$i] | Add-Member -NotePropertyName FullName -NotePropertyValue "streamfile$i" -Force }
+            $act = Resolve-MergeActions -MkvDescriptors @() -StreamFiles $sides
             $act.Adds.Count | Should -Be 2
         }
     }
-    It 'accepte un sidecar .2. si une piste spa existante (gardee) occupe deja l''index 1' {
+    It 'garde la piste sous-titre espagnol (spa) du MKV et ajoute film.spa.2.srt (index differents, pas de collision)' {
         $probe = @{
             streams = @(
                 @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'spa' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
@@ -69,18 +69,18 @@ Describe 'Resolve-MergeActions' {
             param($Probe)
             $desc = @(Get-MediaStreamDescriptors -Probe $Probe)
             $side = ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.spa.2.srt'
-            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'sidecar0' -Force
-            $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars @($side)
+            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'streamfile0' -Force
+            $act = Resolve-MergeActions -MkvDescriptors $desc -StreamFiles @($side)
             $act.Keeps.Count | Should -Be 1
             $act.Adds.Count | Should -Be 1
         }
     }
-    It 'accepte un MKV sans descripteur mappé et n''ajoute que les sidecars' {
+    It 'accepte un MKV sans descripteur mappé et n''ajoute que les fichiers de flux' {
         InModuleScope 'Tetram.Media.Streams' {
             $side = ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.eng.srt'
-            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'sidecar0' -Force
-            { Resolve-MergeActions -MkvDescriptors @() -Sidecars @($side) } | Should -Not -Throw
-            $act = Resolve-MergeActions -MkvDescriptors @() -Sidecars @($side)
+            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'streamfile0' -Force
+            { Resolve-MergeActions -MkvDescriptors @() -StreamFiles @($side) } | Should -Not -Throw
+            $act = Resolve-MergeActions -MkvDescriptors @() -StreamFiles @($side)
             $act.Adds.Count | Should -Be 1
             $act.Keeps.Count | Should -Be 0
             $act.Replaces.Count | Should -Be 0
@@ -101,8 +101,8 @@ Describe 'Build-MergeFFmpegArgs unmapped keep' {
             $desc = @(Get-MediaStreamDescriptors -Probe $Probe)
             $desc = @(Add-UnmappedKeepDescriptors -Descriptors $desc -Probe $Probe)
             $side = ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.eng.srt'
-            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'sidecar0' -Force
-            $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars @($side)
+            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'streamfile0' -Force
+            $act = Resolve-MergeActions -MkvDescriptors $desc -StreamFiles @($side)
             $ffmpegArgs = Build-MergeFFmpegArgs -MkvPath 'film.mkv' -Actions $act -OutputPath 'out.mkv'
             $pair = $false
             for ($i = 0; $i -lt $ffmpegArgs.Count - 1; $i++) {
@@ -124,8 +124,8 @@ Describe 'Build-MergeFFmpegArgs muxer temporaire' {
             param($Probe)
             $desc = @(Get-MediaStreamDescriptors -Probe $Probe)
             $side = ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.eng.srt'
-            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'sidecar0' -Force
-            $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars @($side)
+            $side | Add-Member -NotePropertyName FullName -NotePropertyValue 'streamfile0' -Force
+            $act = Resolve-MergeActions -MkvDescriptors $desc -StreamFiles @($side)
             $out = 'out.mkv.tmp'
             $ffmpegArgs = @(Build-MergeFFmpegArgs -MkvPath 'film.mkv' -Actions $act -OutputPath $out)
             $oi = [array]::IndexOf($ffmpegArgs, $out)
@@ -137,10 +137,10 @@ Describe 'Build-MergeFFmpegArgs muxer temporaire' {
 }
 
 Describe 'Build-MergeFFmpegArgs attachments keep' {
-    It 'mappe la pièce jointe MKV et ignore un sidecar sans match' {
+    It 'mappe la pièce jointe MKV et ignore un fichier de flux sans match' {
         InModuleScope 'Tetram.Media.Streams' {
             $keep = New-StreamDescriptorObject -Class 'Attachment' -Extension '.ttf' -StreamIndex 4 -AttachmentNameSanitized 'KeepFont'
-            $act = Resolve-MergeActions -MkvDescriptors @($keep) -Sidecars @()
+            $act = Resolve-MergeActions -MkvDescriptors @($keep) -StreamFiles @()
             $act.Replaces.Count | Should -Be 0
             $ffmpegArgs = @(Build-MergeFFmpegArgs -MkvPath 'film.mkv' -Actions $act -OutputPath 'film.mkv.tmp')
             $ffmpegArgs | Should -Not -Contain '-attach'

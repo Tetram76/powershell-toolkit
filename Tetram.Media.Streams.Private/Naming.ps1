@@ -146,7 +146,7 @@ function ConvertFrom-StreamFileName {
     $queue = [System.Collections.Generic.List[string]]::new()
     foreach ($t in $tokens) { $queue.Add($t) }
 
-    # Suffixe : n, puis flags, puis au plus une langue. Tout jeton encore présent = pas un sidecar de ce MKV.
+    # Suffixe : n, puis flags, puis au plus une langue. Tout jeton encore présent = pas un fichier de flux de ce MKV.
     $collision = 1
     if ($queue.Count -gt 0) {
         $n = 0

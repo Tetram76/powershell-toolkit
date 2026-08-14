@@ -4,7 +4,7 @@ function Get-StreamsUniqueTempPath {
     param(
         [Parameter(Mandatory)][string] $FinalPath
     )
-    # Comme Reencode : TEMP + GUID + extension réelle — FFmpeg déduit le muxer, Merge ne prend pas le fichier pour un sidecar.
+    # Comme Reencode : TEMP + GUID + extension réelle — FFmpeg déduit le muxer, Merge ne prend pas le fichier pour un fichier de flux.
     $ext = [IO.Path]::GetExtension($FinalPath)
     $temp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + $ext)
     if (Test-Path -LiteralPath $temp -PathType Leaf) {
@@ -32,7 +32,7 @@ function Invoke-StreamsFFmpeg {
     )
     Show-CommandLine $Exe $Arguments -NoPathDetectionParameters 'metadata*', 'disposition*', 'map*'
     # ShouldProcess ne sert qu'à simuler un dry-run (-WhatIf) : il gouverne à lui seul
-    # ffmpeg + le Move-Item + la suppression des sidecars (même opération, pas de prompt séparé).
+    # ffmpeg + le Move-Item final (même opération, pas de prompt séparé).
     # $null = pas exécuté (WhatIf ou -Confirm refusé, message déjà affiché par ShouldProcess).
     if (-not $Cmdlet.ShouldProcess($TargetLabel, "ffmpeg on $TargetLabel")) {
         return $null

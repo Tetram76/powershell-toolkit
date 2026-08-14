@@ -55,7 +55,7 @@ Codec A/V/S hors table (`mpeg4`, `mov_text`, `alac`, `pcm_*`, …) présent dans
 ### Example 1: Réinjecter après édition d'un SRT (remplacement)
 
 Intention : round-trip. `film.fra.srt` a la même clé qu'une piste MKV → `-Update` accepte.
-Les autres pistes sans sidecar sont keep. Aucune piste n'est supprimée.
+Les autres pistes sans fichier de flux correspondant sont keep. Aucune piste n'est supprimée.
 
 ```powershell
 Merge-MediaSubtitle -MediaFile 'D:\Media\film.mkv' -Path 'D:\Media\film.fra.srt' -Update -Force

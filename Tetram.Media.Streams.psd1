@@ -4,7 +4,7 @@
     GUID = 'e7d4a1c8-3b92-4f6e-a1d5-8c9b0e2f4a71'
     Author = 'TRL'
     CompanyName = 'Tetram'
-    Description = 'Extraction de flux MKV (sidecars nommés) et réinjection des sous-titres.'
+    Description = 'Extraction de flux MKV (fichiers de flux nommés) et réinjection des sous-titres.'
     PowerShellVersion = '7.0'
     CompatiblePSEditions = @('Core')
     RequiredModules = @()

@@ -3,7 +3,7 @@ Set-StrictMode -Version 3.0
 function Resolve-MergeActions {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][pscustomobject[]] $MkvDescriptors,
-        [Parameter(Mandatory)][AllowEmptyCollection()][pscustomobject[]] $Sidecars
+        [Parameter(Mandatory)][AllowEmptyCollection()][pscustomobject[]] $StreamFiles
     )
     $used = @{}
     $replaces = @()
@@ -13,17 +13,17 @@ function Resolve-MergeActions {
             $keeps += $mkv
             continue
         }
-        $hit = @($Sidecars | Where-Object {
+        $hit = @($StreamFiles | Where-Object {
             $_.CollisionKey -eq $mkv.CollisionKey -and [int]$_.CollisionIndex -eq [int]$mkv.CollisionIndex
         }) | Select-Object -First 1
         if ($hit) {
-            $replaces += [pscustomobject]@{ Mkv = $mkv; Sidecar = $hit }
+            $replaces += [pscustomobject]@{ Mkv = $mkv; StreamFile = $hit }
             $used[$hit.FullName] = $true
         }
         else { $keeps += $mkv }
     }
     $classOrder = @{ Video = 0; Cover = 1; Audio = 2; Subtitle = 3; Attachment = 4; Chapter = 5 }
-    $adds = @($Sidecars | Where-Object { -not $used.ContainsKey($_.FullName) } |
+    $adds = @($StreamFiles | Where-Object { -not $used.ContainsKey($_.FullName) } |
             Sort-Object { $classOrder[$_.Class] }, CollisionIndex)
     return [pscustomobject]@{
         OrderedMkv = @($MkvDescriptors)
@@ -57,7 +57,7 @@ function Build-MergeFFmpegArgs {
     $inputIndex = @{}
     $n = 1
     $sideForInput = @()
-    foreach ($r in @($Actions.Replaces)) { $sideForInput += $r.Sidecar }
+    foreach ($r in @($Actions.Replaces)) { $sideForInput += $r.StreamFile }
     $sideForInput += @($Actions.Adds)
     foreach ($item in $sideForInput) {
         if ($null -eq $item) { continue }
@@ -86,12 +86,12 @@ function Build-MergeFFmpegArgs {
             $r = $replaceByIndex[[int]$mkv.StreamIndex]
         }
         if ($r) {
-            $in = $inputIndex[$r.Sidecar.FullName]
+            $in = $inputIndex[$r.StreamFile.FullName]
             [void]$a.Add('-map'); [void]$a.Add("${in}:0")
             $oi = $outIdx[$letter]
-            $lang = if ($r.Sidecar.Language) { $r.Sidecar.Language } else { 'und' }
+            $lang = if ($r.StreamFile.Language) { $r.StreamFile.Language } else { 'und' }
             [void]$a.Add("-metadata:s:${letter}:${oi}"); [void]$a.Add("language=$lang")
-            [void]$a.Add("-disposition:${letter}:${oi}"); [void]$a.Add((Get-FfmpegDispositionValue $r.Sidecar.Flags))
+            [void]$a.Add("-disposition:${letter}:${oi}"); [void]$a.Add((Get-FfmpegDispositionValue $r.StreamFile.Flags))
             $outIdx[$letter]++
         }
         else {

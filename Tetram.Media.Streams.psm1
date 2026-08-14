@@ -72,18 +72,18 @@ function Get-MediaStream {
             $out = Join-Path $dir $name
             if (Test-Path -LiteralPath $out) {
                 if (-not (Test-Path -LiteralPath $out -PathType Leaf)) {
-                    # Move-Item vers un dossier range le fichier dedans : pas de sidecar mergeable.
-                    Write-ErrorLog "Sidecar path is not a file: '$out'"
+                    # Move-Item vers un dossier range le fichier dedans : pas de fichier de flux mergeable.
+                    Write-ErrorLog "Stream file path is not a file: '$out'"
                     continue
                 }
                 if (-not $WhatIfPreference) {
-                    if (-not $Force -and -not $PSCmdlet.ShouldContinue($out, 'Overwrite sidecar')) {
-                        Write-InfoLog "Skip existing sidecar '$out'"
+                    if (-not $Force -and -not $PSCmdlet.ShouldContinue($out, 'Overwrite stream file')) {
+                        Write-InfoLog "Skip existing stream file '$out'"
                         continue
                     }
                 }
             }
-            # -y sur le sidecar tronquerait un fichier déjà bon si FFmpeg échoue ensuite.
+            # -y sur le fichier de flux tronquerait un fichier déjà bon si FFmpeg échoue ensuite.
             $temp = Get-StreamsUniqueTempPath -FinalPath $out
             $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $src -OutPath $temp
             try {
@@ -153,18 +153,18 @@ function Merge-MediaSubtitle {
             return
         }
 
-        $sidecarFull = Resolve-StreamsExistingPath -LiteralPath $Path
-        if (-not $sidecarFull -or -not (Test-Path -LiteralPath $sidecarFull -PathType Leaf)) {
+        $streamFileFull = Resolve-StreamsExistingPath -LiteralPath $Path
+        if (-not $streamFileFull -or -not (Test-Path -LiteralPath $streamFileFull -PathType Leaf)) {
             Write-ErrorLog "Subtitle path not found: '$Path'"
             return
         }
         $base = [IO.Path]::GetFileNameWithoutExtension($src)
-        $sidecar = ConvertFrom-StreamFileName -Basename $base -FileName ([IO.Path]::GetFileName($sidecarFull))
-        if ($null -eq $sidecar -or $sidecar.Class -ne 'Subtitle') {
-            Write-ErrorLog "Not a subtitle sidecar for basename '$base': '$Path'"
+        $streamFile = ConvertFrom-StreamFileName -Basename $base -FileName ([IO.Path]::GetFileName($streamFileFull))
+        if ($null -eq $streamFile -or $streamFile.Class -ne 'Subtitle') {
+            Write-ErrorLog "Not a subtitle stream file for basename '$base': '$Path'"
             return
         }
-        $sidecar | Add-Member -NotePropertyName FullName -NotePropertyValue $sidecarFull -Force
+        $streamFile | Add-Member -NotePropertyName FullName -NotePropertyValue $streamFileFull -Force
 
         $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $src
         if ($null -eq $probe) {
@@ -174,7 +174,7 @@ function Merge-MediaSubtitle {
 
         $desc = @(Get-MediaStreamDescriptors -Probe $probe)
         $desc = @(Add-UnmappedKeepDescriptors -Descriptors $desc -Probe $probe)
-        $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars @($sidecar)
+        $act = Resolve-MergeActions -MkvDescriptors $desc -StreamFiles @($streamFile)
 
         if ($Add -and $act.Replaces.Count -gt 0) {
             Write-ErrorLog "A matching subtitle track already exists; use -Update instead of -Add: '$Path'"

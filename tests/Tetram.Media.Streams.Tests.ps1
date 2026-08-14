@@ -3,7 +3,7 @@
 # RepoRoot depuis tests/ racine : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 # Manifeste : Tetram.Media.Streams.psd1 — Test-ModuleManifest puis Import-Module -Force
 # Privé : InModuleScope 'Tetram.Media.Streams' ; mocks Get-FFmpegPath / Write-ErrorLog / Show-CommandLine
-# $TestDrive pour sidecars ; tag Integration seulement si vrai ffmpeg.
+# $TestDrive pour fichiers de flux ; tag Integration seulement si vrai ffmpeg.
 
 BeforeAll {
     Set-StrictMode -Version Latest
@@ -151,7 +151,7 @@ Describe 'Get-MediaStream WhatIf' {
         Should -Invoke -ModuleName Tetram.Media.Streams Show-CommandLine -Times 1
     }
 
-    It 'n''extrait pas un attached_pic h264 comme sidecar vidéo' {
+    It 'n''extrait pas un attached_pic h264 comme fichier de flux vidéo' {
         $mkv = Join-Path $TestDrive 'cover-h264.mkv'
         Set-Content -LiteralPath $mkv -Value 'fake'
         Mock -ModuleName Tetram.Media.Streams Get-FFmpegPath { 'ffmpeg' }
@@ -239,9 +239,9 @@ Describe 'Get-MediaStream extract failure' {
     BeforeEach {
         $script:Mkv = Join-Path $TestDrive 'film.mkv'
         Set-Content -LiteralPath $script:Mkv -Value 'fake'
-        $script:Sidecar = Join-Path $TestDrive 'film.fra.srt'
-        if (Test-Path -LiteralPath $script:Sidecar) {
-            Remove-Item -LiteralPath $script:Sidecar -Recurse -Force
+        $script:StreamFile = Join-Path $TestDrive 'film.fra.srt'
+        if (Test-Path -LiteralPath $script:StreamFile) {
+            Remove-Item -LiteralPath $script:StreamFile -Recurse -Force
         }
         $script:Probe = @{
             streams = @(
@@ -263,7 +263,7 @@ Describe 'Get-MediaStream extract failure' {
         $script:FfmpegOut = $null
     }
 
-    It 'ne laisse pas de sidecar si ffmpeg échoue' {
+    It 'ne laisse pas de fichier de flux si ffmpeg échoue' {
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)
             $script:FfmpegOut = $Arguments[-1]
@@ -271,13 +271,13 @@ Describe 'Get-MediaStream extract failure' {
             return 1
         }
         Get-MediaStream -MediaFile $script:Mkv -StreamType Subtitle -Language fra -Force
-        Test-Path -LiteralPath $script:Sidecar | Should -BeFalse
+        Test-Path -LiteralPath $script:StreamFile | Should -BeFalse
         Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
         Get-ChildItem -LiteralPath $TestDrive -Filter '*.tmp*' -File | Should -BeNullOrEmpty
     }
 
-    It 'conserve un sidecar existant si ffmpeg échoue' {
-        Set-Content -LiteralPath $script:Sidecar -Value 'good'
+    It 'conserve un fichier de flux existant si ffmpeg échoue' {
+        Set-Content -LiteralPath $script:StreamFile -Value 'good'
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)
             $script:FfmpegOut = $Arguments[-1]
@@ -285,10 +285,10 @@ Describe 'Get-MediaStream extract failure' {
             return 1
         }
         Get-MediaStream -MediaFile $script:Mkv -StreamType Subtitle -Language fra -Force
-        Get-Content -LiteralPath $script:Sidecar | Should -Be 'good'
+        Get-Content -LiteralPath $script:StreamFile | Should -Be 'good'
     }
 
-    It 'écrit FFmpeg dans TEMP (GUID + extension sidecar), pas à côté du MKV' {
+    It 'écrit FFmpeg dans TEMP (GUID + extension du fichier de flux), pas à côté du MKV' {
         $script:FfmpegOut = $null
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
             param($Arguments, $ExePath)
@@ -302,7 +302,7 @@ Describe 'Get-MediaStream extract failure' {
         $wantDir = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
         $gotDir | Should -Be $wantDir
         Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
-        Get-Content -LiteralPath $script:Sidecar | Should -Be 'ok'
+        Get-Content -LiteralPath $script:StreamFile | Should -Be 'ok'
     }
 
     It 'supprime le temporaire si Move-Item échoue' {
@@ -314,20 +314,20 @@ Describe 'Get-MediaStream extract failure' {
         }
         Mock -ModuleName Tetram.Media.Streams Move-Item { throw 'access denied' }
         { Get-MediaStream -MediaFile $script:Mkv -StreamType Subtitle -Language fra -Force } | Should -Not -Throw
-        Test-Path -LiteralPath $script:Sidecar | Should -BeFalse
+        Test-Path -LiteralPath $script:StreamFile | Should -BeFalse
         Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
     }
 
-    It 'refuse un dossier qui occupe le chemin sidecar' {
-        if (Test-Path -LiteralPath $script:Sidecar) {
-            Remove-Item -LiteralPath $script:Sidecar -Recurse -Force
+    It 'refuse un dossier qui occupe le chemin du fichier de flux' {
+        if (Test-Path -LiteralPath $script:StreamFile) {
+            Remove-Item -LiteralPath $script:StreamFile -Recurse -Force
         }
-        New-Item -ItemType Directory -Path $script:Sidecar | Out-Null
+        New-Item -ItemType Directory -Path $script:StreamFile | Out-Null
         Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { throw 'ne doit pas extraire' }
         Get-MediaStream -MediaFile $script:Mkv -StreamType Subtitle -Language fra -Force
         Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog
         Should -Invoke -ModuleName Tetram.Media.Streams Invoke-FFmpeg -Times 0
-        Get-ChildItem -LiteralPath $script:Sidecar -File | Should -BeNullOrEmpty
+        Get-ChildItem -LiteralPath $script:StreamFile -File | Should -BeNullOrEmpty
     }
 }
 

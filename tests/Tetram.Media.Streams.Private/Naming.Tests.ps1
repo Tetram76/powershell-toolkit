@@ -1,4 +1,4 @@
-# Étendre la suite autour du SUD Naming.ps1 (grammaire des noms de sidecars).
+# Étendre la suite autour du SUD Naming.ps1 (grammaire des noms de fichiers de flux).
 #
 # RepoRoot (deux `..`) : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
 # Import-Module (Join-Path $RepoRoot 'Tetram.Media.Streams.psd1') ; InModuleScope 'Tetram.Media.Streams' { … }
@@ -127,7 +127,7 @@ Describe 'ConvertTo / ConvertFrom-StreamFileName' {
             $p.AttachmentNameSanitized | Should -Be 'Arial_Bold'
         }
     }
-    It 'peluche n/flags/langue depuis la fin ; un jeton restant n''est pas un sidecar du MKV' {
+    It 'peluche n/flags/langue depuis la fin ; un jeton restant n''est pas un fichier de flux du MKV' {
         InModuleScope 'Tetram.Media.Streams' {
             $ok = ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.eng.forced.commentary.2.srt'
             $ok | Should -Not -BeNullOrEmpty

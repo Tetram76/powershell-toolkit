@@ -10,12 +10,12 @@ Round-trip **MKV uniquement** : extraire des pistes, éditer les **sous-titres**
 
 Deux commandes, FFmpeg uniquement (`-c copy`) :
 
-1. **Get-MediaStream** — extraire certains flux d’un `.mkv` vers des sidecars **à côté** du fichier (grammaire unique : langue, flags de disposition, collision). Vidéo et audio extraits = **référence** (timestamps hors sujet). Verbe `Get` (pas `Split`) : le MKV source n’est jamais modifié, seulement lu et copié.
+1. **Get-MediaStream** — extraire certains flux d’un `.mkv` vers des fichiers de flux **à côté** du fichier (grammaire unique : langue, flags de disposition, collision). Vidéo et audio extraits = **référence** (timestamps hors sujet). Verbe `Get` (pas `Split`) : le MKV source n’est jamais modifié, seulement lu et copié.
 2. **Merge-MediaSubtitle** — réinjecter **un seul** fichier sous-titre, donné explicitement en paramètre, dans **ce** MKV : `-Add` l’ajoute (échoue s’il matche déjà une piste), `-Update` remplace une piste existante (échoue si aucune ne matche), le reste du MKV (y compris vidéo/audio) est **conservé**.
 
-Une invocation de Merge = un fichier MKV **et** un seul fichier sous-titre. Pas de scan de dossier, pas de `-Recurse`, pas de masques, pas de reconstruction à partir des seuls sidecars.
+Une invocation de Merge = un fichier MKV **et** un seul fichier sous-titre. Pas de scan de dossier, pas de `-Recurse`, pas de masques, pas de reconstruction à partir des seuls fichiers de flux.
 
-Les polices, covers, chapitres, vidéo et audio du MKV restent grâce au merge-update : le round-trip sidecar ne concerne que les **sous-titres**.
+Les polices, covers, chapitres, vidéo et audio du MKV restent grâce au merge-update : le round-trip de fichiers de flux ne concerne que les **sous-titres**.
 
 ## Décisions validées
 
@@ -32,7 +32,7 @@ Les polices, covers, chapitres, vidéo et audio du MKV restent grâce au merge-u
 | Flags de disposition dans le nom | `default`, `forced`, `commentary`, `original`, `dub`, `hearing_impaired`, `visual_impaired` |
 | Index de collision | Calculé sur **toutes** les pistes du MKV **source**, même si le split est filtré |
 | Merge sortie | Toujours in-place sur `-MediaFile` (via temporaire) ; pas de `-Destination` |
-| Suppression de piste | Hors v1 (un sidecar manquant = keep) |
+| Suppression de piste | Hors v1 (un fichier de flux manquant = keep) |
 | Overwrite | `-Force` écrit ; sinon `ShouldContinue` ; refus = skip |
 | WhatIf | Pas d’écriture ; **la ligne FFmpeg est quand même affichée** (`Show-CommandLine` avant `ShouldProcess`, comme Reencode) |
 | Erreurs publiques | `Write-ErrorLog` puis return/continue ; pas d’exception vers l’appelant |
@@ -40,16 +40,16 @@ Les polices, covers, chapitres, vidéo et audio du MKV restent grâce au merge-u
 
 ## Hors scope (v1)
 
-- Extraction / réinjection de covers (`attached_pic`), pièces jointes (polices) et chapitres : keep dans le MKV, pas de sidecar.
+- Extraction / réinjection de covers (`attached_pic`), pièces jointes (polices) et chapitres : keep dans le MKV, pas de fichier de flux.
 - Conversion d’un autre conteneur (MP4, AVI, …) vers MKV.
-- Reconstruction d’un MKV à partir **uniquement** des sidecars (mux from-scratch).
+- Reconstruction d’un MKV à partir **uniquement** des fichiers de flux (mux from-scratch).
 - Suppression de piste.
 - Traitement d’un dossier / `-Recurse` / `-InputMasks` / stem sans fichier.
 - mkvmerge, manifeste JSON, conservation d’un ordre de pistes autre que : ordre du MKV source, puis ajouts par classe.
 - Réencodage, décalage temporel (`delay`), noms de piste (`title`) dans le nom de fichier.
 - Autres flags de disposition FFmpeg (`lyrics`, `karaoke`, `captions`, `descriptions`, `clean_effects`, …) : non représentés dans le nom ; perdus au replace, conservés sur les pistes keep.
 - Codecs A/V/S sans entrée dans la table (dont `mpeg4`, `mov_text`, `alac`, `pcm_*`, VobSub) : **split** échoue (`Write-ErrorLog` + return). **Mux** : keep depuis le MKV (pas d’échec). Tout flux ni vidéo, ni audio, ni sous-titre (`data`, covers, polices, chapitres, …) : skip au split, keep au mux.
-- Réinjection vidéo/audio depuis sidecar (timestamps élémentaires hors sujet : extraits pour référence seulement).
+- Réinjection vidéo/audio depuis fichier de flux (timestamps élémentaires hors sujet : extraits pour référence seulement).
 - Modification de `Tetram.Media.FFmpeg` / factorisation du probe Reencode.
 
 ## Architecture
@@ -86,7 +86,7 @@ Merge-MediaSubtitle -MediaFile <fichier.mkv> -Path <sous-titre>
 
 `Merge-MediaSubtitle` : `-MediaFile` (position 0) est obligatoire, **fichier `.mkv` existant**, accepte le pipeline (`ValueFromPipeline`, chaîne simple, comme `-Path` de `Test-MediaSimilarity`) — permet `Get-ChildItem *.mkv | Merge-MediaSubtitle -Path ... -Update`. `-Path` (position 1) est obligatoire, **fichier existant**, dont le **nom** doit se parser (grammaire ci-dessous) avec le basename du MKV et donner la classe `Subtitle` ; sinon `Write-ErrorLog` + return. `-LiteralPath` est un alias de `-Path` (même paramètre, même comportement — convention de nommage uniquement, pas de résolution de wildcard). `-Add` et `-Update` sont deux `ParameterSetName` distincts (switches, chacun `Mandatory` dans son set) : exactement l’un des deux doit être fourni, jamais les deux, jamais aucun (erreur de binding PowerShell native sinon).
 
-`-Force` est le switch d’overwrite des **fichiers de sortie** (sidecars au split, MKV cible au merge). Il n’est pas le `-Force` de `Write-InfoLog`.
+`-Force` est le switch d’overwrite des **fichiers de sortie** (fichiers de flux au split, MKV cible au merge). Il n’est pas le `-Force` de `Write-InfoLog`.
 
 ### Helpers privés (contrats)
 
@@ -115,7 +115,7 @@ Jetons de classe réservés (pas des flags de disposition) : `cover`, `chapters`
 - Source : `tags.language` ffprobe.
 - **Omise** si absente, vide, ou équivalente à indéterminée : `und`, `unk` (comparaison insensible à la casse).
 - Écriture : code tel quel (ISO 639 ou BCP-47, ex. `pt-BR`). Pas de normalisation `fre`↔`fra` ni `en`↔`eng`.
-- Parse (flux A/V/S) : depuis la **fin** du nom (suffixe `n`, puis flags, puis au plus un tag langue tel quel). Basename = celui du MKV, jamais du sidecar. S’il reste un jeton → ce n’était pas un sidecar. `dub` est un flag. `und` / `unk` = pas de langue.
+- Parse (flux A/V/S) : depuis la **fin** du nom (suffixe `n`, puis flags, puis au plus un tag langue tel quel). Basename = celui du MKV, jamais du fichier de flux. S’il reste un jeton → ce n’était pas un fichier de flux. `dub` est un flag. `und` / `unk` = pas de langue.
 
 ### Flags
 
@@ -131,7 +131,7 @@ Présents seulement quand le bit ffprobe correspondant vaut 1 (mot délimité pa
 | `hearing_impaired` | `hearing_impaired` | `hearing_impaired` |
 | `visual_impaired` | `visual_impaired` | `visual_impaired` |
 
-Parse : depuis la fin (insensible à la casse) : `n` ≥ 2, puis les flags (ordre indifférent), puis au plus un tag langue. Alias lecture seulement : `comment` et `comments` → `commentary`. Jeton restant → pas un sidecar de ce MKV.
+Parse : depuis la fin (insensible à la casse) : `n` ≥ 2, puis les flags (ordre indifférent), puis au plus un tag langue. Alias lecture seulement : `comment` et `comments` → `commentary`. Jeton restant → pas un fichier de flux de ce MKV.
 
 Écriture : toujours langue, puis les flags **présents** dans l’ordre du tableau, puis `n`.
 
@@ -157,7 +157,7 @@ Le parse commence par l’extension (allowlist). Selon la classe :
 | Pièce jointe (police, etc.) | `.ttf`, `.otf`, `.ttc`, `.woff`, `.woff2`, `.bin` | pas de langue / flags ; tous les jetons restants (sauf n) = nom d’origine sanitisé, recollés par `.` |
 | Chapitres | `.ffmeta` **et** jeton réservé `chapters` | `chapters` — pas de langue / flags / n |
 
-Les conteneurs (`.mkv`, `.mp4`, `.avi`, `.mov`, `.webm`, `.m4v`, `.wmv`, `.flv`, `.mpeg`, `.mpg`, `.ts`) ne sont **jamais** des sidecars.
+Les conteneurs (`.mkv`, `.mp4`, `.avi`, `.mov`, `.webm`, `.m4v`, `.wmv`, `.flv`, `.mpeg`, `.mpg`, `.ts`) ne sont **jamais** des fichiers de flux.
 
 ### Sanitisation des noms d’attachement
 
@@ -165,7 +165,7 @@ Caractères interdits Windows / séparateur `.` de grammaire : remplacés par `_
 
 ## Carte codec → extension
 
-Copie uniquement. Codec A/V/S absent de la table → split **échoue** (`Write-ErrorLog` + return, aucun sidecar) ; merge **conserve** la piste telle quelle (`Add-UnmappedKeepDescriptors`, map depuis l'input 0, pas de sidecar). Pas de fichier élémentaire « fourre-tout ». Flux hors A/V/S : skip au split, keep au merge.
+Copie uniquement. Codec A/V/S absent de la table → split **échoue** (`Write-ErrorLog` + return, aucun fichier de flux) ; merge **conserve** la piste telle quelle (`Add-UnmappedKeepDescriptors`, map depuis l'input 0, pas de fichier de flux). Pas de fichier élémentaire « fourre-tout ». Flux hors A/V/S : skip au split, keep au merge.
 
 | Codec ffprobe (`codec_name`) | Ext | Classe |
 |---|---|---|
@@ -192,24 +192,24 @@ Copie uniquement. Codec A/V/S absent de la table → split **échoue** (`Write-E
 | `hdmv_pgs_subtitle` | `.sup` | Sous-titres |
 | `mpeg4`, `mov_text`, `alac`, `pcm_*`, `dvd_subtitle`, `dvb_subtitle`, autres A/V/S | non mappé (split : échec ; mux : keep MKV) | — |
 
-Pièces jointes (`codec_type` = `attachment`) : classe et extension calculées en interne (`tags.filename` / mime ; défaut `.bin`) pour le mapping de préservation au merge, mais **jamais extraites en sidecar** par `Get-MediaStream` (qui ne sélectionne que Video/Audio/Subtitle) ; toujours conservées depuis le MKV source au merge.
+Pièces jointes (`codec_type` = `attachment`) : classe et extension calculées en interne (`tags.filename` / mime ; défaut `.bin`) pour le mapping de préservation au merge, mais **jamais extraites en fichier de flux** par `Get-MediaStream` (qui ne sélectionne que Video/Audio/Subtitle) ; toujours conservées depuis le MKV source au merge.
 
-Chapitres : présence d’entrées `chapters` dans ffprobe → détectée en interne pour le mapping de préservation, mais **jamais extraits en sidecar `.ffmeta`** par `Get-MediaStream` ; toujours conservés depuis le MKV source au merge. La grammaire de nommage (`.ffmeta` + jeton `chapters`) reste définie côté `Naming.ps1` mais n’est produite/consommée par aucune des deux commandes.
+Chapitres : présence d’entrées `chapters` dans ffprobe → détectée en interne pour le mapping de préservation, mais **jamais extraits en fichier de flux `.ffmeta`** par `Get-MediaStream` ; toujours conservés depuis le MKV source au merge. La grammaire de nommage (`.ffmeta` + jeton `chapters`) reste définie côté `Naming.ps1` mais n’est produite/consommée par aucune des deux commandes.
 
 ## Flux — Get-MediaStream
 
 1. Résoudre ffmpeg/ffprobe ; échec → `Write-ErrorLog` + return.
 2. Fichier existant, extension `.mkv` (insensible à la casse) ; sinon log + return. Le chemin est ensuite résolu via le provider (`Resolve-Path -LiteralPath`) : `~` et lecteurs PS deviennent un chemin filesystem, contrairement à `GetFullPath`.
 3. ffprobe JSON (`-show_format -show_streams -show_chapters -of json`). JSON invalide ou vide → log + return.
-4. Codec A/V/S absent de la table → `Write-ErrorLog` + return (aucun sidecar), même si `-StreamType` / `-Language` l’aurait exclu. Flux hors A/V/S (`data`, attachment, …) : ignorés, pas un échec.
+4. Codec A/V/S absent de la table → `Write-ErrorLog` + return (aucun fichier de flux), même si `-StreamType` / `-Language` l’aurait exclu. Flux hors A/V/S (`data`, attachment, …) : ignorés, pas un échec.
 5. Construire les descripteurs, **attribuer les index de collision sur l’ensemble du MKV**, puis filtrer :
    - `-StreamType` : si omis, Video + Audio + Subtitle. `attached_pic` n’est **jamais** extrait (classe Cover, keep mux).
    - `-Language` : comparaison insensible à la casse sur le code **tel que dans le fichier**. Les flux sans langue (indéterminés) **ne matchent pas** un filtre `-Language`. Chapitres et pièces jointes **ignorent** `-Language`.
-6. Pour chaque descripteur retenu : calculer le chemin sidecar (même dossier que le MKV).
-   - Si la cible existe et n’est pas un fichier (dossier nommé comme le sidecar) : `Write-ErrorLog` + skip (sinon `Move-Item` rangerait le fichier dans le dossier).
+6. Pour chaque descripteur retenu : calculer le chemin du fichier de flux (même dossier que le MKV).
+   - Si la cible existe et n’est pas un fichier (dossier nommé comme le fichier de flux) : `Write-ErrorLog` + skip (sinon `Move-Item` rangerait le fichier dans le dossier).
    - Si la cible est un fichier : `-WhatIf` → pas de prompt, on affiche quand même la commande FFmpeg prévue ; exécution réelle → `-Force` ou `ShouldContinue` ; refus → skip + `Write-InfoLog`.
-   - `Show-CommandLine` puis `ShouldProcess` puis `ffmpeg` vers un temporaire dans le dossier TEMP (`{guid}{ext}` sidecar, ex. `{TEMP}\{guid}.srt`). Succès → `Move-Item` vers le sidecar ; échec → suppression du temporaire. Le temporaire du **merge** est `{TEMP}\{guid}.mkv` + `-f matroska`. Pas de voisin `.tmp` du MKV (Merge le prendrait pour un sidecar).
-7. Un flux en erreur FFmpeg : `Write-ErrorLog`, **continuer** les autres ; aucun sidecar partiel laissé.
+   - `Show-CommandLine` puis `ShouldProcess` puis `ffmpeg` vers un temporaire dans le dossier TEMP (`{guid}{ext}` du fichier de flux, ex. `{TEMP}\{guid}.srt`). Succès → `Move-Item` vers le fichier de flux ; échec → suppression du temporaire. Le temporaire du **merge** est `{TEMP}\{guid}.mkv` + `-f matroska`. Pas de voisin `.tmp` du MKV (Merge le prendrait pour un fichier de flux).
+7. Un flux en erreur FFmpeg : `Write-ErrorLog`, **continuer** les autres ; aucun fichier de flux partiel laissé.
 8. Aucun flux retenu après filtre : `Write-InfoLog` (pas une erreur).
 
 Le MKV d’origine n’est pas modifié par le split.
@@ -220,7 +220,7 @@ Le MKV d’origine n’est pas modifié par le split.
 
 `-Path` (alias `-LiteralPath`) = le fichier sous-titre à injecter, donné **explicitement** par l’appelant : pas de scan de dossier, pas de collecte automatique. Basename = nom du MKV sans extension. Le **nom** du fichier `-Path` (pas son dossier, qui peut être n’importe où) doit se parser avec ce basename via la grammaire (langue, flags, index de collision) et donner la classe `Subtitle` ; sinon `Write-ErrorLog` + return. `-Path` doit exister (fichier).
 
-Codec A/V/S hors table → keep (`-map 0:<index>`), pas d’échec au mux. Tout flux ni vidéo, ni audio, ni sous-titre : keep, jamais sidecar.
+Codec A/V/S hors table → keep (`-map 0:<index>`), pas d’échec au mux. Tout flux ni vidéo, ni audio, ni sous-titre : keep, jamais fichier de flux.
 
 ### Sortie
 
@@ -246,18 +246,18 @@ Ceci élimine l’ambiguïté : le nom de fichier (langue/flags/index) ne fait q
 
 ### Remap (replace / add / keep)
 
-Entrée 0 = le MKV source. Entrée 1 = le sidecar `-Path` (uniquement s’il est retenu, cf. ci-dessus).
+Entrée 0 = le MKV source. Entrée 1 = le fichier de flux `-Path` (uniquement s’il est retenu, cf. ci-dessus).
 
 Pour chaque piste du MKV (ordre ffprobe) :
 
-- Piste **sous-titre** qui matche `-Path` (replace retenu) → mapper le sidecar.
+- Piste **sous-titre** qui matche `-Path` (replace retenu) → mapper le fichier de flux.
 - Toute autre piste (vidéo, audio, sous-titre non matchée, keep) → toujours **keep**.
 
-Si l’action retenue est **add** : le sidecar est mappé en plus, après les pistes d’origine.
+Si l’action retenue est **add** : le fichier de flux est mappé en plus, après les pistes d’origine.
 
 Chapitres : toujours conservés depuis le MKV (hors scope de `-Path`, qui est toujours un sous-titre).
 
-Chaque piste **issue du sidecar** (replace ou add) reçoit **explicitement** :
+Chaque piste **issue du fichier de flux** (replace ou add) reçoit **explicitement** :
 
 - `-metadata:s:<type>:<i> language=<code>` si langue présente, sinon `language=und`
 - `-disposition:<type>:<i>` : `0` si aucun flag, sinon les noms FFmpeg du tableau joints par `+` (ex. `default+comment+hearing_impaired`). Le jeton fichier `commentary` devient `comment` côté FFmpeg.
@@ -286,7 +286,7 @@ Livrable **complet**, généré/tenu via `tools/New-HelpMarkdown.ps1` (découver
 - Synopsis, description (round-trip MKV, grammaire, collision source, replace/add/keep, contrat `-Add`/`-Update`).
 - Tous les paramètres, y compris WhatIf / Confirm / Force / Add / Update / Path.
 - Exemples : split `-StreamType Subtitle -Language fra` ; merge `-Update` (remplace une piste existante) ; merge `-Add` (ajoute un `.srt` posé à la main) ; `-WhatIf` (la commande FFmpeg s’affiche).
-- Notes : le MKV n’est pas un sidecar ; le merge ne supprime pas de piste ; `-Path` n’est jamais supprimé par la commande ; `-Add`/`-Update` rejettent respectivement collision/absence ; codec A/V/S hors table arrête `Get-MediaStream` mais est conservé (keep) par `Merge-MediaSubtitle` ; hors A/V/S = keep dans les deux cas.
+- Notes : le MKV n’est pas un fichier de flux ; le merge ne supprime pas de piste ; `-Path` n’est jamais supprimé par la commande ; `-Add`/`-Update` rejettent respectivement collision/absence ; codec A/V/S hors table arrête `Get-MediaStream` mais est conservé (keep) par `Merge-MediaSubtitle` ; hors A/V/S = keep dans les deux cas.
 
 Commentaires d’aide `.EXTERNALHELP Tetram.Media.Streams-Help.xml` sur les deux fonctions exportées.
 
