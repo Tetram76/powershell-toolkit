@@ -1,28 +1,36 @@
 Set-StrictMode -Version 3.0
 
+function Get-StreamsFlippedCasePath {
+    param([string] $Path)
+    $dir = Split-Path -Parent $Path
+    $name = Split-Path -Leaf $Path
+    if (-not $name) { return $null }
+    $chars = $name.ToCharArray()
+    for ($i = 0; $i -lt $chars.Length; $i++) {
+        $c = $chars[$i]
+        if (-not [char]::IsLetter($c)) { continue }
+        $chars[$i] = if ([char]::IsUpper($c)) { [char]::ToLowerInvariant($c) } else { [char]::ToUpperInvariant($c) }
+        $flipped = -join $chars
+        if (-not $dir) { return $flipped }
+        return (Join-Path $dir $flipped)
+    }
+    return $null
+}
+
 function Test-StreamsDirectoryCaseSensitive {
-    param([string] $Directory)
-    $id = [guid]::NewGuid().ToString('N')
-    $lower = Join-Path $Directory "a$id.tmp"
-    $upper = Join-Path $Directory "A$id.tmp"
-    try {
-        [IO.File]::WriteAllBytes($lower, [byte[]]@())
-        # Exists(upper) vrai ⇔ le FS a replié la casse sur le même fichier.
-        return -not [IO.File]::Exists($upper)
-    }
-    catch {
-        return -not $IsWindows
-    }
-    finally {
-        if ([IO.File]::Exists($lower)) {
-            try { [IO.File]::Delete($lower) } catch { }
-        }
-    }
+    param([Parameter(Mandatory)][string] $ExistingPath)
+    $flipped = Get-StreamsFlippedCasePath -Path $ExistingPath
+    if (-not $flipped) { return -not $IsWindows }
+    if (-not (Test-Path -LiteralPath $flipped)) { return $true }
+    # Get-Item.FullName = casse disque ; GetFullPath garderait la casse demandée.
+    $a = (Get-Item -LiteralPath $ExistingPath).FullName
+    $b = (Get-Item -LiteralPath $flipped).FullName
+    return -not [string]::Equals($a, $b, [StringComparison]::Ordinal)
 }
 
 function Get-StreamsNameComparison {
-    param([string] $Directory)
-    if (Test-StreamsDirectoryCaseSensitive -Directory $Directory) {
+    param([string] $ExistingPath)
+    if ($ExistingPath -and (Test-StreamsDirectoryCaseSensitive -ExistingPath $ExistingPath)) {
         return [StringComparison]::Ordinal
     }
     return [StringComparison]::OrdinalIgnoreCase
@@ -33,13 +41,24 @@ function Get-SidecarFiles {
         [Parameter(Mandatory)][string] $Directory,
         [Parameter(Mandatory)][string] $Basename,
         [string[]] $ExcludePath = @(),
-        [Nullable[StringComparison]] $NameComparison
+        [Nullable[StringComparison]] $NameComparison,
+        [string] $ExistingPath
     )
-    $cmp = if ($null -ne $NameComparison) { [StringComparison]$NameComparison } else { Get-StreamsNameComparison -Directory $Directory }
     $exclude = @()
     foreach ($p in @($ExcludePath)) {
         if ($p) { $exclude += [IO.Path]::GetFullPath($p) }
     }
+    $cmp = $NameComparison
+    if ($null -eq $cmp) {
+        $probe = $ExistingPath
+        if (-not $probe) {
+            foreach ($e in $exclude) {
+                if ($e -and (Test-Path -LiteralPath $e -PathType Leaf)) { $probe = $e; break }
+            }
+        }
+        $cmp = Get-StreamsNameComparison -ExistingPath $probe
+    }
+    else { $cmp = [StringComparison]$cmp }
     $out = @()
     foreach ($f in @(Get-ChildItem -LiteralPath $Directory -File -ErrorAction SilentlyContinue)) {
         $full = [IO.Path]::GetFullPath($f.FullName)

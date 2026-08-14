@@ -54,6 +54,22 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
             $sides.Count | Should -Be 0
         }
     }
+    It 'sonde la casse via le MKV existant sans créer de fichier' {
+        $dir = Join-Path $TestDrive 'probe'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $mkv = Join-Path $dir 'film.mkv'
+        New-Item -ItemType File -Path $mkv | Out-Null
+        New-Item -ItemType File -Path (Join-Path $dir 'film.eng.srt') | Out-Null
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv } {
+            param($Dir, $Mkv)
+            $before = @(Get-ChildItem -LiteralPath $Dir -File | ForEach-Object Name | Sort-Object)
+            $null = Test-StreamsDirectoryCaseSensitive -ExistingPath $Mkv
+            $null = Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv) -ExistingPath $Mkv
+            Get-ChildItem -LiteralPath $Dir -Filter '*.tmp' -File | Should -BeNullOrEmpty
+            $after = @(Get-ChildItem -LiteralPath $Dir -File | ForEach-Object Name | Sort-Object)
+            $after | Should -Be $before
+        }
+    }
 }
 
 Describe 'Build-MergeFFmpegArgs unmapped keep' {

@@ -216,7 +216,7 @@ Le MKV d’origine n’est pas modifié par le split.
 
 `-LiteralPath` = le MKV à mettre à jour (fichier `.mkv` existant). Répertoire, stem, autre extension → `Write-ErrorLog` + return.
 
-Basename = nom sans extension, dossier = parent. Ramasser les fichiers du dossier dont le nom commence par `{basename}.` **ou** égalité `{basename}.{ext}`, extension dans l’allowlist sidecar, parse de grammaire réussi. La comparaison de casse du préfixe **suit le système de fichiers du dossier** (sensible ⇔ `Ordinal`, insensible ⇔ `OrdinalIgnoreCase` ; un répertoire NTFS marqué case-sensitive est traité comme sensible). **Toujours exclure** le MKV d’entrée, `-Destination`, et toute extension conteneur.
+Basename = nom sans extension, dossier = parent. Ramasser les fichiers du dossier dont le nom commence par `{basename}.` **ou** égalité `{basename}.{ext}`, extension dans l’allowlist sidecar, parse de grammaire réussi. La comparaison de casse du préfixe **suit le système de fichiers du dossier** (sensible ⇔ `Ordinal`, insensible ⇔ `OrdinalIgnoreCase`). Détection **sans écriture** : autre casse du MKV source déjà présent (`film.mkv` / `Film.mkv`) ; `Get-Item.FullName` pour savoir si c’est le même fichier. **Toujours exclure** le MKV d’entrée, `-Destination`, et toute extension conteneur.
 
 Aucun sidecar → `Write-ErrorLog` + return.
 

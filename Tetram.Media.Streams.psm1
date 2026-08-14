@@ -127,7 +127,7 @@ function Merge-MediaStream {
 
     $dir = Split-Path -Parent $src
     $base = [IO.Path]::GetFileNameWithoutExtension($src)
-    $sides = @(Get-SidecarFiles -Directory $dir -Basename $base -ExcludePath @($src, $dest))
+    $sides = @(Get-SidecarFiles -Directory $dir -Basename $base -ExcludePath @($src, $dest) -ExistingPath $src)
     if ($sides.Count -eq 0) {
         Write-ErrorLog "No sidecar files found for '$base'"
         return
