@@ -14,11 +14,11 @@ title: Tetram.Media.Reencode Module
 
 ## Description
 
-Réencodage / remux / contrôle de fichiers média, in-place. Une seule commande exportée. Importer le `.psd1` à la racine du dépôt (`Import-Module .\Tetram.Media.Reencode.psd1`). Consommateur principal de cette aide : agent IA — voir le contrat d'appel dans la page commande (modes exclusifs, skips, remplacement de l'original, absence d'objets pipeline).
+Réencodage / remux / contrôle de fichiers média, in-place. Une seule commande exportée. Importer le `.psd1` à la racine du dépôt (`Import-Module .\Tetram.Media.Reencode.psd1`). Consommateur principal de cette aide : agent IA — voir le contrat d'appel dans la page commande (modes exclusifs, skips, remplacement de l'original, `-CheckOnly` n'est pas un dry-run, absence d'objets pipeline).
 
 ## Tetram.Media.Reencode Cmdlets
 
 ### [Invoke-ReencodeMedia](Invoke-ReencodeMedia.md)
 
-Remplace in-place des fichiers média : réencodage HEVC/AV1, remux (`-Rewrite`) ou contrôle ffmpeg (`-CheckOnly`).
+Remplace in-place des fichiers média : réencodage HEVC/AV1, remux (`-Rewrite`) ou contrôle ffmpeg (`-CheckOnly`, pas un dry-run).
 

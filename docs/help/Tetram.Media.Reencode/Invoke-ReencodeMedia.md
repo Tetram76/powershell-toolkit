@@ -13,7 +13,7 @@ title: Invoke-ReencodeMedia
 
 ## SYNOPSIS
 
-Remplace in-place des fichiers média : réencodage HEVC/AV1, remux (`-Rewrite`) ou contrôle ffmpeg (`-CheckOnly`).
+Remplace in-place des fichiers média : réencodage HEVC/AV1, remux (`-Rewrite`) ou contrôle ffmpeg (`-CheckOnly`, pas un dry-run).
 
 ## SYNTAX
 
@@ -106,17 +106,21 @@ Choisir exactement un mode (jeux de paramètres exclusifs) :
 - défaut (ni `-KeepExtension` ni `-Rewrite` ni `-CheckOnly`) : réencodage vers `-OutputExtension` (défaut `.mkv`), codec `-VideoCodec` (défaut HEVC / libx265), qualité `-Quality` (défaut Medium).
 - `-KeepExtension` : même réencodage, mais l'extension source est conservée.
 - `-Rewrite` : remux uniquement (`-c:v`/`-c:a copy`). Pas de réencodage, pas d'upscale, pas de désentrelacement. Ne s'exécute que s'il y a des pistes à retirer.
-- `-CheckOnly` : décode vers le muxer `null`. Aucune écriture média.
+- `-CheckOnly` : intermédiaire entre `-WhatIf` et un réencodage. Vérifie que ffmpeg peut décoder (muxer `null`) sans réencoder, remuxer ni remplacer le fichier média. Ce n'est pas un dry-run : les horodatages NFO (`premiered`) sont posés sur le fichier et éventuellement les dossiers, comme sur un run normal.
 
 Choisir exactement une source : `-Path` (défaut `.`) ou `-ListFile` (fichier texte, une entrée par ligne). Un chemin préfixé par `+` est parcouru récursivement même sans `-Recurse`.
 
-Effet disque (hors `-CheckOnly` / `-WhatIf`) : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin. Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). Un écart de durée au-delà de max(1 s, 0,5 %) conserve l'original (le temporaire est jeté).
+Effet disque :
+
+- `-WhatIf` : aucune écriture. Seul mode sans effet disque.
+- `-CheckOnly` (sans `-WhatIf`) : pas de temporaire ffmpeg, pas de `Move-Item` / `Rename-Item` sur le média. Les timestamps NFO (`premiered`) sont malgré tout appliqués. Un échec ffmpeg est journalisé dans `reencode-errors.log`.
+- réencodage / remux : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin. Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). Un écart de durée au-delà de max(1 s, 0,5 %) conserve l'original (le temporaire est jeté).
 
 Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-Rewrite`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion`. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
 
 ffmpeg/ffprobe : `-FFMPEGPath` / `-FFPROBEPath`, sinon dossier `RecodeVideo/` à la racine du dépôt (build ffmpeg >= 9.0.1), sinon PATH. Ne pas utiliser `-FFToolsBase` pour pointer les binaires : le paramètre est validé mais ignoré.
 
-Pour une simulation sans écriture : `-WhatIf`. `ConfirmImpact` est Medium : pas de prompt sauf `-Confirm`.
+Pour une simulation sans aucune écriture : `-WhatIf` (pas `-CheckOnly`). `ConfirmImpact` est Medium : pas de prompt sauf `-Confirm`.
 
 ## EXAMPLES
 
@@ -136,9 +140,9 @@ Intention : normaliser un arbre vers MKV/HEVC qualité Medium. Les originaux son
 Invoke-ReencodeMedia -Path 'D:\Media' -Recurse
 ```
 
-### Example 3: Vérifier qu'ffmpeg peut décoder, sans réencoder
+### Example 3: Vérifier qu'ffmpeg peut décoder, sans retravailler le média
 
-Intention : diagnostiquer des fichiers illisibles. N'écrit pas de média ; les échecs vont dans `reencode-errors.log`.
+Intention : diagnostiquer des fichiers illisibles sans réencoder ni remuxer. Ce n'est pas un dry-run : les dates NFO (`premiered`) peuvent être écrites. Pour zéro effet disque, combiner `-WhatIf` (ou n'utiliser que `-WhatIf`). Les échecs ffmpeg vont dans `reencode-errors.log`.
 
 ```powershell
 Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -CheckOnly
@@ -264,16 +268,11 @@ HelpMessage: ''
 
 ### -CheckOnly
 
-Décode chaque fichier avec ffmpeg vers le muxer `null` pour vérifier qu'il est
-lisible. Aucun fichier de sortie n'est écrit. Jeu de paramètres exclusif.
-Décode chaque fichier avec ffmpeg vers le muxer `null` pour vérifier qu'il est
-lisible.
-Aucun fichier de sortie n'est écrit.
-Jeu de paramètres exclusif.
-Décode chaque fichier avec ffmpeg vers le muxer `null` pour vérifier qu'il est
-lisible.
-Aucun fichier de sortie n'est écrit.
-Jeu de paramètres exclusif.
+Intermédiaire entre `-WhatIf` et un réencodage : décode avec ffmpeg vers le
+muxer `null` pour vérifier que le fichier est lisible. Ne réencode pas, ne
+remuxe pas, ne remplace pas le fichier média. Ce n'est pas un dry-run : les
+horodatages NFO (`premiered`) sont quand même posés. Pour zéro effet disque,
+utiliser `-WhatIf`. Jeu de paramètres exclusif.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -1630,7 +1629,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 Prérequis : PowerShell 7+, module chargé depuis son `.psd1` (NestedModules `Utils\`). ffmpeg/ffprobe >= 9.0.1.
 
-Ne pas faire : passer `-FFToolsBase` pour changer les binaires ; combiner `-Path` et `-ListFile` ; combiner les modes `-CheckOnly` / `-Rewrite` / `-KeepExtension` ; attendre un code de retour par fichier (la commande continue).
+Ne pas faire : passer `-FFToolsBase` pour changer les binaires ; combiner `-Path` et `-ListFile` ; combiner les modes `-CheckOnly` / `-Rewrite` / `-KeepExtension` ; prendre `-CheckOnly` pour un dry-run (seul `-WhatIf` n'écrit rien) ; attendre un code de retour par fichier (la commande continue).
 
 Skip « No reencoding needed » / « No stream filtering needed » = déjà conforme, ce n'est pas une erreur.
 
