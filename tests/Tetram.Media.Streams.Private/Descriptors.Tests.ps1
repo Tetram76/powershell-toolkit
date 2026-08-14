@@ -49,6 +49,24 @@ Describe 'Get-MediaStreamDescriptors collision' {
             $sel[0].Class | Should -Be 'Subtitle'
         }
     }
+
+    It 'sans StreamType ni Language : Video/Audio/Subtitle, pas Cover' {
+        $probe = @{
+            streams = @(
+                @{ index = 0; codec_type = 'video'; codec_name = 'h264'; tags = @{}; disposition = @{ attached_pic = 0 } }
+                @{ index = 1; codec_type = 'video'; codec_name = 'mjpeg'; tags = @{}; disposition = @{ attached_pic = 1 } }
+                @{ index = 2; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fra' }; disposition = @{} }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $all = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $sel = @(Select-MediaStreamDescriptors -Descriptors $all)
+            $sel.Count | Should -Be 2
+            ($sel | ForEach-Object { $_.Class }) | Should -Be @('Video', 'Subtitle')
+        }
+    }
+
     It 'conserve CollisionIndex 2 si on ne sélectionne que la 2e piste eng' {
         $probe = @{
             streams = @(
