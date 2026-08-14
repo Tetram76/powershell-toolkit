@@ -54,6 +54,21 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
             $sides.Count | Should -Be 0
         }
     }
+    It 'trouve un sidecar dont seul la casse du basename diffère si le FS est insensible' {
+        $dir = Join-Path $TestDrive 'ci'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $mkv = Join-Path $dir 'film.mkv'
+        $side = Join-Path $dir 'Film.eng.srt'
+        New-Item -ItemType File -Path $mkv | Out-Null
+        New-Item -ItemType File -Path $side | Out-Null
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv } {
+            param($Dir, $Mkv)
+            if (-not $IsWindows) { return }
+            Get-StreamsNameComparison -ExistingPath $Mkv | Should -Be ([StringComparison]::OrdinalIgnoreCase)
+            $sides = @(Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv) -ExistingPath $Mkv)
+            $sides.Count | Should -Be 1
+        }
+    }
     It 'sonde la casse via le MKV existant sans créer de fichier' {
         $dir = Join-Path $TestDrive 'probe'
         New-Item -ItemType Directory -Path $dir | Out-Null

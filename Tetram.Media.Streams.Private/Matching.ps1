@@ -22,10 +22,12 @@ function Test-StreamsDirectoryCaseSensitive {
     $flipped = Get-StreamsFlippedCasePath -Path $ExistingPath
     if (-not $flipped) { return -not $IsWindows }
     if (-not (Test-Path -LiteralPath $flipped)) { return $true }
-    # Get-Item.FullName = casse disque ; GetFullPath garderait la casse demandée.
-    $a = (Get-Item -LiteralPath $ExistingPath).FullName
-    $b = (Get-Item -LiteralPath $flipped).FullName
-    return -not [string]::Equals($a, $b, [StringComparison]::Ordinal)
+    # Get-Item.FullName reflète le chemin demandé, pas la casse disque (NTFS).
+    $dir = Split-Path -Parent $ExistingPath
+    $flippedLeaf = Split-Path -Leaf $flipped
+    $hits = @(Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ceq $flippedLeaf })
+    return $hits.Count -gt 0
 }
 
 function Get-StreamsNameComparison {
