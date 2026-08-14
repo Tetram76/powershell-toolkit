@@ -89,6 +89,21 @@ Describe 'Get-MediaStreamDescriptors collision' {
             $u[0].codec_name | Should -Be 'mpeg4'
         }
     }
+    It 'ne liste pas un attached_pic comme codec A/V/S non mappé' {
+        $probe = @{
+            streams = @(
+                @{ index = 1; codec_type = 'video'; codec_name = 'webp'; tags = @{}; disposition = @{ attached_pic = 1 } }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            @(Get-UnmappedStreamDescriptors -Probe $Probe).Count | Should -Be 0
+            $all = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $all.Count | Should -Be 1
+            $all[0].Class | Should -Be 'Cover'
+        }
+    }
+
     It 'ne liste pas un flux data comme codec A/V/S non mappé' {
         $probe = @{
             streams = @(

@@ -110,6 +110,56 @@ Describe 'Split-MediaStream WhatIf' {
         Test-Path -LiteralPath (Join-Path $TestDrive 'unmapped.fra.srt') | Should -BeFalse
     }
 
+    It 'ignore un attached_pic et n''avorte pas le split' {
+        $mkv = Join-Path $TestDrive 'with-cover.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        Mock -ModuleName Tetram.Media.Streams Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Streams Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Streams Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Streams Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Streams Show-CommandLine {}
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { throw 'ne doit pas extraire sous WhatIf' }
+        $probe = @{
+            streams = @(
+                @{ index = 1; codec_type = 'video'; codec_name = 'webp'; tags = @{}; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0; attached_pic = 1 } }
+                @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fra' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0; attached_pic = 0 } }
+            )
+        }
+        Mock -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable { $probe }
+        Split-MediaStream -LiteralPath $mkv -StreamType Subtitle -Language fra -WhatIf
+        Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Streams Show-CommandLine -Times 1
+    }
+
+    It 'n''extrait pas un attached_pic h264 comme sidecar vidéo' {
+        $mkv = Join-Path $TestDrive 'cover-h264.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        Mock -ModuleName Tetram.Media.Streams Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Streams Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Streams Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Streams Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Streams Show-CommandLine {}
+        $script:ExtractMaps = @()
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            $script:ExtractMaps += ($Arguments -join ' ')
+            Set-Content -LiteralPath $Arguments[-1] -Value 'ok'
+            return 0
+        }
+        $probe = @{
+            streams = @(
+                @{ index = 0; codec_type = 'video'; codec_name = 'h264'; tags = @{ language = 'eng' }; disposition = @{ default = 1; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0; attached_pic = 0 } }
+                @{ index = 1; codec_type = 'video'; codec_name = 'h264'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0; attached_pic = 1 } }
+            )
+        }
+        Mock -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable { $probe }
+        Split-MediaStream -LiteralPath $mkv -StreamType Video -Language eng -Force
+        Should -Invoke -ModuleName Tetram.Media.Streams Invoke-FFmpeg -Times 1
+        ($script:ExtractMaps -join ' ') | Should -Match '-map 0:0'
+        ($script:ExtractMaps -join ' ') | Should -Not -Match '-map 0:1'
+        Test-Path -LiteralPath (Join-Path $TestDrive 'cover-h264.eng.2.h264') | Should -BeFalse
+    }
+
     It 'ignore un flux data et extrait les A/V/S' {
         $mkv = Join-Path $TestDrive 'with-data.mkv'
         Set-Content -LiteralPath $mkv -Value 'fake'

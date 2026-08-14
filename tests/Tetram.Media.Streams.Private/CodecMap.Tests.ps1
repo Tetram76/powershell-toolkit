@@ -35,6 +35,18 @@ Describe 'Get-ElementaryExtension' {
             $r.Class | Should -Be $Class
         }
     }
+    It 'classe tout attached_pic en Cover, hors table A/V' {
+        InModuleScope 'Tetram.Media.Streams' {
+            $h264 = Get-ElementaryExtension -CodecName 'h264' -CodecType 'video' -AttachedPic $true
+            $h264.Class | Should -Be 'Cover'
+            $webp = Get-ElementaryExtension -CodecName 'webp' -CodecType 'video' -AttachedPic $true
+            $webp.Class | Should -Be 'Cover'
+            $mjpeg = Get-ElementaryExtension -CodecName 'mjpeg' -CodecType 'video' -AttachedPic $true
+            $mjpeg.Class | Should -Be 'Cover'
+            $mjpeg.Extension | Should -Be '.jpg'
+        }
+    }
+
     It 'retourne null pour mpeg4, mov_text, alac et pcm' {
         InModuleScope 'Tetram.Media.Streams' {
             Get-ElementaryExtension -CodecName 'mpeg4' -CodecType 'video' -AttachedPic $false | Should -BeNullOrEmpty

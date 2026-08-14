@@ -8,8 +8,15 @@ function Get-ElementaryExtension {
     )
     $c = $CodecName.ToLowerInvariant()
     $t = $CodecType.ToLowerInvariant()
-    if ($AttachedPic -and $c -eq 'mjpeg') { return [pscustomobject]@{ Class = 'Cover'; Extension = '.jpg' } }
-    if ($AttachedPic -and $c -eq 'png') { return [pscustomobject]@{ Class = 'Cover'; Extension = '.png' } }
+    if ($AttachedPic) {
+        # Disposition cover : jamais une piste A/V, quel que soit le codec (webp, h264, …).
+        $ext = switch ($c) {
+            'mjpeg' { '.jpg' }
+            'png' { '.png' }
+            default { '.bin' }
+        }
+        return [pscustomobject]@{ Class = 'Cover'; Extension = $ext }
+    }
     $map = @{
         'h264' = @{ Class = 'Video'; Extension = '.h264' }
         'avc' = @{ Class = 'Video'; Extension = '.h264' }

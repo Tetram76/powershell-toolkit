@@ -172,8 +172,7 @@ Copie uniquement. Codec A/V/S absent de la table → split **et** merge **échou
 | `av1`, `vp8`, `vp9` | `.ivf` | Vidéo |
 | `mpeg2video` | `.m2v` | Vidéo |
 | `vc1` | `.vc1` | Vidéo |
-| `mjpeg` avec `attached_pic` | `.jpg` + jeton `cover` | Cover |
-| `png` avec `attached_pic` | `.png` + jeton `cover` | Cover |
+| `mjpeg` / `png` / tout autre codec **avec** `attached_pic` | (non extrait) | Cover : skip split, keep mux |
 | `aac` | `.aac` | Audio |
 | `ac3` | `.ac3` | Audio |
 | `eac3` | `.eac3` | Audio |
@@ -202,7 +201,7 @@ Chapitres : présence d’entrées `chapters` dans ffprobe → un seul `basename
 3. ffprobe JSON (`-show_format -show_streams -show_chapters -of json`). JSON invalide ou vide → log + return.
 4. Codec A/V/S absent de la table → `Write-ErrorLog` + return (aucun sidecar), même si `-StreamType` / `-Language` l’aurait exclu. Flux hors A/V/S (`data`, attachment, …) : ignorés, pas un échec.
 5. Construire les descripteurs, **attribuer les index de collision sur l’ensemble du MKV**, puis filtrer :
-   - `-StreamType` : si omis, tout. `Chapter` = sidecar ffmeta. `Attachment` = pièces jointes (pas les covers). `Video` = pistes vidéo **y compris** `attached_pic` (covers).
+   - `-StreamType` : si omis, Video + Audio + Subtitle. `attached_pic` n’est **jamais** extrait (classe Cover, keep mux).
    - `-Language` : comparaison insensible à la casse sur le code **tel que dans le fichier**. Les flux sans langue (indéterminés) **ne matchent pas** un filtre `-Language`. Chapitres et pièces jointes **ignorent** `-Language`.
 6. Pour chaque descripteur retenu : calculer le chemin sidecar (même dossier que le MKV).
    - Si la cible existe et n’est pas un fichier (dossier nommé comme le sidecar) : `Write-ErrorLog` + skip (sinon `Move-Item` rangerait le fichier dans le dossier).
