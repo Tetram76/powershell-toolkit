@@ -77,7 +77,78 @@ function Merge-MediaStream {
         [switch] $RemoveSidecars,
         [switch] $Force
     )
-    return
+    try { $ffmpeg = Get-FFmpegPath; $ffprobe = Get-FfprobePath }
+    catch { Write-ErrorLog $_.Exception.Message; return }
+
+    if (-not (Test-StreamsMkvPath -LiteralPath $LiteralPath)) {
+        Write-ErrorLog "Not a .mkv file: '$LiteralPath'"
+        return
+    }
+
+    $src = [IO.Path]::GetFullPath($LiteralPath)
+    if ($Destination) {
+        if ([IO.Path]::GetExtension($Destination) -ine '.mkv') {
+            Write-ErrorLog "Destination must be a .mkv path: '$Destination'"
+            return
+        }
+        $dest = [IO.Path]::GetFullPath($Destination)
+    }
+    else { $dest = $src }
+
+    $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $src
+    if ($null -eq $probe) {
+        Write-ErrorLog "Can't get media info for '$src'"
+        return
+    }
+
+    $dir = Split-Path -Parent $src
+    $base = [IO.Path]::GetFileNameWithoutExtension($src)
+    $sides = @(Get-SidecarFiles -Directory $dir -Basename $base -ExcludePath @($src, $dest))
+    if ($sides.Count -eq 0) {
+        Write-ErrorLog "No sidecar files found for '$base'"
+        return
+    }
+
+    $desc = @(Get-MediaStreamDescriptors -Probe $probe)
+    $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars $sides
+
+    if ((Test-Path -LiteralPath $dest -PathType Leaf) -and -not $WhatIfPreference) {
+        if (-not $Force -and -not $PSCmdlet.ShouldContinue($dest, 'Overwrite MKV')) {
+            Write-InfoLog "Skip existing '$dest'"
+            return
+        }
+    }
+
+    $temp = $dest + '.tmp'
+    $n = 2
+    while (Test-Path -LiteralPath $temp) {
+        $temp = $dest + ".tmp$n"
+        $n++
+    }
+
+    $ffmpegArgs = Build-MergeFFmpegArgs -MkvPath $src -Actions $act -OutputPath $temp
+    $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $dest
+    if ($WhatIfPreference) { return }
+    if (-not $ok) {
+        Write-ErrorLog "ffmpeg failed muxing '$dest'"
+        if (Test-Path -LiteralPath $temp) {
+            if ($PSCmdlet.ShouldProcess($temp, 'Cleanup temp')) { Remove-Item -LiteralPath $temp -Force }
+        }
+        return
+    }
+    if ($PSCmdlet.ShouldProcess($dest, "Move temp over '$dest'")) {
+        Move-Item -LiteralPath $temp -Destination $dest -Force
+    }
+    if ($RemoveSidecars) {
+        $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })
+        foreach ($p in $toRemove) {
+            if (-not $p) { continue }
+            if ($PSCmdlet.ShouldProcess($p, 'Remove sidecar')) {
+                try { Remove-Item -LiteralPath $p -ErrorAction Stop }
+                catch { Write-ErrorLog "Unable to delete sidecar '$p': $($_.Exception.Message)" }
+            }
+        }
+    }
 }
 
 Export-ModuleMember -Function Split-MediaStream, Merge-MediaStream

@@ -86,3 +86,58 @@ Describe 'Split-MediaStream WhatIf' {
         Test-Path -LiteralPath (Join-Path $TestDrive 'film.fra.srt') | Should -BeFalse
     }
 }
+
+Describe 'Merge-MediaStream' {
+    BeforeAll {
+        Import-Module -Name $script:ManifestStreams -Force -ErrorAction Stop
+    }
+    AfterAll {
+        Remove-Module -Name 'Tetram.Media.Streams' -Force -ErrorAction SilentlyContinue
+    }
+
+    BeforeEach {
+        $script:Work = Join-Path $TestDrive ('mw-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:Work | Out-Null
+        $script:Mkv = Join-Path $script:Work 'film.mkv'
+        Set-Content -LiteralPath $script:Mkv -Value 'fake-mkv'
+        $script:Srt = Join-Path $script:Work 'film.eng.srt'
+        Set-Content -LiteralPath $script:Srt -Value '1'
+        $script:Probe = @{
+            streams = @(
+                @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+            )
+        }
+        Mock -ModuleName Tetram.Media.Streams Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Streams Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable { $script:Probe }
+        Mock -ModuleName Tetram.Media.Streams Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Streams Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Streams Show-CommandLine {}
+    }
+
+    It 'WhatIf affiche la commande et ne touche pas aux sidecars' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { throw 'no ffmpeg' }
+        Merge-MediaStream -LiteralPath $script:Mkv -WhatIf
+        Should -Invoke -ModuleName Tetram.Media.Streams Show-CommandLine -Times 1
+        Test-Path -LiteralPath $script:Srt | Should -BeTrue
+        Test-Path -LiteralPath ($script:Mkv + '.tmp') | Should -BeFalse
+    }
+
+    It 'RemoveSidecars après succès supprime le srt' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            $out = $Arguments[-1]
+            Set-Content -LiteralPath $out -Value 'muxed'
+            return 0
+        }
+        Merge-MediaStream -LiteralPath $script:Mkv -Force -RemoveSidecars
+        Test-Path -LiteralPath $script:Srt | Should -BeFalse
+        Test-Path -LiteralPath $script:Mkv | Should -BeTrue
+    }
+
+    It 'RemoveSidecars ne supprime rien si ffmpeg échoue' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg { return 1 }
+        Merge-MediaStream -LiteralPath $script:Mkv -Force -RemoveSidecars
+        Test-Path -LiteralPath $script:Srt | Should -BeTrue
+    }
+}
