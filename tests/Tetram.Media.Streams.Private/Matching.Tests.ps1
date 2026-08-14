@@ -10,6 +10,55 @@ BeforeAll {
 }
 AfterAll { Remove-Module -Name 'Tetram.Media.Streams' -Force -ErrorAction SilentlyContinue }
 
+Describe 'Get-StreamsFlippedCasePath' {
+    It 'inverse la casse de tous les caracteres du nom, pas seulement le premier' {
+        $p = Join-Path $TestDrive 'film.mkv'
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ P = $p } {
+            param($P)
+            Split-Path -Leaf (Get-StreamsFlippedCasePath -Path $P) | Should -BeExactly 'FILM.MKV'
+        }
+    }
+    It 'ne produit pas de chemin alternatif si aucun caractere n''a de casse' {
+        $p = Join-Path $TestDrive ([char]0x5F71)
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ P = $p } {
+            param($P)
+            Get-StreamsFlippedCasePath -Path $P | Should -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'Test-StreamsDirectoryCaseSensitive' {
+    It 'declare le FS sensible si les deux casses sont deux inodes distincts' {
+        $dir = Join-Path $TestDrive 'two-ino'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $lower = Join-Path $dir 'film.mkv'
+        $upper = Join-Path $dir 'FILM.MKV'
+        New-Item -ItemType File -Path $lower | Out-Null
+        try { New-Item -ItemType File -Path $upper -ErrorAction Stop | Out-Null }
+        catch {
+            Set-ItResult -Skipped -Because 'le FS n''a pas accepte une 2e casse'
+            return
+        }
+        $names = @(Get-ChildItem -LiteralPath $dir -File | ForEach-Object Name)
+        $hasLower = @($names | Where-Object { $_ -ceq 'film.mkv' }).Count -eq 1
+        $hasUpper = @($names | Where-Object { $_ -ceq 'FILM.MKV' }).Count -eq 1
+        if (-not ($hasLower -and $hasUpper)) {
+            Set-ItResult -Skipped -Because 'une seule entree disque pour les deux casses'
+            return
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Lower = $lower } {
+            param($Lower)
+            $idHere = Get-StreamsFileIdentity -Path $Lower
+            $idOther = Get-StreamsFileIdentity -Path (Get-StreamsFlippedCasePath -Path $Lower)
+            $idHere | Should -Not -BeNullOrEmpty
+            $idOther | Should -Not -BeNullOrEmpty
+            ($idHere -cne $idOther) | Should -BeTrue
+            Test-StreamsDirectoryCaseSensitive -ExistingPath $Lower | Should -BeTrue
+            Get-StreamsNameComparison -ExistingPath $Lower | Should -Be ([StringComparison]::Ordinal)
+        }
+    }
+}
+
 Describe 'Get-SidecarFiles / Resolve-MergeActions' {
     It 'exclut film.mkv, remplace les deux eng, ajoute spa' {
         $dir = Join-Path $TestDrive 'm'

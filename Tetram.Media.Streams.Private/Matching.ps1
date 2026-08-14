@@ -6,15 +6,20 @@ function Get-StreamsFlippedCasePath {
     $name = Split-Path -Leaf $Path
     if (-not $name) { return $null }
     $chars = $name.ToCharArray()
+    $changed = $false
     for ($i = 0; $i -lt $chars.Length; $i++) {
         $c = $chars[$i]
-        if (-not [char]::IsLetter($c)) { continue }
-        $chars[$i] = if ([char]::IsUpper($c)) { [char]::ToLowerInvariant($c) } else { [char]::ToUpperInvariant($c) }
-        $flipped = -join $chars
-        if (-not $dir) { return $flipped }
-        return (Join-Path $dir $flipped)
+        $alt = if ([char]::IsUpper($c)) { [char]::ToLowerInvariant($c) } else { [char]::ToUpperInvariant($c) }
+        if ($alt -cne $c) {
+            $chars[$i] = $alt
+            $changed = $true
+        }
     }
-    return $null
+    # Aucune 2e casse possible (chiffres, CJK, …) : Ordinal et IgnoreCase coincident.
+    if (-not $changed) { return $null }
+    $flipped = -join $chars
+    if (-not $dir) { return $flipped }
+    return (Join-Path $dir $flipped)
 }
 
 function Get-StreamsFileIdentity {
@@ -68,7 +73,7 @@ function Test-StreamsDirectoryCaseSensitive {
     param([Parameter(Mandatory)][string] $ExistingPath)
     $flipped = Get-StreamsFlippedCasePath -Path $ExistingPath
     if (-not $flipped) { return -not $IsWindows }
-    # Noms : NTFS ouvre film.mkv et Film.mkv. Inode identique = insensible ; absent / autre fichier = sensible.
+    # Les deux casses peuvent coexister. Meme inode = insensible ; autre inode ou identite absente = sensible.
     $here = Get-StreamsFileIdentity -Path $ExistingPath
     $other = Get-StreamsFileIdentity -Path $flipped
     if ($null -eq $other) { return $true }
