@@ -76,10 +76,11 @@ function Get-MediaStreamDescriptors {
         $attached = ((Get-ProbeProperty $disp 'attached_pic') -eq 1)
         if ($codecType -eq 'attachment') {
             $fn = [string](Get-ProbeProperty $tags 'filename')
-            $ext = [IO.Path]::GetExtension($fn)
-            if (-not $ext) { $ext = '.bin' }
+            $ext = [IO.Path]::GetExtension($fn).ToLowerInvariant()
+            # .jpg/.xml etc. ne sont pas dans l'allowlist Attachment : le parse les prendrait pour Cover ou les ignorerait.
+            if (-not $ext -or $script:StreamsExtClass[$ext] -ne 'Attachment') { $ext = '.bin' }
             $base = [IO.Path]::GetFileNameWithoutExtension($fn)
-            $d = New-StreamDescriptorObject -Class 'Attachment' -Extension $ext.ToLowerInvariant() `
+            $d = New-StreamDescriptorObject -Class 'Attachment' -Extension $ext `
                 -AttachmentName $fn -AttachmentNameSanitized (ConvertTo-SanitizedAttachmentName $base) `
                 -StreamIndex $index -Codec $codecName -MimeType ([string](Get-ProbeProperty $tags 'mimetype'))
             $list.Add($d)

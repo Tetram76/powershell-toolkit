@@ -89,4 +89,27 @@ Describe 'Get-MediaStreamDescriptors collision' {
             $u[0].codec_name | Should -Be 'mpeg4'
         }
     }
+    It 'force .bin si l''extension d''attachement n''est pas dans l''allowlist' {
+        $probe = @{
+            streams = @(
+                @{ index = 1; codec_type = 'attachment'; codec_name = 'ttf'; tags = @{ filename = 'Arial.ttf'; mimetype = 'font/ttf' }; disposition = @{} }
+                @{ index = 2; codec_type = 'attachment'; codec_name = 'mjpeg'; tags = @{ filename = 'poster.jpg'; mimetype = 'image/jpeg' }; disposition = @{} }
+                @{ index = 3; codec_type = 'attachment'; codec_name = 'mjpeg'; tags = @{ filename = 'cover.jpg'; mimetype = 'image/jpeg' }; disposition = @{} }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $all = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $all.Count | Should -Be 3
+            $all[0].Extension | Should -Be '.ttf'
+            $all[0].AttachmentName | Should -Be 'Arial.ttf'
+            $all[1].Extension | Should -Be '.bin'
+            $all[1].AttachmentName | Should -Be 'poster.jpg'
+            (ConvertTo-StreamFileName -Basename 'film' -Descriptor $all[1]) | Should -Be 'film.poster.bin'
+            (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.poster.bin').Class | Should -Be 'Attachment'
+            $all[2].Extension | Should -Be '.bin'
+            (ConvertTo-StreamFileName -Basename 'film' -Descriptor $all[2]) | Should -Be 'film.cover.bin'
+            (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.cover.bin').Class | Should -Be 'Attachment'
+        }
+    }
 }
