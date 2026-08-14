@@ -23,24 +23,6 @@ function Remove-StreamsTempIfPresent {
     Remove-Item -LiteralPath $TempPath -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue
 }
 
-function Test-StreamsDirectoryWritable {
-    param([Parameter(Mandatory)][string] $Directory)
-    # GUID sans extension : ConvertFrom-StreamFileName l'ignore si la sonde reste.
-    if (-not (Test-Path -LiteralPath $Directory -PathType Container)) { return $false }
-    $probe = Join-Path $Directory ([guid]::NewGuid().ToString('n'))
-    try {
-        $fs = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-        $fs.Dispose()
-        return $true
-    }
-    catch { return $false }
-    finally {
-        if (Test-Path -LiteralPath $probe) {
-            Remove-Item -LiteralPath $probe -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue
-        }
-    }
-}
-
 function Invoke-StreamsFFmpeg {
     param(
         [Parameter(Mandatory)] $Cmdlet,
