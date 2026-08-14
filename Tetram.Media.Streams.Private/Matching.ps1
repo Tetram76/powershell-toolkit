@@ -1,35 +1,5 @@
 Set-StrictMode -Version 3.0
 
-function Get-SidecarFiles {
-    param(
-        [Parameter(Mandatory)][string] $Directory,
-        [Parameter(Mandatory)][string] $Basename,
-        [string[]] $ExcludePath = @()
-    )
-    $exclude = @()
-    foreach ($p in @($ExcludePath)) {
-        if ($p) { $exclude += [IO.Path]::GetFullPath($p) }
-    }
-    # v1 : toujours insensible. Pas de sonde inode / casse.
-    $cmp = [StringComparison]::OrdinalIgnoreCase
-    $out = @()
-    foreach ($f in @(Get-ChildItem -LiteralPath $Directory -File -ErrorAction SilentlyContinue)) {
-        $full = [IO.Path]::GetFullPath($f.FullName)
-        $excluded = $false
-        foreach ($e in $exclude) {
-            if ([string]::Equals($e, $full, $cmp)) { $excluded = $true; break }
-        }
-        if ($excluded) { continue }
-        $parsed = ConvertFrom-StreamFileName -Basename $Basename -FileName $f.Name -Comparison $cmp
-        if ($null -eq $parsed) { continue }
-        # Mux = sous-titres seulement ; vidéo/audio extraits au split restent des fichiers de référence.
-        if ($parsed.Class -ne 'Subtitle') { continue }
-        $parsed | Add-Member -NotePropertyName FullName -NotePropertyValue $full -Force
-        $out += $parsed
-    }
-    return $out
-}
-
 function Resolve-MergeActions {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][pscustomobject[]] $MkvDescriptors,

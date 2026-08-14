@@ -204,22 +204,6 @@ function Resolve-StreamsExistingPath {
     }
 }
 
-function Resolve-StreamsOutputPath {
-    param([string] $LiteralPath)
-    $existing = Resolve-StreamsExistingPath -LiteralPath $LiteralPath
-    if ($existing) {
-        # Resolve-Path réussit aussi sur un dossier `*.mkv` ; Move-Item y rangerait le .tmp.
-        if (Test-Path -LiteralPath $existing -PathType Leaf) { return $existing }
-        return $null
-    }
-    $parent = Split-Path -Parent $LiteralPath
-    $leaf = Split-Path -Leaf $LiteralPath
-    if (-not $parent) { $parent = '.' }
-    $parentResolved = Resolve-StreamsExistingPath -LiteralPath $parent
-    if (-not $parentResolved) { return $null }
-    return (Join-Path $parentResolved $leaf)
-}
-
 function Get-StreamsProbeHashtable {
     param(
         [Parameter(Mandatory)][string] $Ffprobe,

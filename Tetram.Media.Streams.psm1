@@ -18,95 +18,101 @@ function Test-StreamsUnmappedAvCodec {
     return $true
 }
 
-function Split-MediaStream {
+function Get-MediaStream {
     <#
 .EXTERNALHELP Tetram.Media.Streams-Help.xml
 #>
     [CmdletBinding(SupportsShouldProcess = $true, PositionalBinding = $false)]
     param(
-        [Parameter(Mandatory, Position = 0)]
-        [string] $LiteralPath,
+        [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+        [string] $MediaFile,
         [ValidateSet('Video', 'Audio', 'Subtitle')]
         [string[]] $StreamType,
         [string[]] $Language,
         [switch] $Force
     )
-    try { $ffmpeg = Get-FFmpegPath; $ffprobe = Get-FfprobePath }
-    catch { Write-ErrorLog $_.Exception.Message; return }
-
-    if (-not (Test-StreamsMkvPath -LiteralPath $LiteralPath)) {
-        Write-ErrorLog "Not a .mkv file: '$LiteralPath'"
-        return
+    begin {
+        $ffmpegAvailable = $true
+        try { $ffmpeg = Get-FFmpegPath; $ffprobe = Get-FfprobePath }
+        catch { Write-ErrorLog $_.Exception.Message; $ffmpegAvailable = $false }
     }
+    process {
+        if (-not $ffmpegAvailable) { return }
 
-    $src = Resolve-StreamsExistingPath -LiteralPath $LiteralPath
-    if (-not $src) {
-        Write-ErrorLog "Not a .mkv file: '$LiteralPath'"
-        return
-    }
+        if (-not (Test-StreamsMkvPath -LiteralPath $MediaFile)) {
+            Write-ErrorLog "Not a .mkv file: '$MediaFile'"
+            return
+        }
 
-    $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $src
-    if ($null -eq $probe) {
-        Write-ErrorLog "Can't get media info for '$src'"
-        return
-    }
+        $src = Resolve-StreamsExistingPath -LiteralPath $MediaFile
+        if (-not $src) {
+            Write-ErrorLog "Not a .mkv file: '$MediaFile'"
+            return
+        }
 
-    if (Test-StreamsUnmappedAvCodec -Probe $probe -SourcePath $src) { return }
+        $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $src
+        if ($null -eq $probe) {
+            Write-ErrorLog "Can't get media info for '$src'"
+            return
+        }
 
-    $all = @(Get-MediaStreamDescriptors -Probe $probe)
-    $sel = @(Select-MediaStreamDescriptors -Descriptors $all -StreamType $StreamType -Language $Language)
-    if ($sel.Count -eq 0) {
-        Write-InfoLog "No stream to extract from '$src'"
-        return
-    }
+        if (Test-StreamsUnmappedAvCodec -Probe $probe -SourcePath $src) { return }
 
-    $dir = Split-Path -Parent $src
-    $base = [IO.Path]::GetFileNameWithoutExtension($src)
-    foreach ($d in $sel) {
-        $name = ConvertTo-StreamFileName -Basename $base -Descriptor $d
-        $out = Join-Path $dir $name
-        if (Test-Path -LiteralPath $out) {
-            if (-not (Test-Path -LiteralPath $out -PathType Leaf)) {
-                # Move-Item vers un dossier range le fichier dedans : pas de sidecar mergeable.
-                Write-ErrorLog "Sidecar path is not a file: '$out'"
-                continue
-            }
-            if (-not $WhatIfPreference) {
-                if (-not $Force -and -not $PSCmdlet.ShouldContinue($out, 'Overwrite sidecar')) {
-                    Write-InfoLog "Skip existing sidecar '$out'"
+        $all = @(Get-MediaStreamDescriptors -Probe $probe)
+        $sel = @(Select-MediaStreamDescriptors -Descriptors $all -StreamType $StreamType -Language $Language)
+        if ($sel.Count -eq 0) {
+            Write-InfoLog "No stream to extract from '$src'"
+            return
+        }
+
+        $dir = Split-Path -Parent $src
+        $base = [IO.Path]::GetFileNameWithoutExtension($src)
+        foreach ($d in $sel) {
+            $name = ConvertTo-StreamFileName -Basename $base -Descriptor $d
+            $out = Join-Path $dir $name
+            if (Test-Path -LiteralPath $out) {
+                if (-not (Test-Path -LiteralPath $out -PathType Leaf)) {
+                    # Move-Item vers un dossier range le fichier dedans : pas de sidecar mergeable.
+                    Write-ErrorLog "Sidecar path is not a file: '$out'"
                     continue
                 }
+                if (-not $WhatIfPreference) {
+                    if (-not $Force -and -not $PSCmdlet.ShouldContinue($out, 'Overwrite sidecar')) {
+                        Write-InfoLog "Skip existing sidecar '$out'"
+                        continue
+                    }
+                }
             }
-        }
-        # -y sur le sidecar tronquerait un fichier déjà bon si FFmpeg échoue ensuite.
-        $temp = Get-StreamsUniqueTempPath -FinalPath $out
-        $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $src -OutPath $temp
-        try {
+            # -y sur le sidecar tronquerait un fichier déjà bon si FFmpeg échoue ensuite.
+            $temp = Get-StreamsUniqueTempPath -FinalPath $out
+            $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $src -OutPath $temp
             try {
-                $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out
+                try {
+                    $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out
+                }
+                catch {
+                    Write-ErrorLog $_.Exception.Message
+                    continue
+                }
+                if ($null -eq $ok) { continue }
+                if (-not $ok) {
+                    Write-ErrorLog "ffmpeg failed extracting '$out'"
+                    continue
+                }
+                if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
+                    Write-ErrorLog "Temp file missing after extract: '$temp'"
+                    continue
+                }
+                try {
+                    Move-Item -LiteralPath $temp -Destination $out -Force -ErrorAction Stop
+                }
+                catch {
+                    Write-ErrorLog $_.Exception.Message
+                }
             }
-            catch {
-                Write-ErrorLog $_.Exception.Message
-                continue
+            finally {
+                Remove-StreamsTempIfPresent -TempPath $temp
             }
-            if ($null -eq $ok) { continue }
-            if (-not $ok) {
-                Write-ErrorLog "ffmpeg failed extracting '$out'"
-                continue
-            }
-            if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
-                Write-ErrorLog "Temp file missing after extract: '$temp'"
-                continue
-            }
-            try {
-                Move-Item -LiteralPath $temp -Destination $out -Force -ErrorAction Stop
-            }
-            catch {
-                Write-ErrorLog $_.Exception.Message
-            }
-        }
-        finally {
-            Remove-StreamsTempIfPresent -TempPath $temp
         }
     }
 }
@@ -117,104 +123,106 @@ function Merge-MediaSubtitle {
 #>
     [CmdletBinding(SupportsShouldProcess = $true, PositionalBinding = $false)]
     param(
-        [Parameter(Mandatory, Position = 0)]
-        [string] $LiteralPath,
-        [string] $Destination,
-        [switch] $RemoveSidecars,
+        [Parameter(Mandatory, ValueFromPipeline, Position = 0)]
+        [string] $MediaFile,
+        [Parameter(Mandatory, Position = 1)]
+        [Alias('LiteralPath')]
+        [string] $Path,
+        [Parameter(Mandatory, ParameterSetName = 'Add')]
+        [switch] $Add,
+        [Parameter(Mandatory, ParameterSetName = 'Update')]
+        [switch] $Update,
         [switch] $Force
     )
-    try { $ffmpeg = Get-FFmpegPath; $ffprobe = Get-FfprobePath }
-    catch { Write-ErrorLog $_.Exception.Message; return }
-
-    if (-not (Test-StreamsMkvPath -LiteralPath $LiteralPath)) {
-        Write-ErrorLog "Not a .mkv file: '$LiteralPath'"
-        return
+    begin {
+        $ffmpegAvailable = $true
+        try { $ffmpeg = Get-FFmpegPath; $ffprobe = Get-FfprobePath }
+        catch { Write-ErrorLog $_.Exception.Message; $ffmpegAvailable = $false }
     }
+    process {
+        if (-not $ffmpegAvailable) { return }
 
-    $src = Resolve-StreamsExistingPath -LiteralPath $LiteralPath
-    if (-not $src) {
-        Write-ErrorLog "Not a .mkv file: '$LiteralPath'"
-        return
-    }
-    if ($Destination) {
-        if ([IO.Path]::GetExtension($Destination) -ine '.mkv') {
-            Write-ErrorLog "Destination must be a .mkv path: '$Destination'"
+        if (-not (Test-StreamsMkvPath -LiteralPath $MediaFile)) {
+            Write-ErrorLog "Not a .mkv file: '$MediaFile'"
             return
         }
-        $dest = Resolve-StreamsOutputPath -LiteralPath $Destination
-        if (-not $dest) {
-            Write-ErrorLog "Destination must be a .mkv path: '$Destination'"
-            return
-        }
-    }
-    else { $dest = $src }
 
-    $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $src
-    if ($null -eq $probe) {
-        Write-ErrorLog "Can't get media info for '$src'"
-        return
-    }
+        $src = Resolve-StreamsExistingPath -LiteralPath $MediaFile
+        if (-not $src) {
+            Write-ErrorLog "Not a .mkv file: '$MediaFile'"
+            return
+        }
 
-    $dir = Split-Path -Parent $src
-    $base = [IO.Path]::GetFileNameWithoutExtension($src)
-    $sides = @(Get-SidecarFiles -Directory $dir -Basename $base -ExcludePath @($src, $dest))
-    if ($sides.Count -eq 0) {
-        Write-ErrorLog "No sidecar files found for '$base'"
-        return
-    }
+        $sidecarFull = Resolve-StreamsExistingPath -LiteralPath $Path
+        if (-not $sidecarFull -or -not (Test-Path -LiteralPath $sidecarFull -PathType Leaf)) {
+            Write-ErrorLog "Subtitle path not found: '$Path'"
+            return
+        }
+        $base = [IO.Path]::GetFileNameWithoutExtension($src)
+        $sidecar = ConvertFrom-StreamFileName -Basename $base -FileName ([IO.Path]::GetFileName($sidecarFull))
+        if ($null -eq $sidecar -or $sidecar.Class -ne 'Subtitle') {
+            Write-ErrorLog "Not a subtitle sidecar for basename '$base': '$Path'"
+            return
+        }
+        $sidecar | Add-Member -NotePropertyName FullName -NotePropertyValue $sidecarFull -Force
 
-    $desc = @(Get-MediaStreamDescriptors -Probe $probe)
-    $desc = @(Add-UnmappedKeepDescriptors -Descriptors $desc -Probe $probe)
-    $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars $sides
+        $probe = Get-StreamsProbeHashtable -Ffprobe $ffprobe -LiteralPath $src
+        if ($null -eq $probe) {
+            Write-ErrorLog "Can't get media info for '$src'"
+            return
+        }
 
-    if ((Test-Path -LiteralPath $dest -PathType Leaf) -and -not $WhatIfPreference) {
-        if (-not $Force -and -not $PSCmdlet.ShouldContinue($dest, 'Overwrite MKV')) {
-            Write-InfoLog "Skip existing '$dest'"
-            return
-        }
-    }
+        $desc = @(Get-MediaStreamDescriptors -Probe $probe)
+        $desc = @(Add-UnmappedKeepDescriptors -Descriptors $desc -Probe $probe)
+        $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars @($sidecar)
 
-    $temp = Get-StreamsUniqueTempPath -FinalPath $dest
-    try {
-        $ffmpegArgs = Build-MergeFFmpegArgs -MkvPath $src -Actions $act -OutputPath $temp
-        try {
-            $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $dest
-        }
-        catch {
-            Write-ErrorLog $_.Exception.Message
+        if ($Add -and $act.Replaces.Count -gt 0) {
+            Write-ErrorLog "A matching subtitle track already exists; use -Update instead of -Add: '$Path'"
             return
         }
-        if ($null -eq $ok) { return }
-        if (-not $ok) {
-            Write-ErrorLog "ffmpeg failed muxing '$dest'"
+        if ($Update -and $act.Adds.Count -gt 0) {
+            Write-ErrorLog "No matching subtitle track to update; use -Add instead of -Update: '$Path'"
             return
         }
-        if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
-            Write-ErrorLog "Temp file missing after mux: '$temp'"
-            return
-        }
-        $moveSucceeded = $false
-        try {
-            Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
-            $moveSucceeded = $true
-        }
-        catch {
-            Write-ErrorLog $_.Exception.Message
-            return
-        }
-        if ($RemoveSidecars -and $moveSucceeded) {
-            $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })
-            foreach ($p in $toRemove) {
-                if (-not $p) { continue }
-                # FullName issu de Get-ChildItem : uniquement le fichier réellement muxé, casse du FS respectée.
-                try { Remove-Item -LiteralPath $p -ErrorAction Stop }
-                catch { Write-ErrorLog "Unable to delete sidecar '$p': $($_.Exception.Message)" }
+
+        if ((Test-Path -LiteralPath $src -PathType Leaf) -and -not $WhatIfPreference) {
+            if (-not $Force -and -not $PSCmdlet.ShouldContinue($src, 'Overwrite MKV')) {
+                Write-InfoLog "Skip existing '$src'"
+                return
             }
         }
-    }
-    finally {
-        Remove-StreamsTempIfPresent -TempPath $temp
+
+        $temp = Get-StreamsUniqueTempPath -FinalPath $src
+        try {
+            $ffmpegArgs = Build-MergeFFmpegArgs -MkvPath $src -Actions $act -OutputPath $temp
+            try {
+                $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $src
+            }
+            catch {
+                Write-ErrorLog $_.Exception.Message
+                return
+            }
+            if ($null -eq $ok) { return }
+            if (-not $ok) {
+                Write-ErrorLog "ffmpeg failed muxing '$src'"
+                return
+            }
+            if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
+                Write-ErrorLog "Temp file missing after mux: '$temp'"
+                return
+            }
+            try {
+                Move-Item -LiteralPath $temp -Destination $src -Force -ErrorAction Stop
+            }
+            catch {
+                Write-ErrorLog $_.Exception.Message
+                return
+            }
+        }
+        finally {
+            Remove-StreamsTempIfPresent -TempPath $temp
+        }
     }
 }
 
-Export-ModuleMember -Function Split-MediaStream, Merge-MediaSubtitle
+Export-ModuleMember -Function Get-MediaStream, Merge-MediaSubtitle

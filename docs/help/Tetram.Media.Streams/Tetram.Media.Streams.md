@@ -20,8 +20,8 @@ Round-trip MKV : extraire des sidecars (A/V/S) ; réinjecter uniquement les sous
 
 ### [Merge-MediaSubtitle](Merge-MediaSubtitle.md)
 
-Réinjecte les sous-titres sidecar dans le MKV (replace / add / keep).
+Réinjecte un sous-titre explicite dans le MKV (`-Add` ou `-Update`).
 
-### [Split-MediaStream](Split-MediaStream.md)
+### [Get-MediaStream](Get-MediaStream.md)
 
 Extrait des flux d'un MKV vers des sidecars à côté du fichier.

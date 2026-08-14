@@ -14,7 +14,7 @@
         '.\Utils\Tetram.Media.FFmpeg'
     )
     FunctionsToExport = @(
-        'Split-MediaStream'
+        'Get-MediaStream'
         'Merge-MediaSubtitle'
     )
     CmdletsToExport = @()
@@ -24,7 +24,7 @@
         PSData = @{
             Tags = @('ffmpeg', 'mkv', 'media', 'demux', 'subtitle', 'ps7')
             ReleaseNotes = @'
-- 1.0.0 : Split-MediaStream / Merge-MediaSubtitle (sous-titres muxés, WhatIf/Force).
+- 1.0.0 : Get-MediaStream / Merge-MediaSubtitle (sous-titres muxés, WhatIf/Force).
 '@
         }
     }
