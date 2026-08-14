@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" schema="maml" xmlns="http://msh">
+  <command:command>
+    <command:details>
+      <command:name>Remove-EmptyDirs</command:name>
+      <maml:description>
+        <maml:para>Supprime uniquement des répertoires vides. Ne touche pas aux fichiers. Un passage, ou boucle (`-DeepScan`) jusqu'à stabilité.</maml:para>
+      </maml:description>
+      <command:verb>Remove</command:verb>
+      <command:noun>EmptyDirs</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Importer `Tetram.Remove-Empty-Dirs.psd1` (PowerShell 7+). Cible : `-Path` doit être un dossier existant (défaut `.`).
+
+Fait : `Get-ChildItem -Directory -Recurse` sous la racine, du plus profond au plus proche, puis `Remove-Item` si le dossier n'a aucun enfant.
+
+Ne fait pas : supprimer des fichiers ; suivre/supprimer les reparse points (jonctions, liens symboliques) — ils ne sont jamais « vides » au sens de cette commande ; émettre d'objets pipeline.
+
+Sans `-DeepScan` : un seul passage. Un parent qui ne devient vide qu'après la suppression de ses enfants reste. Avec `-DeepScan` : nouveaux passages tant qu'un dossier a été retiré.
+
+Dry-run : `-WhatIf`. `ConfirmImpact` Medium : pas de prompt sauf `-Confirm`. Chemin invalide : message d'erreur console, retour immédiat, pas d'exception.
+
+Les échecs d'inspection ou de suppression sont écrits sur la console (`Write-ErrorLog`), pas dans le pipeline.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Remove-EmptyDirs</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>DeepScan</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>WhatIf</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Confirm</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="cf">
+        <maml:name>Confirm</maml:name>
+        <maml:description>
+          <maml:para>Prompts you for confirmation before running the cmdlet.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>DeepScan</maml:name>
+        <maml:description>
+          <maml:para>Répète le scan tant qu'un passage a supprimé au moins un dossier. Permet de
+retirer les parents qui ne deviennent vides qu'après la suppression de leurs
+enfants.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Répertoire racine à nettoyer. Doit exister et être un conteneur. Valeur par
+défaut : répertoire courant (`.`).</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="wi">
+        <maml:name>WhatIf</maml:name>
+        <maml:description>
+          <maml:para>Runs the command in a mode that only reports what would happen without performing the actions.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues />
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Prérequis : PowerShell 7+. La racine `-Path` n'est jamais supprimée : le scan ne liste que ses sous-dossiers.
+
+Ne pas faire : l'utiliser pour effacer des fichiers ; omettre `-WhatIf` sur un arbre inconnu ; conclure « rien à faire » sans `-DeepScan` alors que des parents sont devenus vides.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Simuler un nettoyage complet ---------</maml:title>
+        <maml:introduction>
+          <maml:para>Intention : lister ce qui serait effacé, y compris les parents qui ne se vident qu'après coup.</maml:para>
+          <maml:para>&#x80;</maml:para>
+          <maml:para>```powershell
+Remove-EmptyDirs -Path 'D:\Media' -DeepScan -WhatIf
+```</maml:para>
+        </maml:introduction>
+        <dev:code />
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Supprimer jusqu'à ce qu'il ne reste plus de dossier vide ---------</maml:title>
+        <maml:introduction>
+          <maml:para>Intention : run réel après un dry-run. Préférer `-DeepScan` sauf besoin d'un seul niveau de feuilles.</maml:para>
+          <maml:para>&#x80;</maml:para>
+          <maml:para>```powershell
+Remove-EmptyDirs -Path 'D:\Media' -DeepScan
+```</maml:para>
+        </maml:introduction>
+        <dev:code />
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 3: Un seul passage (feuilles vides seulement) ---------</maml:title>
+        <maml:introduction>
+          <maml:para>Intention : ne pas retirer les parents nouvellement vidés.</maml:para>
+          <maml:para>&#x80;</maml:para>
+          <maml:para>```powershell
+Remove-EmptyDirs -Path 'D:\Media'
+```</maml:para>
+        </maml:introduction>
+        <dev:code />
+        <dev:remarks />
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Invoke-ReencodeMedia</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+</helpItems>

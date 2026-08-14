@@ -74,6 +74,7 @@ function Remove-Empty-Dirs-Pass
 function Remove-EmptyDirs
 {
     <#
+.EXTERNALHELP Tetram.Remove-Empty-Dirs-Help.xml
 .SYNOPSIS
     Supprime les répertoires vides (PS7).
 #>
