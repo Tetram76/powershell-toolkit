@@ -10,7 +10,7 @@ Round-trip **MKV uniquement** : extraire des pistes, les éditer hors conteneur,
 
 Deux commandes, FFmpeg uniquement (`-c copy`) :
 
-1. **Split** — extraire certains flux d’un `.mkv` vers des sidecars **à côté** du fichier (grammaire unique : langue, forced, default, collision).
+1. **Split** — extraire certains flux d’un `.mkv` vers des sidecars **à côté** du fichier (grammaire unique : langue, flags de disposition, collision).
 2. **Merge** — réinjecter les sidecars dans **ce** MKV : un sidecar qui matche une piste la **remplace**, un sidecar sans match est **ajouté**, le reste du MKV est **conservé**.
 
 Une invocation = un fichier MKV. Pas de `-Recurse`, pas de masques, pas de reconstruction à partir des seuls sidecars.
@@ -27,6 +27,7 @@ Les polices, chapitres et pistes non extraites restent dans le MKV grâce au mer
 | Unité d’appel | Un fichier MKV ; pas de lot, pas de stem, pas de dossier |
 | Merge | **Toujours** update du MKV (pas de switch `-Update`, pas de mux « sidecars seuls ») |
 | Collision de noms | Suffixe `.2`, `.3`, … seulement si besoin ; **pas** de `.1` |
+| Flags de disposition dans le nom | `default`, `forced`, `commentary`, `original`, `dub`, `hearing_impaired`, `visual_impaired` |
 | Index de collision | Calculé sur **toutes** les pistes du MKV **source**, même si le split est filtré |
 | Merge sortie | `-Destination` optionnel ; sinon le MKV d’entrée (in-place via temporaire) |
 | Suppression de piste | Hors v1 (un sidecar manquant = keep) |
@@ -44,6 +45,7 @@ Les polices, chapitres et pistes non extraites restent dans le MKV grâce au mer
 - Traitement d’un dossier / `-Recurse` / `-InputMasks` / stem sans fichier.
 - mkvmerge, manifeste JSON, conservation d’un ordre de pistes autre que : ordre du MKV source, puis ajouts par classe.
 - Réencodage, décalage temporel (`delay`), noms de piste (`title`) dans le nom de fichier.
+- Autres flags de disposition FFmpeg (`lyrics`, `karaoke`, `captions`, `descriptions`, `clean_effects`, …) : non représentés dans le nom ; perdus au replace, conservés sur les pistes keep.
 - Codecs sans entrée dans la table (dont `mpeg4`, `mov_text`, VobSub) : skip + log au split ; ils restent dans le MKV au merge si on ne les a pas extraits.
 - Modification de `Tetram.Media.FFmpeg` / factorisation du probe Reencode.
 
@@ -97,30 +99,41 @@ FFmpeg / ffprobe : `Get-FFmpegPath` / `Get-FfprobePath`. Échec → catch au poi
 Écriture (ordre stable) :
 
 ```
-{basename}[.{langue}][.forced][.default][.{n}].{ext}
+{basename}[.{langue}][.default][.forced][.commentary][.original][.dub][.hearing_impaired][.visual_impaired][.{n}].{ext}
 ```
 
-Exemples : `film.h264`, `film.eng.aac`, `film.fra.forced.srt`, `film.eng.default.2.ac3`, `film.cover.jpg`, `film.Arial.ttf`, `film.ffmeta`.
+Exemples : `film.h264`, `film.eng.aac`, `film.fra.forced.srt`, `film.eng.commentary.aac`, `film.eng.hearing_impaired.srt`, `film.eng.default.2.ac3`, `film.cover.jpg`, `film.Arial.ttf`, `film.ffmeta`.
 
 ### Langue
 
 - Source : `tags.language` ffprobe.
 - **Omise** si absente, vide, ou équivalente à indéterminée : `und`, `unk` (comparaison insensible à la casse).
 - Écriture : code tel quel (typiquement ISO 639-2, 3 lettres). Pas de normalisation `fre`↔`fra` ni `en`↔`eng`.
-- Parse (flux A/V/S uniquement) : jeton de 2 ou 3 lettres qui n’est pas un flag réservé. `und` / `unk` ne sont jamais écrits et, s’ils apparaissent, sont traités comme « pas de langue ».
+- Parse (flux A/V/S uniquement) : jeton de 2 ou 3 lettres qui n’est **pas** un flag réservé. `dub` est un flag, jamais une langue. `und` / `unk` ne sont jamais écrits et, s’ils apparaissent, sont traités comme « pas de langue ».
 
 ### Flags
 
-- `.forced` si `disposition.forced == 1`.
-- `.default` si `disposition.default == 1`.
-- Présents seulement quand le flag est à 1 (norme MKVToolNix : mot délimité par `.`).
-- Parse : ordre des jetons `forced` / `default` / langue / `n` indifférent ; l’écriture suit toujours langue → forced → default → n.
+Présents seulement quand le bit ffprobe correspondant vaut 1 (mot délimité par `.`, norme MKVToolNix). Couverture A/V/S uniquement (pas les covers, pièces jointes, chapitres).
+
+| Jeton fichier (écriture) | Champ ffprobe `disposition.*` | Valeur FFmpeg `-disposition` |
+|---|---|---|
+| `default` | `default` | `default` |
+| `forced` | `forced` | `forced` |
+| `commentary` | `comment` | `comment` |
+| `original` | `original` | `original` |
+| `dub` | `dub` | `dub` |
+| `hearing_impaired` | `hearing_impaired` | `hearing_impaired` |
+| `visual_impaired` | `visual_impaired` | `visual_impaired` |
+
+Parse : d’abord les jetons réservés (insensible à la casse), puis `n` ≥ 2, puis la langue. Ordre des flags indifférent à la lecture. Alias acceptés à la lecture seulement : `comment` et `comments` → `commentary`.
+
+Écriture : toujours langue, puis les flags **présents** dans l’ordre du tableau, puis `n`.
 
 ### Collision
 
 Clé selon la classe :
 
-- A/V/S : `(classe, langue normalisée, forced, default, extension)`
+- A/V/S : `(classe, langue normalisée, ensemble des flags ci-dessus, extension)`
 - Cover : `(cover, extension)` — le jeton `cover` est fixe
 - Pièce jointe : `(attachment, nom d’origine sanitisé, extension)`
 - Chapitres : singleton (un seul `basename.ffmeta`)
@@ -133,7 +146,7 @@ Le parse commence par l’extension (allowlist). Selon la classe :
 
 | Classe | Extensions | Jetons |
 |---|---|---|
-| Vidéo / audio / sous-titres | voir table codec | langue, forced, default, n |
+| Vidéo / audio / sous-titres | voir table codec | langue, flags de disposition, n |
 | Cover | `.jpg`, `.jpeg`, `.png` **et** jeton réservé `cover` | `cover`, n optionnel — pas de langue |
 | Pièce jointe (police, etc.) | `.ttf`, `.otf`, `.ttc`, `.woff`, `.woff2`, `.bin` | pas de langue / flags ; tous les jetons restants (sauf n) = nom d’origine sanitisé, recollés par `.` |
 | Chapitres | `.ffmeta` | aucun jeton de piste ; le fichier entier est le sidecar chapitres |
@@ -226,7 +239,7 @@ Chapitres : si `basename.ffmeta` présent → remplace les chapitres ; sinon con
 Chaque piste **issue d’un sidecar** (replace ou add) reçoit **explicitement** :
 
 - `-metadata:s:<type>:<i> language=<code>` si langue présente, sinon `language=und`
-- `-disposition:<type>:<i>` : `0` par défaut, ou `default`, `forced`, `default+forced` selon les jetons
+- `-disposition:<type>:<i>` : `0` si aucun flag, sinon les noms FFmpeg du tableau joints par `+` (ex. `default+comment+hearing_impaired`). Le jeton fichier `commentary` devient `comment` côté FFmpeg.
 
 Les pistes **keep** conservent métadonnées et dispositions du MKV source (pas de réécriture).
 
@@ -271,7 +284,7 @@ Tag `Integration` pour tout appel au vrai FFmpeg (exclu du CI, cf. `Invoke-Tests
 | `Test-ModuleManifest` | OK |
 | Exports = Split + Merge uniquement | OK |
 | Split / merge sur non-`.mkv` | `Write-ErrorLog`, pas de throw |
-| Format : `eng` + forced + default + n | Nom et parse inverses |
+| Format : flags `commentary` / `hearing_impaired` / `dub` + `n` | Nom et parse inverses ; `comment` lu comme `commentary` |
 | Langue `und` / absente | Pas de jeton langue |
 | Collision 2 pistes `eng`+`.srt` | `.srt` et `.2.srt` |
 | Split filtré sur la 2ᵉ | Fichier `.2.srt` (index source) |
