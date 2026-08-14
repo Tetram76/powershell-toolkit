@@ -1,0 +1,92 @@
+# Étendre la suite autour de Descriptors.ps1 (probe → descripteurs + collision source).
+#
+# RepoRoot : (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+# Import-Module Tetram.Media.Streams.psd1 ; InModuleScope
+
+BeforeAll {
+    Set-StrictMode -Version Latest
+    $script:RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
+    Import-Module -Name (Join-Path $script:RepoRoot 'Tetram.Media.Streams.psd1') -Force -ErrorAction Stop
+}
+AfterAll { Remove-Module -Name 'Tetram.Media.Streams' -Force -ErrorAction SilentlyContinue }
+
+Describe 'Get-MediaStreamDescriptors collision' {
+    It 'numérote deux subrip eng 1 puis 2 dans l''ordre ffprobe' {
+        $probe = @{
+            streams = @(
+                @{ index = 0; codec_type = 'video'; codec_name = 'h264'; tags = @{}; disposition = @{ default = 1; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+                @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+                @{ index = 5; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $all = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $subs = @($all | Where-Object { $_.Class -eq 'Subtitle' })
+            $subs.Count | Should -Be 2
+            $subs[0].CollisionIndex | Should -Be 1
+            $subs[1].CollisionIndex | Should -Be 2
+            $subs[0].StreamIndex | Should -Be 3
+            $subs[1].StreamIndex | Should -Be 5
+            (ConvertTo-StreamFileName -Basename 'film' -Descriptor $subs[0]) | Should -Be 'film.eng.srt'
+            (ConvertTo-StreamFileName -Basename 'film' -Descriptor $subs[1]) | Should -Be 'film.eng.2.srt'
+        }
+    }
+    It 'filtre StreamType Subtitle et Language eng' {
+        $probe = @{
+            streams = @(
+                @{ index = 1; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fra' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+                @{ index = 2; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+                @{ index = 3; codec_type = 'audio'; codec_name = 'aac'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $all = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $sel = @(Select-MediaStreamDescriptors -Descriptors $all -StreamType @('Subtitle') -Language @('eng'))
+            $sel.Count | Should -Be 1
+            $sel[0].Language | Should -Be 'eng'
+            $sel[0].Class | Should -Be 'Subtitle'
+        }
+    }
+    It 'conserve CollisionIndex 2 si on ne sélectionne que la 2e piste eng' {
+        $probe = @{
+            streams = @(
+                @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+                @{ index = 5; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $all = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $second = $all | Where-Object { $_.StreamIndex -eq 5 }
+            $second.CollisionIndex | Should -Be 2
+            (ConvertTo-StreamFileName -Basename 'film' -Descriptor $second) | Should -Be 'film.eng.2.srt'
+        }
+    }
+    It 'ajoute un descripteur Chapter si chapters est non vide' {
+        $probe = @{
+            streams = @()
+            chapters = @(@{ id = 1; start_time = '0' })
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $all = @(Get-MediaStreamDescriptors -Probe $Probe)
+            @($all | Where-Object { $_.Class -eq 'Chapter' }).Count | Should -Be 1
+        }
+    }
+    It 'omet mpeg4 des mappés et le liste en unmapped' {
+        $probe = @{
+            streams = @(
+                @{ index = 0; codec_type = 'video'; codec_name = 'mpeg4'; tags = @{}; disposition = @{} }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            @(Get-MediaStreamDescriptors -Probe $Probe).Count | Should -Be 0
+            $u = @(Get-UnmappedStreamDescriptors -Probe $Probe)
+            $u.Count | Should -Be 1
+            $u[0].codec_name | Should -Be 'mpeg4'
+        }
+    }
+}
