@@ -82,33 +82,32 @@ function Split-MediaStream {
         $temp = Get-StreamsUniqueTempPath -FinalPath $out
         $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $src -OutPath $temp
         try {
-            $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out
-        }
-        catch {
-            Write-ErrorLog $_.Exception.Message
-            if (Test-Path -LiteralPath $temp) {
-                if ($PSCmdlet.ShouldProcess($temp, 'Cleanup temp')) { Remove-Item -LiteralPath $temp -Force }
-            }
-            continue
-        }
-        if (-not $ok) {
-            Write-ErrorLog "ffmpeg failed extracting '$out'"
-            if (Test-Path -LiteralPath $temp) {
-                if ($PSCmdlet.ShouldProcess($temp, 'Cleanup temp')) { Remove-Item -LiteralPath $temp -Force }
-            }
-            continue
-        }
-        if ($PSCmdlet.ShouldProcess($out, "Move temp over '$out'")) {
-            if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
-                Write-ErrorLog "Temp file missing after extract: '$temp'"
-                continue
-            }
             try {
-                Move-Item -LiteralPath $temp -Destination $out -Force -ErrorAction Stop
+                $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out
             }
             catch {
                 Write-ErrorLog $_.Exception.Message
+                continue
             }
+            if (-not $ok) {
+                Write-ErrorLog "ffmpeg failed extracting '$out'"
+                continue
+            }
+            if ($PSCmdlet.ShouldProcess($out, "Move temp over '$out'")) {
+                if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
+                    Write-ErrorLog "Temp file missing after extract: '$temp'"
+                    continue
+                }
+                try {
+                    Move-Item -LiteralPath $temp -Destination $out -Force -ErrorAction Stop
+                }
+                catch {
+                    Write-ErrorLog $_.Exception.Message
+                }
+            }
+        }
+        finally {
+            Remove-StreamsTempIfPresent -Cmdlet $PSCmdlet -TempPath $temp
         }
     }
 }
@@ -177,53 +176,51 @@ function Merge-MediaSubtitle {
     }
 
     $temp = Get-StreamsUniqueTempPath -FinalPath $dest
-
-    $ffmpegArgs = Build-MergeFFmpegArgs -MkvPath $src -Actions $act -OutputPath $temp
     try {
-        $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $dest
-    }
-    catch {
-        Write-ErrorLog $_.Exception.Message
-        return
-    }
-    if (-not $ok) {
-        Write-ErrorLog "ffmpeg failed muxing '$dest'"
-        if (Test-Path -LiteralPath $temp) {
-            if ($PSCmdlet.ShouldProcess($temp, 'Cleanup temp')) { Remove-Item -LiteralPath $temp -Force }
-        }
-        return
-    }
-    $moveSucceeded = $false
-    if ($PSCmdlet.ShouldProcess($dest, "Move temp over '$dest'")) {
-        if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
-            Write-ErrorLog "Temp file missing after mux: '$temp'"
-            return
-        }
+        $ffmpegArgs = Build-MergeFFmpegArgs -MkvPath $src -Actions $act -OutputPath $temp
         try {
-            Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
-            $moveSucceeded = $true
+            $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $dest
         }
         catch {
             Write-ErrorLog $_.Exception.Message
-            if (Test-Path -LiteralPath $temp) {
-                if ($PSCmdlet.ShouldProcess($temp, 'Cleanup temp')) { Remove-Item -LiteralPath $temp -Force }
-            }
             return
         }
-    }
-    elseif (-not $WhatIfPreference) {
-        return
-    }
-    if ($RemoveSidecars -and ($WhatIfPreference -or $moveSucceeded)) {
-        $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })
-        foreach ($p in $toRemove) {
-            if (-not $p) { continue }
-            # FullName issu de Get-ChildItem : uniquement le fichier réellement muxé, casse du FS respectée.
-            if ($PSCmdlet.ShouldProcess($p, 'Remove sidecar')) {
-                try { Remove-Item -LiteralPath $p -ErrorAction Stop }
-                catch { Write-ErrorLog "Unable to delete sidecar '$p': $($_.Exception.Message)" }
+        if (-not $ok) {
+            Write-ErrorLog "ffmpeg failed muxing '$dest'"
+            return
+        }
+        $moveSucceeded = $false
+        if ($PSCmdlet.ShouldProcess($dest, "Move temp over '$dest'")) {
+            if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
+                Write-ErrorLog "Temp file missing after mux: '$temp'"
+                return
+            }
+            try {
+                Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
+                $moveSucceeded = $true
+            }
+            catch {
+                Write-ErrorLog $_.Exception.Message
+                return
             }
         }
+        elseif (-not $WhatIfPreference) {
+            return
+        }
+        if ($RemoveSidecars -and ($WhatIfPreference -or $moveSucceeded)) {
+            $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })
+            foreach ($p in $toRemove) {
+                if (-not $p) { continue }
+                # FullName issu de Get-ChildItem : uniquement le fichier réellement muxé, casse du FS respectée.
+                if ($PSCmdlet.ShouldProcess($p, 'Remove sidecar')) {
+                    try { Remove-Item -LiteralPath $p -ErrorAction Stop }
+                    catch { Write-ErrorLog "Unable to delete sidecar '$p': $($_.Exception.Message)" }
+                }
+            }
+        }
+    }
+    finally {
+        Remove-StreamsTempIfPresent -Cmdlet $PSCmdlet -TempPath $temp
     }
 }
 

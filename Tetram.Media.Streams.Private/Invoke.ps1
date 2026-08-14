@@ -13,6 +13,19 @@ function Get-StreamsUniqueTempPath {
     return $temp
 }
 
+function Remove-StreamsTempIfPresent {
+    param(
+        [Parameter(Mandatory)] $Cmdlet,
+        [string] $TempPath
+    )
+    # Reencode : tout exit après FFmpeg (échec Move-Item, throw, Confirm refusé) laisse sinon un GUID dans TEMP.
+    if (-not $TempPath) { return }
+    if (-not (Test-Path -LiteralPath $TempPath)) { return }
+    if ($Cmdlet.ShouldProcess($TempPath, 'Cleanup temp')) {
+        Remove-Item -LiteralPath $TempPath -Force
+    }
+}
+
 function Invoke-StreamsFFmpeg {
     param(
         [Parameter(Mandatory)] $Cmdlet,

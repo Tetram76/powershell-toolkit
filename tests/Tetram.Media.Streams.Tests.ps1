@@ -170,6 +170,9 @@ Describe 'Split-MediaStream extract failure' {
         $script:Mkv = Join-Path $TestDrive 'film.mkv'
         Set-Content -LiteralPath $script:Mkv -Value 'fake'
         $script:Sidecar = Join-Path $TestDrive 'film.fra.srt'
+        if (Test-Path -LiteralPath $script:Sidecar) {
+            Remove-Item -LiteralPath $script:Sidecar -Recurse -Force
+        }
         $script:Probe = @{
             streams = @(
                 @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fra' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
@@ -230,6 +233,19 @@ Describe 'Split-MediaStream extract failure' {
         $gotDir | Should -Be $wantDir
         Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
         Get-Content -LiteralPath $script:Sidecar | Should -Be 'ok'
+    }
+
+    It 'supprime le temporaire si Move-Item échoue' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            $script:FfmpegOut = $Arguments[-1]
+            Set-Content -LiteralPath $Arguments[-1] -Value 'extracted'
+            return 0
+        }
+        Mock -ModuleName Tetram.Media.Streams Move-Item { throw 'access denied' }
+        { Split-MediaStream -LiteralPath $script:Mkv -StreamType Subtitle -Language fra -Force } | Should -Not -Throw
+        Test-Path -LiteralPath $script:Sidecar | Should -BeFalse
+        Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
     }
 
     It 'refuse un dossier qui occupe le chemin sidecar' {
@@ -384,6 +400,18 @@ Describe 'Merge-MediaSubtitle' {
         Mock -ModuleName Tetram.Media.Streams Invoke-StreamsFFmpeg { throw 'unexpected wrapper' }
         { Merge-MediaSubtitle -LiteralPath $script:Mkv -Force } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog
+    }
+
+    It 'supprime le temporaire si ffmpeg a écrit puis lève' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            $script:FfmpegOut = $Arguments[-1]
+            Set-Content -LiteralPath $Arguments[-1] -Value 'muxed'
+            throw 'unexpected wrapper'
+        }
+        { Merge-MediaSubtitle -LiteralPath $script:Mkv -Force } | Should -Not -Throw
+        Get-Content -LiteralPath $script:Mkv | Should -Be 'fake-mkv'
+        Test-Path -LiteralPath $script:FfmpegOut | Should -BeFalse
     }
 
     It 'muxe les sous-titres même si un codec audio n''est pas dans la table' {
