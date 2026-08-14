@@ -181,7 +181,8 @@ function ConvertFrom-StreamFileName {
 function Get-FfmpegDispositionValue {
     param([string[]] $Flags)
     $ordered = Get-StreamsOrderedFlags $Flags
-    if ($ordered.Count -eq 0) { return '0' }
+    # return unwraps empty @() to $null; StrictMode then rejects .Count
+    if ($null -eq $ordered -or @($ordered).Count -eq 0) { return '0' }
     $names = foreach ($tok in $ordered) {
         ($script:StreamsDispositionFlags | Where-Object { $_.FileToken -eq $tok } | Select-Object -First 1).FfmpegName
     }
