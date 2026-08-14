@@ -140,4 +140,22 @@ Describe 'Merge-MediaStream' {
         Merge-MediaStream -LiteralPath $script:Mkv -Force -RemoveSidecars
         Test-Path -LiteralPath $script:Srt | Should -BeTrue
     }
+
+    It 'RemoveSidecars ne supprime rien si Move-Item échoue' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            $out = $Arguments[-1]
+            Set-Content -LiteralPath $out -Value 'muxed'
+            return 0
+        }
+        Mock -ModuleName Tetram.Media.Streams Move-Item { throw 'access denied' }
+        { Merge-MediaStream -LiteralPath $script:Mkv -Force -RemoveSidecars } | Should -Not -Throw
+        Test-Path -LiteralPath $script:Srt | Should -BeTrue
+    }
+
+    It 'ne throw pas si Invoke-StreamsFFmpeg lève une exception' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-StreamsFFmpeg { throw 'unexpected wrapper' }
+        { Merge-MediaStream -LiteralPath $script:Mkv -Force } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Streams Write-ErrorLog
+    }
 }

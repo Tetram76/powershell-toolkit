@@ -103,6 +103,33 @@ function Get-MediaStreamDescriptors {
     return $arr
 }
 
+function Add-UnmappedKeepDescriptors {
+    param(
+        [AllowEmptyCollection()][pscustomobject[]] $Descriptors,
+        [Parameter(Mandatory)][hashtable] $Probe
+    )
+    $keeps = [System.Collections.Generic.List[pscustomobject]]::new()
+    foreach ($st in @(Get-UnmappedStreamDescriptors -Probe $Probe)) {
+        $codecType = [string](Get-ProbeProperty $st 'codec_type')
+        $index = ConvertTo-IntOrNull (Get-ProbeProperty $st 'index')
+        if ($null -eq $index) { continue }
+        $class = switch ($codecType) {
+            'video' { 'Video' }
+            'audio' { 'Audio' }
+            'subtitle' { 'Subtitle' }
+            default { $null }
+        }
+        if (-not $class) { continue }
+        $codec = [string](Get-ProbeProperty $st 'codec_name')
+        # Extension vide : keep-only au merge ; Split ne doit pas tenter d'extraire ces codecs
+        $keeps.Add((New-StreamDescriptorObject -Class $class -StreamIndex $index -Codec $codec -Extension ''))
+    }
+    $mapped = @($Descriptors | Where-Object { $null -ne $_ -and $_.Class -ne 'Chapter' })
+    $chapters = @($Descriptors | Where-Object { $null -ne $_ -and $_.Class -eq 'Chapter' })
+    $combined = @($mapped + @($keeps) | Sort-Object -Property StreamIndex)
+    return @($combined) + @($chapters)
+}
+
 function Get-UnmappedStreamDescriptors {
     param([Parameter(Mandatory)][hashtable] $Probe)
     $out = @()

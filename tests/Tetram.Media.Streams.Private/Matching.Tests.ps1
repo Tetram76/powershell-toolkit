@@ -43,6 +43,35 @@ Describe 'Get-SidecarFiles / Resolve-MergeActions' {
     }
 }
 
+Describe 'Build-MergeFFmpegArgs unmapped keep' {
+    It 'émet -map 0:2 pour une piste mpeg4 keep intercalée' {
+        $dir = Join-Path $TestDrive 'um'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $mkv = Join-Path $dir 'film.mkv'
+        New-Item -ItemType File -Path $mkv | Out-Null
+        New-Item -ItemType File -Path (Join-Path $dir 'film.eng.srt') | Out-Null
+        $probe = @{
+            streams = @(
+                @{ index = 2; codec_type = 'video'; codec_name = 'mpeg4'; tags = @{}; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+                @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'eng' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Dir = $dir; Mkv = $mkv; Probe = $probe } {
+            param($Dir, $Mkv, $Probe)
+            $desc = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $desc = @(Add-UnmappedKeepDescriptors -Descriptors $desc -Probe $Probe)
+            $sides = @(Get-SidecarFiles -Directory $Dir -Basename 'film' -ExcludePath @($Mkv))
+            $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars $sides
+            $ffmpegArgs = Build-MergeFFmpegArgs -MkvPath $Mkv -Actions $act -OutputPath (Join-Path $Dir 'out.mkv')
+            $pair = $false
+            for ($i = 0; $i -lt $ffmpegArgs.Count - 1; $i++) {
+                if ($ffmpegArgs[$i] -eq '-map' -and $ffmpegArgs[$i + 1] -eq '0:2') { $pair = $true; break }
+            }
+            $pair | Should -BeTrue
+        }
+    }
+}
+
 Describe 'Get-FfmpegDispositionValue' {
     It 'joint comment pour commentary' {
         InModuleScope 'Tetram.Media.Streams' {

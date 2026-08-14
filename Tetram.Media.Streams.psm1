@@ -58,7 +58,13 @@ function Split-MediaStream {
             }
         }
         $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $LiteralPath -OutPath $out
-        $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out
+        try {
+            $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out
+        }
+        catch {
+            Write-ErrorLog $_.Exception.Message
+            return
+        }
         if (-not $ok) {
             Write-ErrorLog "ffmpeg failed extracting '$out'"
         }
@@ -110,6 +116,7 @@ function Merge-MediaStream {
     }
 
     $desc = @(Get-MediaStreamDescriptors -Probe $probe)
+    $desc = @(Add-UnmappedKeepDescriptors -Descriptors $desc -Probe $probe)
     $act = Resolve-MergeActions -MkvDescriptors $desc -Sidecars $sides
 
     if ((Test-Path -LiteralPath $dest -PathType Leaf) -and -not $WhatIfPreference) {
@@ -127,7 +134,13 @@ function Merge-MediaStream {
     }
 
     $ffmpegArgs = Build-MergeFFmpegArgs -MkvPath $src -Actions $act -OutputPath $temp
-    $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $dest
+    try {
+        $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $dest
+    }
+    catch {
+        Write-ErrorLog $_.Exception.Message
+        return
+    }
     if ($WhatIfPreference) { return }
     if (-not $ok) {
         Write-ErrorLog "ffmpeg failed muxing '$dest'"
@@ -136,8 +149,15 @@ function Merge-MediaStream {
         }
         return
     }
-    if ($PSCmdlet.ShouldProcess($dest, "Move temp over '$dest'")) {
-        Move-Item -LiteralPath $temp -Destination $dest -Force
+    if (-not $PSCmdlet.ShouldProcess($dest, "Move temp over '$dest'")) {
+        return
+    }
+    try {
+        Move-Item -LiteralPath $temp -Destination $dest -Force -ErrorAction Stop
+    }
+    catch {
+        Write-ErrorLog $_.Exception.Message
+        return
     }
     if ($RemoveSidecars) {
         $toRemove = @($act.Replaces | ForEach-Object { $_.Sidecar.FullName }) + @($act.Adds | ForEach-Object { $_.FullName })
