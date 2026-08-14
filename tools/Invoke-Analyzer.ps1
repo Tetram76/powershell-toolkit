@@ -1,7 +1,8 @@
 #Requires -Version 5.1
 [CmdletBinding()]
 param(
-    [string[]] $Path = @(
+    [string[]] $AdditionalPaths = @(
+        '.\tools'
         '.\tests'
     ),
 
@@ -35,7 +36,7 @@ try {
 
     $results = [System.Collections.ArrayList]::new()
     $scanPaths = [System.Collections.Generic.List[string]]::new()
-    foreach ($item in @($Path)) {
+    foreach ($item in @($AdditionalPaths)) {
         if (Test-Path -LiteralPath $item) {
             [void]$scanPaths.Add((Resolve-Path -LiteralPath $item).Path)
         }
