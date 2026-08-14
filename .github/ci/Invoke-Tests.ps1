@@ -30,7 +30,8 @@ $config.TestResult.OutputPath = "TestResults.xml"
 $config.TestResult.OutputFormat = "JUnitXml"
 
 if ($Coverage) {
-    $repoRoot = Split-Path -Parent $PSScriptRoot
+    # .github/ci/ est à deux niveaux sous la racine du dépôt.
+    $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 
     [string[]] $pathsForCoverage =
         if ($CodeCoveragePath.Count -gt 0) {

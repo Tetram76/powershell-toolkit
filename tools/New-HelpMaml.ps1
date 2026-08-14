@@ -41,7 +41,7 @@ Install-PlatyPSIfMissing
 Import-Module Microsoft.PowerShell.PlatyPS -Force
 
 if (-not (Test-Path -LiteralPath $MarkdownRoot)) {
-    throw "Dossier markdown introuvable : $MarkdownRoot. Lancer d'abord build\New-HelpMarkdown.ps1."
+    throw "Dossier markdown introuvable : $MarkdownRoot. Lancer d'abord tools\New-HelpMarkdown.ps1."
 }
 
 $manifests = @(
