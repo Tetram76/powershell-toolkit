@@ -1,10 +1,10 @@
 # Post-traitement MAML : PlatyPS 1.0 met les fences d'exemple dans l'introduction.
-# RepoRoot depuis tests/build : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
+# RepoRoot depuis tests/tools : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
 
 BeforeAll {
     Set-StrictMode -Version Latest
     $script:RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
-    $script:RepairScript = Join-Path $script:RepoRoot 'build' 'Repair-MamlExampleCode.ps1'
+    $script:RepairScript = Join-Path $script:RepoRoot 'tools' 'Repair-MamlExampleCode.ps1'
     . $script:RepairScript
 
     function script:Get-ExampleXml {

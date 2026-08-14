@@ -1,10 +1,10 @@
 # PSScriptAnalyzer — paramètres partagés (local + CI)
 # ------------------------------------------------------------------
-# CI : build/Invoke-Analyzer.ps1 ; le gate bloquant = paramètre -Severity du
+# CI : .github/ci/Invoke-Analyzer.ps1 ; le gate bloquant = paramètre -Severity du
 #      script (phase 1 typique : ParseError, Error). Les severités ci-dessous
 #      fixent ce que PSA évalue ; Invoke-Analyzer filtre ce qui fait échouer la build.
-# Localement : .\build\Invoke-Analyzer.ps1
-#              ou Invoke-ScriptAnalyzer -Path ... -Settings .\build\PSScriptAnalyzerSettings.psd1
+# Localement : .\.github\ci\Invoke-Analyzer.ps1
+#              ou Invoke-ScriptAnalyzer -Path ... -Settings .\.github\ci\PSScriptAnalyzerSettings.psd1
 # Règles dispo : Get-ScriptAnalyzerRule
 #
 # Découverte automatique par nom : seulement si le répertoire analysé est celui qui

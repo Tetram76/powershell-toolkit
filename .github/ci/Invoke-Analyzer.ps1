@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [string[]] $Path = @(
-        '.\build',
+        '.\.github\ci',
+        '.\tools',
         '.\tests',
         '.\Utils',
         '.\Tetram.Media.Reencode.Private'
@@ -20,7 +21,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+# .github/ci/ est à deux niveaux sous la racine du dépôt.
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $Settings) {
     $Settings = Join-Path $PSScriptRoot 'PSScriptAnalyzerSettings.psd1'
 }
