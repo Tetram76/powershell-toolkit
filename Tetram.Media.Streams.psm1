@@ -71,16 +71,37 @@ function Split-MediaStream {
                 continue
             }
         }
-        $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $src -OutPath $out
+        # -y sur le sidecar tronquerait un fichier déjà bon si FFmpeg échoue ensuite.
+        $temp = Get-StreamsUniqueTempPath -FinalPath $out
+        $ffmpegArgs = Get-SplitExtractArguments -Descriptor $d -MkvPath $src -OutPath $temp
         try {
             $ok = Invoke-StreamsFFmpeg -Cmdlet $PSCmdlet -Exe $ffmpeg -Arguments $ffmpegArgs -TargetLabel $out
         }
         catch {
             Write-ErrorLog $_.Exception.Message
+            if (Test-Path -LiteralPath $temp) {
+                if ($PSCmdlet.ShouldProcess($temp, 'Cleanup temp')) { Remove-Item -LiteralPath $temp -Force }
+            }
             continue
         }
         if (-not $ok) {
             Write-ErrorLog "ffmpeg failed extracting '$out'"
+            if (Test-Path -LiteralPath $temp) {
+                if ($PSCmdlet.ShouldProcess($temp, 'Cleanup temp')) { Remove-Item -LiteralPath $temp -Force }
+            }
+            continue
+        }
+        if ($PSCmdlet.ShouldProcess($out, "Move temp over '$out'")) {
+            if (-not (Test-Path -LiteralPath $temp -PathType Leaf)) {
+                Write-ErrorLog "Temp file missing after extract: '$temp'"
+                continue
+            }
+            try {
+                Move-Item -LiteralPath $temp -Destination $out -Force -ErrorAction Stop
+            }
+            catch {
+                Write-ErrorLog $_.Exception.Message
+            }
         }
     }
 }
@@ -150,12 +171,7 @@ function Merge-MediaStream {
         }
     }
 
-    $temp = $dest + '.tmp'
-    $n = 2
-    while (Test-Path -LiteralPath $temp) {
-        $temp = $dest + ".tmp$n"
-        $n++
-    }
+    $temp = Get-StreamsUniqueTempPath -FinalPath $dest
 
     $ffmpegArgs = Build-MergeFFmpegArgs -MkvPath $src -Actions $act -OutputPath $temp
     try {

@@ -205,8 +205,8 @@ Chapitres : présence d’entrées `chapters` dans ffprobe → un seul `basename
    - `-Language` : comparaison insensible à la casse sur le code **tel que dans le fichier**. Les flux sans langue (indéterminés) **ne matchent pas** un filtre `-Language`. Chapitres et pièces jointes **ignorent** `-Language`.
 6. Pour chaque descripteur retenu : calculer le chemin sidecar (même dossier que le MKV).
    - Si la cible existe : `-WhatIf` → pas de prompt, on affiche quand même la commande FFmpeg prévue ; exécution réelle → `-Force` ou `ShouldContinue` ; refus → skip + `Write-InfoLog`.
-   - `Show-CommandLine` puis `ShouldProcess` puis `ffmpeg -hide_banner -i <mkv> -map 0:<index> -c copy -y <sidecar>` (variante chapitres / `-dump_attachment` ou `-map 0:t:N` selon le type).
-7. Un flux en erreur FFmpeg : `Write-ErrorLog`, **continuer** les autres.
+   - `Show-CommandLine` puis `ShouldProcess` puis `ffmpeg` vers un temporaire (`{sidecar}.tmp`), `-c copy`. Succès → `Move-Item` vers le sidecar ; échec → suppression du temporaire (un `-y` direct tronquerait un sidecar déjà bon).
+7. Un flux en erreur FFmpeg : `Write-ErrorLog`, **continuer** les autres ; aucun sidecar partiel laissé.
 8. Aucun flux retenu après filtre : `Write-InfoLog` (pas une erreur).
 
 Le MKV d’origine n’est pas modifié par le split.

@@ -158,6 +158,54 @@ Describe 'Split-MediaStream WhatIf' {
     }
 }
 
+Describe 'Split-MediaStream extract failure' {
+    BeforeAll {
+        Import-Module -Name $script:ManifestStreams -Force -ErrorAction Stop
+    }
+    AfterAll {
+        Remove-Module -Name 'Tetram.Media.Streams' -Force -ErrorAction SilentlyContinue
+    }
+
+    BeforeEach {
+        $script:Mkv = Join-Path $TestDrive 'film.mkv'
+        Set-Content -LiteralPath $script:Mkv -Value 'fake'
+        $script:Sidecar = Join-Path $TestDrive 'film.fra.srt'
+        $script:Probe = @{
+            streams = @(
+                @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fra' }; disposition = @{ default = 0; forced = 0; comment = 0; original = 0; dub = 0; hearing_impaired = 0; visual_impaired = 0 } }
+            )
+        }
+        Mock -ModuleName Tetram.Media.Streams Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Streams Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Streams Get-StreamsProbeHashtable { $script:Probe }
+        Mock -ModuleName Tetram.Media.Streams Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Streams Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Streams Show-CommandLine {}
+    }
+
+    It 'ne laisse pas de sidecar si ffmpeg échoue' {
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            Set-Content -LiteralPath $Arguments[-1] -Value 'partial'
+            return 1
+        }
+        Split-MediaStream -LiteralPath $script:Mkv -StreamType Subtitle -Language fra -Force
+        Test-Path -LiteralPath $script:Sidecar | Should -BeFalse
+        Get-ChildItem -LiteralPath $TestDrive -Filter '*.tmp*' -File | Should -BeNullOrEmpty
+    }
+
+    It 'conserve un sidecar existant si ffmpeg échoue' {
+        Set-Content -LiteralPath $script:Sidecar -Value 'good'
+        Mock -ModuleName Tetram.Media.Streams Invoke-FFmpeg {
+            param($Arguments, $ExePath)
+            Set-Content -LiteralPath $Arguments[-1] -Value 'partial'
+            return 1
+        }
+        Split-MediaStream -LiteralPath $script:Mkv -StreamType Subtitle -Language fra -Force
+        Get-Content -LiteralPath $script:Sidecar | Should -Be 'good'
+    }
+}
+
 Describe 'Merge-MediaStream' {
     BeforeAll {
         Import-Module -Name $script:ManifestStreams -Force -ErrorAction Stop

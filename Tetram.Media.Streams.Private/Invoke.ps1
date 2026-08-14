@@ -1,5 +1,16 @@
 Set-StrictMode -Version 3.0
 
+function Get-StreamsUniqueTempPath {
+    param([Parameter(Mandatory)][string] $FinalPath)
+    $temp = $FinalPath + '.tmp'
+    $n = 2
+    while (Test-Path -LiteralPath $temp) {
+        $temp = $FinalPath + ".tmp$n"
+        $n++
+    }
+    return $temp
+}
+
 function Invoke-StreamsFFmpeg {
     param(
         [Parameter(Mandatory)] $Cmdlet,
