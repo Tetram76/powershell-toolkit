@@ -174,10 +174,11 @@ HelpMessage: ''
 ### -RemoveSidecars
 
 Supprime uniquement les sidecars réellement muxés (replace/add), via le chemin
-énuméré, après un mux réussi (`Move-Item` ok). La casse suit le système de
-fichiers du dossier. Échec FFmpeg, `-WhatIf` ou `-Confirm` refusé (même
-`ShouldProcess` que FFmpeg, pas de prompt séparé) : aucune suppression. Les
-pistes keep n'ont pas de sidecar à retirer.
+énuméré, après un mux réussi (`Move-Item` ok). La correspondance basename ↔
+sidecar est toujours insensible à la casse (`OrdinalIgnoreCase`), quel que
+soit le système de fichiers. Échec FFmpeg, `-WhatIf` ou `-Confirm` refusé
+(même `ShouldProcess` que FFmpeg, pas de prompt séparé) : aucune suppression.
+Les pistes keep n'ont pas de sidecar à retirer.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter

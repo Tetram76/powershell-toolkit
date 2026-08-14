@@ -216,7 +216,7 @@ Le MKV d’origine n’est pas modifié par le split.
 
 `-LiteralPath` = le MKV à mettre à jour (fichier `.mkv` existant). Répertoire, stem, autre extension → `Write-ErrorLog` + return.
 
-Basename = nom sans extension, dossier = parent. Ramasser les fichiers du dossier dont le nom commence par `{basename}.` **ou** égalité `{basename}.{ext}`, extension dans l’allowlist sidecar, parse de grammaire réussi. La comparaison de casse du préfixe **suit le système de fichiers du dossier** (sensible ⇔ `Ordinal`, insensible ⇔ `OrdinalIgnoreCase`). Détection **sans écriture** : autre casse du MKV source déjà présent (`film.mkv` / `Film.mkv`) ; `Get-Item.FullName` pour savoir si c’est le même fichier. **Toujours exclure** le MKV d’entrée, `-Destination`, et toute extension conteneur.
+Basename = nom sans extension, dossier = parent. Ramasser les fichiers du dossier dont le nom commence par `{basename}.` **ou** égalité `{basename}.{ext}`, extension dans l’allowlist sidecar, parse de grammaire réussi. La comparaison de casse du préfixe est **toujours insensible** (`OrdinalIgnoreCase`), quel que soit le système de fichiers — v1 ne sonde pas la sensibilité du dossier (pas de sonde inode/identité, pas d’écriture). **Toujours exclure** le MKV d’entrée, `-Destination`, et toute extension conteneur.
 
 Aucun sidecar **sous-titre** → `Write-ErrorLog` + return. Sidecars vidéo/audio (`.h264`, `.aac`, …) ignorés.
 
@@ -255,10 +255,10 @@ Un sidecar manquant n’enlève jamais une piste.
 
 ### `-RemoveSidecars`
 
-Après un mux **réussi** seulement : supprimer uniquement les sidecars **effectivement muxés** (replace + add), via leur `FullName` issu de l’énumération du dossier — jamais un nom reconstruit ni un glob. Un fichier du dossier non retenu (autre basename, y compris si seule la casse diffère sur un FS sensible) n’est pas touché. Le MKV source/cible n’est jamais dans cette liste.
+Après un mux **réussi** seulement : supprimer uniquement les sidecars **effectivement muxés** (replace + add), via leur `FullName` issu de l’énumération du dossier — jamais un nom reconstruit ni un glob. Le MKV source/cible n’est jamais dans cette liste. La comparaison basename↔sidecar étant toujours `OrdinalIgnoreCase` (voir plus haut), un fichier d’un basename **différent** dont la casse coïncide par ailleurs (ex. `Film.eng.srt` à côté de `film.mkv`) peut être ramassé et supprimé, y compris sur un système de fichiers sensible à la casse.
 
 - Échec FFmpeg / `Move-Item` → aucune suppression.
-- Chaque suppression passe par `ShouldProcess` (donc `-WhatIf` affiche sans effacer).
+- La suppression est gouvernée par le même `ShouldProcess` que ffmpeg (pas de prompt séparé) : sous `-WhatIf` ou `-Confirm` refusé, rien n’est supprimé.
 - `-Force` n’est pas requis pour ces sidecars : ce sont des fichiers de travail que l’utilisateur a demandé d’enlever ; un sidecar en lecture seule → `Write-ErrorLog` et on continue les autres.
 
 ## Journalisation
