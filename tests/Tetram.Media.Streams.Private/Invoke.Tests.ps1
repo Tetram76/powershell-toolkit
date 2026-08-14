@@ -35,7 +35,21 @@ Describe 'Remove-StreamsTempIfPresent' {
                 Test-Path -LiteralPath $temp | Should -BeFalse
             }
             finally {
-                if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
+                if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -Confirm:$false -WhatIf:$false }
+            }
+        }
+    }
+    It 'supprime le GUID même si WhatIfPreference est hérité' {
+        InModuleScope 'Tetram.Media.Streams' {
+            $temp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + '.mkv')
+            Set-Content -LiteralPath $temp -Value 'leftover'
+            try {
+                $WhatIfPreference = 'Continue'
+                Remove-StreamsTempIfPresent -TempPath $temp
+                Test-Path -LiteralPath $temp | Should -BeFalse
+            }
+            finally {
+                if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force -Confirm:$false -WhatIf:$false }
             }
         }
     }

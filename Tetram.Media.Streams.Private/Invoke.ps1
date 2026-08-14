@@ -8,7 +8,7 @@ function Get-StreamsUniqueTempPath {
     $ext = [IO.Path]::GetExtension($FinalPath)
     $temp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + $ext)
     if (Test-Path -LiteralPath $temp -PathType Leaf) {
-        Remove-Item -LiteralPath $temp -Force
+        Remove-Item -LiteralPath $temp -Force -Confirm:$false -WhatIf:$false
     }
     return $temp
 }
@@ -20,7 +20,7 @@ function Remove-StreamsTempIfPresent {
     # GUID interne TEMP : pas un ShouldProcess utilisateur (No to All sur le publish laisserait le fichier).
     if (-not $TempPath) { return }
     if (-not (Test-Path -LiteralPath $TempPath)) { return }
-    Remove-Item -LiteralPath $TempPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $TempPath -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue
 }
 
 function Invoke-StreamsFFmpeg {
