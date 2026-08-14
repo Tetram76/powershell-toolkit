@@ -286,7 +286,7 @@ Livrable **complet**, généré/tenu via `tools/New-HelpMarkdown.ps1` (découver
 - Synopsis, description (round-trip MKV, grammaire, collision source, replace/add/keep, contrat `-Add`/`-Update`).
 - Tous les paramètres, y compris WhatIf / Confirm / Force / Add / Update / Path.
 - Exemples : split `-StreamType Subtitle -Language fra` ; merge `-Update` (remplace une piste existante) ; merge `-Add` (ajoute un `.srt` posé à la main) ; `-WhatIf` (la commande FFmpeg s’affiche).
-- Notes : le MKV n’est pas un sidecar ; le merge ne supprime pas de piste ; `-Path` n’est jamais supprimé par la commande ; `-Add`/`-Update` rejettent respectivement collision/absence ; codec A/V/S hors table arrête split et merge ; hors A/V/S = keep.
+- Notes : le MKV n’est pas un sidecar ; le merge ne supprime pas de piste ; `-Path` n’est jamais supprimé par la commande ; `-Add`/`-Update` rejettent respectivement collision/absence ; codec A/V/S hors table arrête `Get-MediaStream` mais est conservé (keep) par `Merge-MediaSubtitle` ; hors A/V/S = keep dans les deux cas.
 
 Commentaires d’aide `.EXTERNALHELP Tetram.Media.Streams-Help.xml` sur les deux fonctions exportées.
 

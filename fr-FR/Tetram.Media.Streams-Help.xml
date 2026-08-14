@@ -128,7 +128,9 @@ dossier.</maml:para>
 Plusieurs valeurs = union. Omit = ces trois classes. Covers, pièces jointes et
 chapitres ne sont pas extraits. Un codec A/V/S hors
 table (ex. `mpeg4`, `mov_text`, `alac`, `pcm_*`) fait échouer tout le split
-(`Write-ErrorLog`, aucun sidecar) — même arrêt au merge.</maml:para>
+(`Write-ErrorLog`, aucun sidecar). `Merge-MediaSubtitle`, à l'inverse, conserve
+ces pistes telles quelles (copie `-map`, pas d'échec) : seul `Get-MediaStream`
+s'arrête sur un codec non mappé.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
         <dev:type>
