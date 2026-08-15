@@ -2,7 +2,8 @@
 #
 # Tout passe par InModuleScope 'Tetram.Media.Whisper' : ces fonctions ne sont pas exportées.
 # $TestDrive n'est pas visible depuis InModuleScope : le passer via -Parameters @{ Work = $TestDrive }.
-# Aucune de ces fonctions n'appelle le binaire.
+# Get-Whisper* / Resolve-* n'appellent aucun binaire. Invoke-Whisper s'exerce via pwsh (stand-in),
+# jamais via faster-whisper-xxl.
 
 BeforeAll {
     Set-StrictMode -Version Latest
@@ -247,6 +248,56 @@ Describe 'Get-WhisperPath' {
             finally {
                 $script:WhisperRoot = $saved
             }
+        }
+    }
+}
+
+Describe 'Invoke-Whisper' {
+    It 'affiche la ligne de commande avant toute exécution' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            Mock Show-CommandLine {}
+            $cmdlet = [PSCustomObject]@{}
+            $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $false }
+            $state = @{}
+            Invoke-Whisper -Exe 'binaire-absent-xyz.exe' -Arguments @('a.mkv', '--task', 'transcribe') -Cmdlet $cmdlet -State $state
+            Should -Invoke Show-CommandLine -Times 1
+        }
+    }
+
+    It 'laisse ExitCode à $null et n''exécute rien si ShouldProcess refuse' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            Mock Show-CommandLine {}
+            $cmdlet = [PSCustomObject]@{}
+            $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $false }
+            $state = @{}
+            Invoke-Whisper -Exe 'binaire-absent-xyz.exe' -Arguments @('a.mkv') -Cmdlet $cmdlet -State $state
+            $state['ExitCode'] | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'relève le code de sortie du binaire' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            Mock Show-CommandLine {}
+            $cmdlet = [PSCustomObject]@{}
+            $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $true }
+            $state = @{}
+            Invoke-Whisper -Exe (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'exit 3') -Cmdlet $cmdlet -State $state
+            $state['ExitCode'] | Should -Be 3
+        }
+    }
+
+    It 'préserve les frontières d''arguments, y compris les chemins à espaces' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            Mock Show-CommandLine {}
+            $cmdlet = [PSCustomObject]@{}
+            $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $true }
+            $helper = Join-Path $Work 'ecrit-args.ps1'
+            Set-Content -LiteralPath $helper -Value 'param($Destination, $Contenu) Set-Content -LiteralPath $Destination -Value $Contenu'
+            $out = Join-Path $Work 'sortie avec espaces.txt'
+            $state = @{}
+            Invoke-Whisper -Exe (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $helper, $out, 'ok') -Cmdlet $cmdlet -State $state
+            Get-Content -LiteralPath $out | Should -Be 'ok'
         }
     }
 }

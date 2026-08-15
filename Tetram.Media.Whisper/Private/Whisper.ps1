@@ -112,3 +112,29 @@ function Get-WhisperPath {
 
     throw "faster-whisper-xxl introuvable : posez la distribution Purfview dans '$script:WhisperRoot', ou fournissez -WhisperPath."
 }
+
+function Invoke-Whisper {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Exe,
+        [Parameter(Mandatory)] [string[]] $Arguments,
+        [Parameter(Mandatory)] $Cmdlet,
+        [Parameter(Mandatory)] [hashtable] $State
+    )
+
+    # Résultat déposé dans $State et non retourné : une valeur de retour forcerait l'appelant à capturer
+    # la sortie de la fonction, donc celle du binaire, et étoufferait --print_progress.
+    $State['ExitCode'] = $null
+
+    # Avant ShouldProcess : sous -WhatIf, la ligne prévue reste visible.
+    Show-CommandLine -Exe $Exe -Arguments $Arguments -NoPathDetectionParameters 'output_dir', 'output_format', 'model', 'task', 'language', 'ff_track'
+
+    if (-not $Cmdlet.ShouldProcess($Arguments[0], 'faster-whisper-xxl')) {
+        return
+    }
+
+    # & + splat, sans redirection : les frontières d'arguments sont conservées et le binaire écrit
+    # directement sur la console.
+    & $Exe @Arguments
+    $State['ExitCode'] = $LASTEXITCODE
+}
