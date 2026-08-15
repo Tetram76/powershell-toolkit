@@ -31,3 +31,153 @@ Describe 'Tetram.Media.Whisper exports' {
         $names | Should -Be @('Get-MediaTranscript')
     }
 }
+
+Describe 'Get-MediaTranscript binding' {
+    BeforeAll {
+        Import-Module -Name $script:ModuleRootWhisper -Force -ErrorAction Stop
+    }
+    AfterAll {
+        Remove-Module -Name 'Tetram.Media.Whisper' -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'refuse un appel sans aucune source' {
+        { Get-MediaTranscript -Format srt -ErrorAction Stop } | Should -Throw
+    }
+
+    It 'refuse un format hors liste' {
+        { Get-MediaTranscript -Path 'a.mkv' -Format 'docx' -ErrorAction Stop } | Should -Throw
+    }
+
+    It 'refuse un modèle hors liste' {
+        { Get-MediaTranscript -Path 'a.mkv' -Model 'tiny' -ErrorAction Stop } | Should -Throw
+    }
+
+    It 'refuse une langue hors liste' {
+        { Get-MediaTranscript -Path 'a.mkv' -UseLanguage 'French' -ErrorAction Stop } | Should -Throw
+    }
+
+    It 'expose trois jeux de paramètres dont Path par défaut' {
+        $meta = Get-Command Get-MediaTranscript
+        $meta.DefaultParameterSet | Should -Be 'Path'
+        @($meta.ParameterSets | Select-Object -ExpandProperty Name | Sort-Object) | Should -Be @('LiteralPath', 'Mixed', 'Path')
+    }
+
+    It 'rend -Path positionnel dans Path et nommé dans Mixed' {
+        $meta = Get-Command Get-MediaTranscript
+        $inPath = ($meta.ParameterSets | Where-Object Name -EQ 'Path').Parameters | Where-Object Name -EQ 'Path'
+        $inMixed = ($meta.ParameterSets | Where-Object Name -EQ 'Mixed').Parameters | Where-Object Name -EQ 'Path'
+        $inPath.Position | Should -Be 0
+        $inMixed.Position | Should -Be ([int]::MinValue)
+    }
+
+    It 'n''accepte aucune entrée pipeline' {
+        $meta = Get-Command Get-MediaTranscript
+        foreach ($parameter in $meta.Parameters.Values) {
+            foreach ($attribute in @($parameter.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] })) {
+                $attribute.ValueFromPipeline | Should -BeFalse
+                $attribute.ValueFromPipelineByPropertyName | Should -BeFalse
+            }
+        }
+    }
+}
+
+Describe 'Get-MediaTranscript orchestration' {
+    BeforeAll {
+        Import-Module -Name $script:ModuleRootWhisper -Force -ErrorAction Stop
+    }
+    AfterAll {
+        Remove-Module -Name 'Tetram.Media.Whisper' -Force -ErrorAction SilentlyContinue
+    }
+
+    BeforeEach {
+        Mock -ModuleName Tetram.Media.Whisper Get-WhisperPath { 'whisper.exe' }
+        Mock -ModuleName Tetram.Media.Whisper Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Whisper Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Whisper Write-DebugLog {}
+        Mock -ModuleName Tetram.Media.Whisper Show-CommandLine {}
+        $script:SeenArguments = $null
+    }
+
+    It 'invoque le binaire une seule fois pour tout le lot' {
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $State['ExitCode'] = 0
+        }
+        Get-MediaTranscript -Path @('D:\a.mkv', 'D:\b.mkv')
+        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 1
+        $script:SeenArguments[0] | Should -Be 'D:\a.mkv'
+        $script:SeenArguments[1] | Should -Be 'D:\b.mkv'
+    }
+
+    It 'concatène -Path puis -LiteralPath dans le jeu Mixed' {
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $State['ExitCode'] = 0
+        }
+        Get-MediaTranscript -Path 'D:\Films\*.mkv' -LiteralPath 'D:\Films\film[1].mkv'
+        $script:SeenArguments[0] | Should -Be 'D:\Films\*.mkv'
+        # LiteralPath n'est pas glob-échappé : whisper teste l'existence avant de globaliser, et
+        # film[[]1].mkv ne serait pas trouvé (décision Task 6 / spec, pas ConvertTo-GlobLiteral).
+        $script:SeenArguments[1] | Should -Be 'D:\Films\film[1].mkv'
+    }
+
+    It 'ne lance rien et journalise si toutes les entrées résolvent à vide' {
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper { throw 'ne doit pas tourner' }
+        Get-MediaTranscript -Path (Join-Path $TestDrive 'rien[9].mkv')
+        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-InfoLog -Times 1
+    }
+
+    It 'ne throw pas et journalise si le binaire est introuvable' {
+        Mock -ModuleName Tetram.Media.Whisper Get-WhisperPath { throw 'faster-whisper-xxl introuvable (test)' }
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper { throw 'ne doit pas tourner' }
+        { Get-MediaTranscript -Path 'D:\a.mkv' } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 0
+    }
+
+    It 'journalise un code de sortie non nul sans lever' {
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $State['ExitCode'] = 1
+        }
+        { Get-MediaTranscript -Path 'D:\a.mkv' } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
+    }
+
+    It 'journalise une exception d''exécution sans lever' {
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper { throw 'accès refusé' }
+        { Get-MediaTranscript -Path 'D:\a.mkv' } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
+    }
+
+    It 'transmet une source inexistante sans erreur' {
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $State['ExitCode'] = 0
+        }
+        { Get-MediaTranscript -Path (Join-Path $TestDrive 'absent.mkv') } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 1
+    }
+
+    It 'n''émet rien dans le pipeline' {
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $State['ExitCode'] = 0
+        }
+        $out = Get-MediaTranscript -Path 'D:\a.mkv'
+        $out | Should -BeNullOrEmpty
+    }
+
+    It 'sous -WhatIf, affiche la commande et ne lance pas le binaire' {
+        # Invoke-Whisper n'est volontairement pas mocké : avec un exe inexistant, toute exécution réelle
+        # lèverait et déclencherait Write-ErrorLog.
+        Mock -ModuleName Tetram.Media.Whisper Get-WhisperPath { 'X:\binaire-absent-xyz.exe' }
+        Get-MediaTranscript -Path 'D:\a.mkv' -WhatIf
+        Should -Invoke -ModuleName Tetram.Media.Whisper Show-CommandLine -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 0
+    }
+}
