@@ -181,3 +181,31 @@ Describe 'Get-MediaTranscript orchestration' {
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 0
     }
 }
+
+Describe 'Get-MediaTranscript bout en bout' -Tag 'Integration' {
+    BeforeAll {
+        Import-Module -Name $script:ModuleRootWhisper -Force -ErrorAction Stop
+        $script:PurfviewRoot = Join-Path $script:ModuleRootWhisper 'Purfview-Whisper-Faster'
+        $script:RealExe = Join-Path $script:PurfviewRoot 'faster-whisper-xxl.exe'
+        $script:RealFfmpeg = Join-Path $script:PurfviewRoot 'ffmpeg.exe'
+    }
+    AfterAll {
+        Remove-Module -Name 'Tetram.Media.Whisper' -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'produit un .srt à côté de la source' {
+        if (-not (Test-Path -LiteralPath $script:RealExe -PathType Leaf)) {
+            Set-ItResult -Skipped -Because 'distribution Purfview absente'
+            return
+        }
+
+        $work = Join-Path $TestDrive 'integration'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $wav = Join-Path $work 'sample.wav'
+        & $script:RealFfmpeg -f lavfi -i 'sine=frequency=440:duration=3' -y $wav 2>&1 | Out-Null
+
+        Get-MediaTranscript -Path $wav -UseLanguage en
+
+        @(Get-ChildItem -LiteralPath $work -Filter '*.srt').Count | Should -BeGreaterThan 0
+    }
+}
