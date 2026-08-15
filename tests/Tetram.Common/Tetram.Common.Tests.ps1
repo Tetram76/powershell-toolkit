@@ -103,3 +103,73 @@ Describe 'Show-CommandLine (-PassThru)' {
         $lines[1] | Should -BeExactly '    -i input.mkv'
     }
 }
+
+Describe 'Test-PowerShellSpecificPath' {
+
+    It 'reconnaît les crochets et l''échappement backtick' {
+        Test-PowerShellSpecificPath -Path 'D:\Films\film[1].mkv' | Should -BeTrue
+        Test-PowerShellSpecificPath -Path 'D:\Films\film`*.mkv' | Should -BeTrue
+    }
+
+    It 'reconnaît un PSDrive nommé' {
+        Test-PowerShellSpecificPath -Path 'Temp:\a.mkv' | Should -BeTrue
+    }
+
+    It 'laisse passer un chemin, un masque, une lettre de lecteur ou un UNC' {
+        Test-PowerShellSpecificPath -Path 'D:\Films\a.mkv' | Should -BeFalse
+        Test-PowerShellSpecificPath -Path 'D:\Films\*.mkv' | Should -BeFalse
+        Test-PowerShellSpecificPath -Path '.\a?.mkv' | Should -BeFalse
+        Test-PowerShellSpecificPath -Path '\\nas\films\a.mkv' | Should -BeFalse
+    }
+}
+
+Describe 'ConvertTo-AbsolutePath' {
+
+    It 'absolutise relativement à l''emplacement PowerShell, sans exiger l''existence' {
+        Push-Location -LiteralPath $TestDrive
+        try {
+            $expected = Join-Path ((Get-Location -PSProvider FileSystem).ProviderPath) 'absent.mkv'
+            ConvertTo-AbsolutePath -Path 'absent.mkv' | Should -Be $expected
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
+    It 'développe ~' {
+        ConvertTo-AbsolutePath -Path '~/a.mkv' | Should -Be (Join-Path $HOME 'a.mkv')
+    }
+
+    It 'laisse un chemin déjà absolu inchangé' {
+        ConvertTo-AbsolutePath -Path 'D:\Films\a.mkv' | Should -Be 'D:\Films\a.mkv'
+    }
+}
+
+Describe 'ConvertTo-AbsoluteMask' {
+
+    It 'absolutise le préfixe et conserve le masque de feuille' {
+        Push-Location -LiteralPath $TestDrive
+        try {
+            $expected = Join-Path ((Get-Location -PSProvider FileSystem).ProviderPath) '*.mkv'
+            ConvertTo-AbsoluteMask -Mask '.\*.mkv' | Should -Be $expected
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
+    It 'absolutise un masque sans aucun séparateur' {
+        Push-Location -LiteralPath $TestDrive
+        try {
+            $expected = Join-Path ((Get-Location -PSProvider FileSystem).ProviderPath) '*.mkv'
+            ConvertTo-AbsoluteMask -Mask '*.mkv' | Should -Be $expected
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
+    It 'conserve un masque de segment intermédiaire' {
+        ConvertTo-AbsoluteMask -Mask 'D:\Films\*\*.mkv' | Should -Be 'D:\Films\*\*.mkv'
+    }
+}

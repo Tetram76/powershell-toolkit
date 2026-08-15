@@ -181,6 +181,92 @@ function Test-IsLikelyPath
     return $false
 }
 
+function Test-PowerShellSpecificPath
+{
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+
+    # Les classes de caractères divergent entre PowerShell et le glob des outils natifs ([!a] = négation
+    # côté glob, jeu littéral côté PowerShell) : tout crochet impose une résolution PowerShell préalable.
+    if ($Path.Contains('[') -or $Path.Contains('`'))
+    {
+        return $true
+    }
+
+    # Qualifier de plus d'une lettre = PSDrive nommé, qu'un processus natif ne sait pas interpréter.
+    if ($Path -match '^(?<q>[A-Za-z][^\\/:]*):' -and $Matches['q'].Length -gt 1)
+    {
+        return $true
+    }
+
+    return $false
+}
+
+function ConvertTo-AbsolutePath
+{
+    [CmdletBinding()]
+    [OutputType([string])]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+
+    $expanded = $Path
+    if ($expanded -eq '~' -or $expanded.StartsWith('~/') -or $expanded.StartsWith('~\'))
+    {
+        $expanded = Join-Path $HOME $expanded.Substring(1).TrimStart('/', '\')
+    }
+
+    # GetFullPath et pas Resolve-Path : le chemin peut ne pas exister. La base est l'emplacement
+    # PowerShell, qui ne coïncide pas forcément avec le répertoire de travail du processus — seul connu
+    # des exécutables lancés depuis PowerShell.
+    $base = (Get-Location -PSProvider FileSystem).ProviderPath
+    return [System.IO.Path]::GetFullPath($expanded, $base)
+}
+
+function ConvertTo-AbsoluteMask
+{
+    [CmdletBinding()]
+    [OutputType([string])]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string] $Mask
+    )
+
+    $separator = [System.IO.Path]::DirectorySeparatorChar
+    $prefix = @()
+    $rest = @()
+    $inRest = $false
+
+    foreach ($segment in ($Mask -split '[\\/]'))
+    {
+        if (-not $inRest -and $segment -match '[*?]')
+        {
+            $inRest = $true
+        }
+        if ($inRest)
+        {
+            $rest += $segment
+        }
+        else
+        {
+            $prefix += $segment
+        }
+    }
+
+    $prefixPath = $prefix -join $separator
+    if ([string]::IsNullOrEmpty($prefixPath))
+    {
+        $prefixPath = '.'
+    }
+
+    return (@((ConvertTo-AbsolutePath -Path $prefixPath)) + $rest) -join $separator
+}
+
 function Show-CommandLine
 {
     [CmdletBinding()]
@@ -323,4 +409,6 @@ Export-ModuleMember -Function `
 	Show-Colors,
 Write-Log, Write-ErrorLog, Write-InfoLog, Write-DebugLog,
 Format-FileSize, Format-Duration,
-Show-CommandLine
+Show-CommandLine,
+Test-PowerShellSpecificPath,
+ConvertTo-AbsolutePath, ConvertTo-AbsoluteMask
