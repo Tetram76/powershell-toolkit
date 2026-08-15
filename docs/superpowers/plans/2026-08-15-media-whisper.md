@@ -35,10 +35,10 @@ direct dans son dossier de travail.
 - Aucun paramètre n'accepte le pipeline.
 - La sortie du binaire n'est jamais capturée ni redirigée : la barre de progression doit s'afficher
 directement sur la console.
-- Ordre des arguments du binaire, stable et vérifié par les tests : `file_list=<source1>`, sources
-suivantes, `--batch_recursive`, `--output_dir source`, `--output_format <formats>`, `--check_files`,
+- Ordre des arguments du binaire, stable et vérifié par les tests : `<source1>` [sources…],
+`--batch_recursive`, `--output_dir source`, `--output_format <formats>`, `--check_files`,
 `--model <modèle>`, `--ff_track 1`, `[--language <code>]`, `--postfix`, `--print_progress`,
-`--task transcribe`.
+`--task transcribe`. Pas de préfixe `file_list=` : chaque source est un argument nu.
 - `ValidateSet` de `-Format` : `json`, `lrc`, `txt`, `text`, `vtt`, `srt`, `tsv`, `all` — défaut `@('srt')`.
 - `ValidateSet` de `-Model` : `large-v2` (défaut), `large-v3-turbo`, `large-v3`.
 - Tests réels du binaire uniquement sous le tag Pester `Integration`, exclu du CI.
@@ -131,20 +131,23 @@ git commit -m "docs(whisper): spec et plan du module Tetram.Media.Whisper"
 
 ---
 
-### Task 2 : Smoke test du binaire (`file_list=` et crochets)
+### Task 2 : Smoke test du binaire (chemins nus et crochets)
 
-Cette tâche ne produit pas de code : elle tranche empiriquement deux points que la spec laisse ouverts,
-**avant** que le reste du module ne se construise dessus.
+Cette tâche ne produit pas de code : elle confirme empiriquement deux points **avant** que le reste du
+module ne se construise dessus. Décision déjà tranchée : **pas** de préfixe `file_list=` — les sources
+sont des arguments nus (fichiers / dossiers / masques).
 
 **Files:**
 
-- Modify (seulement si le smoke test contredit la spec) : `docs/superpowers/specs/2026-08-15-media-whisper-design.md`, `docs/superpowers/plans/2026-08-15-media-whisper.md`
+- Modify (seulement si le smoke test contredit la spec sur les crochets) :
+  `docs/superpowers/specs/2026-08-15-media-whisper-design.md`,
+  `docs/superpowers/plans/2026-08-15-media-whisper.md`
 
 **Interfaces:**
 
 - Consumes: rien
-- Produces: confirmation que `file_list=<chemin>` est accepté comme première source, et que la
-  neutralisation `[` → `[[]` est nécessaire. Les tâches 4, 5 et 6 s'appuient sur ce verdict.
+- Produces: confirmation qu'un chemin nu est accepté comme source, et que la neutralisation
+  `[` → `[[]` est nécessaire (ou non). Les tâches 4, 5 et 6 s'appuient sur ce verdict.
 
 - [ ] **Step 1: Préparer un média court**
 
@@ -157,31 +160,23 @@ $ffmpeg = Join-Path $purfview 'ffmpeg.exe'
 & $ffmpeg -f lavfi -i 'sine=frequency=440:duration=3' -y (Join-Path $work 'sample.wav')
 ```
 
-- [ ] **Step 2: Tester la forme `file_list=`**
+- [ ] **Step 2: Tester un chemin nu (sans `file_list=`)**
 
 ```powershell
-& $exe "file_list=$(Join-Path $work 'sample.wav')" --batch_recursive --output_dir source --output_format srt --check_files --model large-v2 --ff_track 1 --postfix --print_progress --task transcribe --beep_off
+& $exe (Join-Path $work 'sample.wav') --batch_recursive --output_dir source --output_format srt --check_files --model large-v2 --ff_track 1 --postfix --print_progress --task transcribe --beep_off
 Get-ChildItem -LiteralPath $work
 ```
 
-Attendu si la forme est valide : le binaire transcrit et un `.srt` apparaît dans `$work`.
-Attendu sinon : `Error: Media files were not found.` — rappel, le binaire sort en code `0` même dans ce
-cas, il faut lire la sortie et non `$LASTEXITCODE`.
+Attendu : le binaire transcrit et un `.srt` apparaît dans `$work`.
+Sinon (`Error: Media files were not found.`) : **BLOCKED** — le contrat « arguments nus » est
+invalide ; escalader. Rappel : le binaire sort en code `0` même en échec, lire la sortie et non
+`$LASTEXITCODE`.
 
-- [ ] **Step 3: Trancher sur `file_list=`**
-
-Si un `.srt` est présent, la spec est confirmée : passer au step 4.
-
-Sinon, refaire le step 2 **sans** le préfixe `file_list=`, en passant le chemin nu en premier argument. Si
-cette forme produit le `.srt`, corriger la section « Ligne de commande produite » de la spec et le contrat
-de `Get-WhisperArguments` en Task 4 de ce plan pour supprimer le préfixe, puis signaler le changement dans
-le message de commit du step 5.
-
-- [ ] **Step 4: Tester la neutralisation des crochets**
+- [ ] **Step 3: Tester la neutralisation des crochets**
 
 ```powershell
 Copy-Item (Join-Path $work 'sample.wav') (Join-Path $work 'sample[1].wav')
-& $exe "file_list=$(Join-Path $work 'sample[[]1].wav')" --batch_recursive --output_dir source --output_format srt --check_files --model large-v2 --ff_track 1 --postfix --print_progress --task transcribe --beep_off
+& $exe (Join-Path $work 'sample[[]1].wav') --batch_recursive --output_dir source --output_format srt --check_files --model large-v2 --ff_track 1 --postfix --print_progress --task transcribe --beep_off
 Get-ChildItem -LiteralPath $work -Filter 'sample[[]1]*'
 ```
 
@@ -192,13 +187,13 @@ fonctionne, le binaire teste l'existence avant de globaliser : supprimer alors l
 et retirer `ConvertTo-GlobLiteral` (Task 5, dans `Tetram.Common`), ses appels dans `Resolve-WhisperSource`
 (Task 6) et ses tests.
 
-- [ ] **Step 5: Nettoyer et commiter le verdict**
+- [ ] **Step 4: Nettoyer et commiter le verdict**
 
 ```powershell
 Remove-Item -LiteralPath $work -Recurse -Force
 ```
 
-Si la spec ou le plan ont été corrigés :
+Si la spec ou le plan ont été corrigés (crochets) :
 
 ```bash
 git add docs/superpowers/specs/2026-08-15-media-whisper-design.md docs/superpowers/plans/2026-08-15-media-whisper.md
@@ -389,7 +384,7 @@ Describe 'Get-WhisperArguments' {
         InModuleScope 'Tetram.Media.Whisper' {
             $got = Get-WhisperArguments -Source @('D:\Films\a.mkv') -Format @('srt') -Model 'large-v2'
             $got | Should -Be @(
-                'file_list=D:\Films\a.mkv'
+                'D:\Films\a.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
                 '--output_format', 'srt'
@@ -403,11 +398,11 @@ Describe 'Get-WhisperArguments' {
         }
     }
 
-    It 'préfixe file_list= sur la première source seulement' {
+    It 'passe chaque source comme argument nu, sans préfixe file_list=' {
         InModuleScope 'Tetram.Media.Whisper' {
             $got = Get-WhisperArguments -Source @('D:\a.mkv', 'D:\b.mkv', 'D:\c.mkv') -Format @('srt') -Model 'large-v2'
             $got | Should -Be @(
-                'file_list=D:\a.mkv'
+                'D:\a.mkv'
                 'D:\b.mkv'
                 'D:\c.mkv'
                 '--batch_recursive'
@@ -427,7 +422,7 @@ Describe 'Get-WhisperArguments' {
         InModuleScope 'Tetram.Media.Whisper' {
             $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt', 'vtt') -Model 'large-v2'
             $got | Should -Be @(
-                'file_list=D:\a.mkv'
+                'D:\a.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
                 '--output_format', 'srt', 'vtt'
@@ -445,7 +440,7 @@ Describe 'Get-WhisperArguments' {
         InModuleScope 'Tetram.Media.Whisper' {
             $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt') -Model 'large-v3-turbo'
             $got | Should -Be @(
-                'file_list=D:\a.mkv'
+                'D:\a.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
                 '--output_format', 'srt'
@@ -463,7 +458,7 @@ Describe 'Get-WhisperArguments' {
         InModuleScope 'Tetram.Media.Whisper' {
             $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt') -Model 'large-v2' -UseLanguage 'fr'
             $got | Should -Be @(
-                'file_list=D:\a.mkv'
+                'D:\a.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
                 '--output_format', 'srt'
@@ -500,9 +495,8 @@ function Get-WhisperArguments {
         [string] $UseLanguage
     )
 
-    # file_list= ne préfixe que la première source ; les suivantes sont des arguments distincts.
-    $whisperArgs = @("file_list=$( $Source[0] )")
-    $whisperArgs += @($Source | Select-Object -Skip 1)
+    # Chaque source est un argument nu (pas de préfixe file_list=).
+    $whisperArgs = @($Source)
 
     $whisperArgs += @(
         '--batch_recursive'
@@ -1140,7 +1134,7 @@ Describe 'Invoke-Whisper' {
             $cmdlet = [PSCustomObject]@{}
             $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $false }
             $state = @{}
-            Invoke-Whisper -Exe 'binaire-absent-xyz.exe' -Arguments @('file_list=a.mkv', '--task', 'transcribe') -Cmdlet $cmdlet -State $state
+            Invoke-Whisper -Exe 'binaire-absent-xyz.exe' -Arguments @('a.mkv', '--task', 'transcribe') -Cmdlet $cmdlet -State $state
             Should -Invoke Show-CommandLine -Times 1
         }
     }
@@ -1151,7 +1145,7 @@ Describe 'Invoke-Whisper' {
             $cmdlet = [PSCustomObject]@{}
             $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $false }
             $state = @{}
-            Invoke-Whisper -Exe 'binaire-absent-xyz.exe' -Arguments @('file_list=a.mkv') -Cmdlet $cmdlet -State $state
+            Invoke-Whisper -Exe 'binaire-absent-xyz.exe' -Arguments @('a.mkv') -Cmdlet $cmdlet -State $state
             $state['ExitCode'] | Should -BeNullOrEmpty
         }
     }
@@ -1328,7 +1322,7 @@ Describe 'Get-MediaTranscript orchestration' {
         }
         Get-MediaTranscript -Path @('D:\a.mkv', 'D:\b.mkv')
         Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 1
-        $script:SeenArguments[0] | Should -Be 'file_list=D:\a.mkv'
+        $script:SeenArguments[0] | Should -Be 'D:\a.mkv'
         $script:SeenArguments[1] | Should -Be 'D:\b.mkv'
     }
 
@@ -1339,7 +1333,7 @@ Describe 'Get-MediaTranscript orchestration' {
             $State['ExitCode'] = 0
         }
         Get-MediaTranscript -Path 'D:\Films\*.mkv' -LiteralPath 'D:\Films\film[1].mkv'
-        $script:SeenArguments[0] | Should -Be 'file_list=D:\Films\*.mkv'
+        $script:SeenArguments[0] | Should -Be 'D:\Films\*.mkv'
         $script:SeenArguments[1] | Should -Be 'D:\Films\film[[]1].mkv'
     }
 
@@ -1460,7 +1454,7 @@ function Get-MediaTranscript {
     $sources = @(Resolve-WhisperSource -Path $Path -LiteralPath $LiteralPath)
     if ($sources.Count -eq 0) {
         # Atteignable seulement si toutes les entrées étaient des motifs résolus à vide : le binding
-        # garantit au moins une source. Évite un file_list= sans valeur.
+        # garantit au moins une source. Évite d'invoquer le binaire sans source.
         Write-InfoLog -Text 'Aucune source à transcrire.' -Force
         return
     }
@@ -1697,7 +1691,7 @@ git commit -m "test(whisper): transcription réelle taggée Integration"
 | Exigence de la spec                                                                               | Tâche          |
 | ------------------------------------------------------------------------------------------------- | -------------- |
 | Manifeste, export unique, PS 7 Core, dot-source de `Private/`                                     | Task 3         |
-| Ordre stable des arguments, `file_list=`, formats, modèle, langue                                 | Task 4         |
+| Ordre stable des arguments (chemins nus), formats, modèle, langue                                 | Task 4         |
 | Conversions de chemin : `~`, absolutisation, échappement glob, syntaxe PowerShell                 | Task 5         |
 | Masque transmis tel quel, spécificités PowerShell traduites, crochets neutralisés                 | Task 5, Task 6 |
 | Dossier, fichier-liste et chemin inexistant transmis sans validation                              | Task 6         |
@@ -1711,6 +1705,6 @@ git commit -m "test(whisper): transcription réelle taggée Integration"
 | `.gitignore` et `.keep`                                                                           | Task 1         |
 | Aide PlatyPS complète et MAML (whisper + `Tetram.Common`)                                         | Task 10        |
 | Test réel taggé `Integration`                                                                     | Task 11        |
-| Smoke test préalable de `file_list=` et des crochets                                              | Task 2         |
+| Smoke test préalable des chemins nus et des crochets                                              | Task 2         |
 
 

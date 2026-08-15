@@ -26,7 +26,7 @@ n'émet rien dans le pipeline.
 | Commande                          | `Get-MediaTranscript`, seule commande exportée                                                                               |
 | Moteur                            | `faster-whisper-xxl.exe` uniquement                                                                                          |
 | Conventions                       | Guidelines PowerShell (jeux `Path` / `LiteralPath`, `ValidateSet`, `ShouldProcess`), pas d'alignement sur l'existant du repo |
-| Sources                           | Transmises au binaire via `file_list="file1" "file2"...`                                                                     |
+| Sources                           | Transmises au binaire comme arguments nus : `"file1" "file2"...` (pas de préfixe `file_list=`)                               |
 | Formes acceptées                  | Les quatre du binaire : fichier média, masque, dossier, fichier-liste (`.txt`, `.m3u`, `.m3u8`, `.lst`)                       |
 | Masques                           | Masque `*` / `?` transmis tel quel à whisper ; seules les spécificités PowerShell sont traduites             |
 | Jeux de paramètres                | Trois : `Path`, `LiteralPath`, et `Mixed` autorisant les deux dans le même appel                                             |
@@ -202,7 +202,7 @@ Ordre des arguments stable — les tests comparent la séquence produite.
 `Get-MediaTranscript -Path "D:\Films\a.mkv", "D:\Films\b.mkv"` :
 
 ```
-faster-whisper-xxl.exe file_list="D:\Films\a.mkv" "D:\Films\b.mkv"
+faster-whisper-xxl.exe "D:\Films\a.mkv" "D:\Films\b.mkv"
     --batch_recursive
     --output_dir source
     --output_format srt
@@ -217,7 +217,7 @@ faster-whisper-xxl.exe file_list="D:\Films\a.mkv" "D:\Films\b.mkv"
 `Get-MediaTranscript -Path "D:\Films\a.mkv" -Format srt, vtt -Model large-v3 -UseLanguage fr` :
 
 ```
-faster-whisper-xxl.exe file_list="D:\Films\a.mkv"
+faster-whisper-xxl.exe "D:\Films\a.mkv"
     --batch_recursive
     --output_dir source
     --output_format srt vtt
@@ -230,13 +230,12 @@ faster-whisper-xxl.exe file_list="D:\Films\a.mkv"
     --task transcribe
 ```
 
-Le token `file_list=` préfixe la première source ; les sources suivantes sont ajoutées telles quelles,
-chacune comme un argument distinct (les frontières d'arguments sont préservées par `& $Exe @Arguments`, jamais
-par une chaîne unique).
+Chaque source est un argument distinct, sans préfixe `file_list=` (les frontières d'arguments sont
+préservées par `& $Exe @Arguments`, jamais par une chaîne unique).
 
 ### Transmission des sources : masque conservé, spécificités traduites
 
-Un masque qui correspond à 500 fichiers ne doit pas produire 500 éléments dans `file_list=`. Whisper sachant
+Un masque qui correspond à 500 fichiers ne doit pas produire 500 arguments source. Whisper sachant
 lui-même globaliser, une entrée de `-Path` est **transmise telle quelle** dès qu'elle est un masque que le
 binaire interprète comme PowerShell. Seules les **spécificités PowerShell** sont traduites, en résolvant
 l'entrée et en transmettant les fichiers obtenus.
@@ -296,8 +295,8 @@ Le binaire filtre par ailleurs lui-même les non-médias présents dans un dossi
 
 Conséquence assumée : une source fautive — masque sans correspondance, chemin mal orthographié, dossier vide
 — ne produit aucun message côté PowerShell. C'est whisper qui signale n'avoir trouvé aucun média. En
-contrepartie, `file_list=` reste court, `--check_files` fonctionne, et la commande n'a pas de règle de
-validation à maintenir en parallèle de celles du binaire.
+contrepartie, la ligne de commande reste courte (un argument par entrée), `--check_files` fonctionne, et la
+commande n'a pas de règle de validation à maintenir en parallèle de celles du binaire.
 
 Neutralisation des crochets, pour les chemins **littéraux** transmis : `[` → `[[]`, convention glob. À
 confirmer au smoke test d'implémentation (première étape du plan) : si le binaire teste l'existence du chemin
@@ -315,7 +314,7 @@ La commande n'acceptant pas le pipeline, tout se déroule en une passe, sans `be
   - jeu `Mixed` : les deux collectes ci-dessus, concaténées dans l'ordre `-Path` puis `-LiteralPath`.
 3. Plus aucune source après collecte → `Write-InfoLog` et fin, sans invocation. Le binding garantissant au
   moins une source, ce cas n'est atteignable que si **toutes** les entrées étaient des motifs à crochets
-  résolus à vide ; il évite un `file_list=` sans valeur.
+  résolus à vide ; il évite d'invoquer le binaire sans aucune source.
 4. Construction des arguments (`Get-WhisperArguments`), `Write-DebugLog` de la séquence obtenue.
 5. `Invoke-Whisper` : `Show-CommandLine`, `ShouldProcess`, exécution. Sous `-WhatIf`, la ligne s'affiche et
   le binaire ne tourne pas.
@@ -381,7 +380,7 @@ Le module entre automatiquement dans la couverture du CI (découverte des `*.psm
 | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Test-ModuleManifest`                                              | OK                                                                                                                                                                                                         |
 | Exports = `Get-MediaTranscript` uniquement                         | OK                                                                                                                                                                                                         |
-| Arguments par défaut                                               | `file_list=`, `--batch_recursive`, `--output_dir source`, `--output_format srt`, `--check_files`, `--model large-v2`, `--ff_track 1`, `--postfix`, `--print_progress`, `--task transcribe`, dans cet ordre |
+| Arguments par défaut                                               | `<source1>` [sources…], `--batch_recursive`, `--output_dir source`, `--output_format srt`, `--check_files`, `--model large-v2`, `--ff_track 1`, `--postfix`, `--print_progress`, `--task transcribe`, dans cet ordre |
 | `-Format srt, vtt`                                                 | `--output_format srt vtt`                                                                                                                                                                                  |
 | `-Format`, `-Model` ou `-UseLanguage` hors liste                   | Erreur de binding `ValidateSet`                                                                                                                                                                            |
 | `-Model large-v3-turbo`                                            | `--model large-v3-turbo`                                                                                                                                                                                   |
@@ -399,7 +398,7 @@ Le module entre automatiquement dans la couverture du CI (découverte des `*.psm
 | Aucun des deux paramètres de source                                | Erreur de binding (paramètre obligatoire du jeu par défaut)                                                                                                                                                |
 | Entrée pipeline                                                    | Rejetée : aucun paramètre ne se lie depuis le pipeline                                                                                                                                                     |
 | Entrée à crochets sans correspondance                              | Ne produit aucun élément ; jamais rabattue en littéral                                                                                                                                                     |
-| Toutes les entrées résolues à vide                                 | `Write-InfoLog`, aucune invocation : pas de `file_list=` sans valeur                                                                                                                                       |
+| Toutes les entrées résolues à vide                                 | `Write-InfoLog`, aucune invocation : pas d'appel sans source                                                                                                                                               |
 | Source inexistante                                                 | Transmise quand même : aucun test d'existence, aucune erreur PowerShell                                                                                                                                    |
 | Binaire introuvable                                                | `Write-ErrorLog`, pas de throw, aucune invocation                                                                                                                                                          |
 | `-WhisperPath` vers un fichier / un dossier / un chemin inexistant | Retenu / erreur / erreur                                                                                                                                                                                   |
@@ -424,9 +423,9 @@ validation des sources. Le premier appel est donc long.
 - **`--check_files` et `--skip`** : l'aide du binaire indique qu'ils ne s'appliquent qu'à une entrée de type
 masque ou dossier. C'est l'une des raisons de transmettre les masques tels quels plutôt que de les résoudre :
 `--check_files`, toujours activé, reste alors opérant.
-- **Première étape du plan d'implémentation** : smoke test réel de la ligne de commande (`file_list=`,
-neutralisation des crochets) contre le binaire, avec un vrai fichier média court, avant d'écrire le reste
-du module.
+- **Première étape du plan d'implémentation** : smoke test réel de la ligne de commande (sources en
+arguments nus, neutralisation des crochets) contre le binaire, avec un vrai fichier média court, avant
+d'écrire le reste du module.
 
 ## Critères de succès
 
@@ -434,7 +433,7 @@ du module.
 dans le nom.
 - Plusieurs fichiers, ou un masque, en une seule invocation : le modèle n'est chargé qu'une fois.
 - `-Path 'D:\Films\*.mkv' -LiteralPath 'D:\Films\film[1].mkv'` transcrit les deux ensembles en un seul appel.
-- Un masque couvrant 500 fichiers produit **un seul** élément dans `file_list=`, pas 500.
+- Un masque couvrant 500 fichiers produit **un seul** argument source, pas 500.
 - `-Path 'D:\Films'` transcrit le dossier, récursivement, sans que PowerShell énumère quoi que ce soit.
 - `-Format srt, vtt` produit les deux formats ; une valeur hors liste est refusée au binding.
 - `-UseLanguage fr` force la langue ; sans lui, whisper la détecte.
