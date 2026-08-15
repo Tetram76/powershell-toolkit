@@ -136,24 +136,24 @@ function Get-AudioEncoderArgs
         return @("-c:a:$StreamIndex", 'copy')
     }
 
-    $args = @(
+    $arguments = @(
         "-c:a:$StreamIndex", ($TargetCodec -eq 'opus' ? 'libopus' : 'aac')
         "-b:a:$StreamIndex", $TargetBitrate
     )
     if ($ChannelMapFilter)
     {
-        $args += @("-filter:a:$StreamIndex", $ChannelMapFilter)
+        $arguments += @("-filter:a:$StreamIndex", $ChannelMapFilter)
     }
     if ($TargetCodec -eq 'opus')
     {
-        $args += @(
+        $arguments += @(
             "-vbr:a:$StreamIndex", 'on'
             "-compression_level:a:$StreamIndex", '10'
             "-application:a:$StreamIndex", 'audio'
         )
     }
 
-    return $args
+    return $arguments
 }
 
 function Get-FFmpegArgs
@@ -333,12 +333,18 @@ function Get-FFmpegArgs
     $ffmpegArgs += @(
         '-map_metadata', '0'
         '-metadata', 'MOVIE/ENCODER='
+        '-metadata', 'MAJOR_BRAND='
+        '-metadata', 'MINOR_VERSION='
+        '-metadata', 'COMPATIBLE_BRANDS='
+        '-metadata', 'ENCODER='
         $( if ($ClearStreamsTitle)
         {
             @('-metadata:s', 'title=')
         } )
         '-metadata:s', '_STATISTICS_TAGS='
         '-metadata:s', '_STATISTICS_TAGS-eng='
+        '-metadata:s', 'HANDLER_NAME='
+        '-metadata:s', 'VENDOR_ID='
         '-metadata:s', 'BPS='
         '-metadata:s', 'BPS-eng='
         '-metadata:s', 'DURATION-eng='
