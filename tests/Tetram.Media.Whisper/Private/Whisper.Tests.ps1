@@ -111,3 +111,82 @@ Describe 'Get-WhisperArguments' {
         }
     }
 }
+
+Describe 'Resolve-WhisperSource' {
+    It 'transmet un masque tel quel, sans énumérer les fichiers' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            1..3 | ForEach-Object { Set-Content -LiteralPath (Join-Path $Work "f$_.mkv") -Value 'x' }
+            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work '*.mkv')))
+            $got.Count | Should -Be 1
+            $got[0] | Should -Be (Join-Path $Work '*.mkv')
+        }
+    }
+
+    It 'transmet un dossier tel quel' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dir = Join-Path $Work 'films'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $got = @(Resolve-WhisperSource -Path @($dir))
+            $got | Should -Be @($dir)
+        }
+    }
+
+    It 'transmet un fichier-liste tel quel, sans le lire' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $lst = Join-Path $Work 'lot.lst'
+            Set-Content -LiteralPath $lst -Value 'D:\Films\a.mkv'
+            $got = @(Resolve-WhisperSource -Path @($lst))
+            $got | Should -Be @($lst)
+        }
+    }
+
+    It 'transmet un chemin inexistant sans erreur' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $missing = Join-Path $Work 'absent.mkv'
+            $got = @(Resolve-WhisperSource -Path @($missing))
+            $got | Should -Be @($missing)
+        }
+    }
+
+    It 'résout une entrée à crochets sans neutraliser les crochets du résultat' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            Set-Content -LiteralPath (Join-Path $Work 'film[1].mkv') -Value 'x'
+            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work 'film[1].mkv')))
+            $got.Count | Should -Be 1
+            $got[0] | Should -Be (Join-Path $Work 'film[1].mkv')
+        }
+    }
+
+    It 'ne produit rien pour une entrée à crochets sans correspondance' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work 'rien[9].mkv')))
+            $got.Count | Should -Be 0
+        }
+    }
+
+    It 'concatène -Path puis -LiteralPath' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $mask = Join-Path $Work '*.mkv'
+            $literal = Join-Path $Work 'film[1].mkv'
+            $got = @(Resolve-WhisperSource -Path @($mask) -LiteralPath @($literal))
+            $got[0] | Should -Be $mask
+            $got[1] | Should -Be (Join-Path $Work 'film[1].mkv')
+        }
+    }
+
+    It 'ne résout jamais -LiteralPath, même avec un masque dedans' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $entry = Join-Path $Work '*.mkv'
+            $got = @(Resolve-WhisperSource -LiteralPath @($entry))
+            $got | Should -Be @($entry)
+        }
+    }
+}

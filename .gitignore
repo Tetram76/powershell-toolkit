@@ -9,3 +9,4 @@ reencode-errors.log
 /testResults.xml
 /coverage.xml
 .worktrees/
+.superpowers/
