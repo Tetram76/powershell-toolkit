@@ -110,7 +110,7 @@ Get-MediaTranscript -Path 'D:\Films\film.mkv' -WhatIf
 
 ### -Confirm
 
-La ligne de commande s'affiche, le binaire ne tourne pas.
+La ligne de commande s'affiche ; une confirmation est demandée avant d'exécuter faster-whisper-xxl (le binaire tourne si on confirme).
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -261,7 +261,7 @@ HelpMessage: ''
 
 ### -WhatIf
 
-La ligne de commande s'affiche, le binaire ne tourne pas.
+La ligne de commande s'affiche, le binaire ne tourne pas (dry-run).
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter

@@ -242,7 +242,7 @@
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="cf">
         <maml:name>Confirm</maml:name>
         <maml:description>
-          <maml:para>La ligne de commande s'affiche, le binaire ne tourne pas.</maml:para>
+          <maml:para>La ligne de commande s'affiche ; une confirmation est demandée avant d'exécuter faster-whisper-xxl (le binaire tourne si on confirme).</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -316,7 +316,7 @@
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="wi">
         <maml:name>WhatIf</maml:name>
         <maml:description>
-          <maml:para>La ligne de commande s'affiche, le binaire ne tourne pas.</maml:para>
+          <maml:para>La ligne de commande s'affiche, le binaire ne tourne pas (dry-run).</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
