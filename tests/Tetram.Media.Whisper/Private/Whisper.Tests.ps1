@@ -190,3 +190,63 @@ Describe 'Resolve-WhisperSource' {
         }
     }
 }
+
+Describe 'Get-WhisperPath' {
+    It 'retourne l''override quand c''est un fichier' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $exe = Join-Path $Work 'ailleurs.exe'
+            Set-Content -LiteralPath $exe -Value 'stub'
+            Get-WhisperPath -OverridePath $exe | Should -Be $exe
+        }
+    }
+
+    It 'rejette un override qui est un dossier' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dir = Join-Path $Work 'dossier-exe'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            { Get-WhisperPath -OverridePath $dir } | Should -Throw '*pas un dossier*'
+        }
+    }
+
+    It 'rejette un override inexistant' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            { Get-WhisperPath -OverridePath (Join-Path $Work 'absent.exe') } | Should -Throw '*inexistant*'
+        }
+    }
+
+    It 'prend le binaire du dossier du module quand il existe' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $fakeRoot = Join-Path $Work 'purfview'
+            New-Item -ItemType Directory -Path $fakeRoot -Force | Out-Null
+            $exe = Join-Path $fakeRoot 'faster-whisper-xxl.exe'
+            Set-Content -LiteralPath $exe -Value 'stub'
+            $saved = $script:WhisperRoot
+            try {
+                $script:WhisperRoot = $fakeRoot
+                Get-WhisperPath | Should -Be $exe
+            }
+            finally {
+                $script:WhisperRoot = $saved
+            }
+        }
+    }
+
+    It 'échoue avec un message qui indique où poser la distribution' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            Mock Get-Command { $null } -ParameterFilter { $Name -eq 'faster-whisper-xxl' }
+            $saved = $script:WhisperRoot
+            try {
+                $script:WhisperRoot = Join-Path $Work 'vide'
+                { Get-WhisperPath } | Should -Throw '*Purfview*'
+            }
+            finally {
+                $script:WhisperRoot = $saved
+            }
+        }
+    }
+}

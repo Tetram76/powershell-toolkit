@@ -82,3 +82,33 @@ function Resolve-WhisperSource {
 
     return $sources
 }
+
+function Get-WhisperPath {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [string] $OverridePath
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($OverridePath)) {
+        if (Test-Path -LiteralPath $OverridePath -PathType Leaf) {
+            return $OverridePath
+        }
+        if (Test-Path -LiteralPath $OverridePath) {
+            throw "WhisperPath doit désigner un exécutable, pas un dossier : '$OverridePath'"
+        }
+        throw "WhisperPath inexistant : '$OverridePath'"
+    }
+
+    $default = Join-Path $script:WhisperRoot 'faster-whisper-xxl.exe'
+    if (Test-Path -LiteralPath $default -PathType Leaf) {
+        return $default
+    }
+
+    $fromPath = Get-Command -Name 'faster-whisper-xxl' -ErrorAction SilentlyContinue
+    if ($fromPath) {
+        return $fromPath.Source
+    }
+
+    throw "faster-whisper-xxl introuvable : posez la distribution Purfview dans '$script:WhisperRoot', ou fournissez -WhisperPath."
+}
