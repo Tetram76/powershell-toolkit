@@ -27,7 +27,7 @@ direct dans son dossier de travail.
 - Aucun commit sur `main` : tout le travail se fait sur la branche créée en Task 1.
 - Tous les affichages console passent par `Tetram.Common` : `Write-ErrorLog -Text`,
   `Write-InfoLog -Text -Force`, `Write-DebugLog -Text`, `Show-CommandLine -Exe -Arguments`.
-- `Tetram.Common` est étendu par la Task 5 avec quatre utilitaires de chemin génériques. Le code qui y est
+- `Tetram.Common` est étendu par la Task 5 avec trois utilitaires de chemin génériques. Le code qui y est
   ajouté suit le style d'accolades Allman de ce fichier ; le nouveau module suit le K&R de
   `Tetram.Media.Streams`, le plus récent du dépôt.
 - Aucune exception ne remonte à l'appelant depuis `Get-MediaTranscript` : `Write-ErrorLog` puis `return`.
@@ -51,7 +51,7 @@ directement sur la console.
 
 | Chemin                                                      | Responsabilité                                             |
 | ----------------------------------------------------------- | ---------------------------------------------------------- |
-| `Tetram.Common/Tetram.Common.psm1`                          | **+** les quatre utilitaires de chemin génériques          |
+| `Tetram.Common/Tetram.Common.psm1`                          | **+** les trois utilitaires de chemin génériques           |
 | `Tetram.Common/Tetram.Common.psd1`                          | **+** leurs exports, version portée à 1.2.0                |
 | `tests/Tetram.Common/Tetram.Common.Tests.ps1`               | **+** leurs tests                                          |
 | `docs/help/Tetram.Common/*.md`                              | **+** leurs pages d'aide                                   |
@@ -70,12 +70,13 @@ directement sur la console.
 1. La spec nomme trois helpers privés (`Get-WhisperPath`, `Get-WhisperArguments`, `Invoke-Whisper`) mais
    décrit à l'étape 2 de son flux une traduction des sources sans lui donner de nom. Ce plan la nomme
    `Resolve-WhisperSource`.
-2. La spec posait que `Tetram.Common` ne serait pas modifié. Ce n'est plus vrai : les quatre conversions de
+2. La spec posait que `Tetram.Common` ne serait pas modifié. Ce n'est plus vrai : les trois conversions de
    chemin que `Resolve-WhisperSource` utilise ne connaissent rien à whisper — développement de `~`,
-   absolutisation, échappement glob des crochets, détection de syntaxe PowerShell — et sont promues dans
-   `Tetram.Common` sous des noms génériques et exportés. Seule la **politique** (masque transmis tel quel,
-   crochets résolus, `-LiteralPath` jamais résolu) reste dans le module, parce qu'elle découle d'une
-   propriété de whisper : il globalise lui-même.
+   absolutisation, détection de syntaxe PowerShell — et sont promues dans `Tetram.Common` sous des noms
+   génériques et exportés. Seule la **politique** (masque transmis tel quel, crochets résolus,
+   `-LiteralPath` jamais résolu, aucun chemin littéral neutralisé) reste dans le module, parce qu'elle
+   découle d'une propriété de whisper : il globalise lui-même et teste l'existence du chemin avant de le
+   faire (confirmé au smoke test de la Task 2).
 3. `Invoke-Whisper` ne **retourne** pas le résultat de l'exécution : il le dépose dans une hashtable
    `-State` fournie par l'appelant. Retourner une valeur obligerait l'appelant à capturer la sortie de la
    fonction, donc celle du binaire, ce qui étoufferait la barre de progression exigée par la spec. C'est
@@ -540,9 +541,13 @@ git commit -m "feat(whisper): construction des arguments faster-whisper"
 
 ### Task 5 : Utilitaires de chemin génériques dans `Tetram.Common`
 
-Ces quatre fonctions ne connaissent rien à whisper : elles traduisent de la syntaxe de chemin PowerShell
+Ces trois fonctions ne connaissent rien à whisper : elles traduisent de la syntaxe de chemin PowerShell
 vers ce qu'un processus natif qui globalise lui-même sait lire. Elles sont donc exportées par
 `Tetram.Common`, sous des noms sans infixe, comme `Show-CommandLine` ou `Format-FileSize`.
+
+Pas de fonction d'échappement glob des crochets : le smoke test de la Task 2 a confirmé que le binaire
+teste l'existence du chemin **avant** de globaliser, donc un chemin littéral à crochets non échappé est
+trouvé tel quel, et une forme échappée (`[[]`) ne correspond à aucun fichier réel.
 
 **Files:**
 
@@ -557,7 +562,6 @@ vers ce qu'un processus natif qui globalise lui-même sait lire. Elles sont donc
   - `Test-PowerShellSpecificPath -Path <string>` → `[bool]` — `$true` si l'entrée emploie de la syntaxe que
     seul PowerShell comprend (crochets, échappement backtick, PSDrive nommé) et doit donc être résolue
     avant d'être remise à un processus natif.
-  - `ConvertTo-GlobLiteral -LiteralPath <string>` → `[string]` — échappe les crochets à la convention glob.
   - `ConvertTo-AbsolutePath -Path <string>` → `[string]` — développe `~` puis absolutise, sans exiger que
     le chemin existe.
   - `ConvertTo-AbsoluteMask -Mask <string>` → `[string]` — absolutise le préfixe sans métacaractère d'un
@@ -585,17 +589,6 @@ Describe 'Test-PowerShellSpecificPath' {
         Test-PowerShellSpecificPath -Path 'D:\Films\*.mkv' | Should -BeFalse
         Test-PowerShellSpecificPath -Path '.\a?.mkv' | Should -BeFalse
         Test-PowerShellSpecificPath -Path '\\nas\films\a.mkv' | Should -BeFalse
-    }
-}
-
-Describe 'ConvertTo-GlobLiteral' {
-
-    It 'échappe les crochets ouvrants' {
-        ConvertTo-GlobLiteral -LiteralPath 'D:\Films\film[1].mkv' | Should -Be 'D:\Films\film[[]1].mkv'
-    }
-
-    It 'laisse un chemin sans crochet intact' {
-        ConvertTo-GlobLiteral -LiteralPath 'D:\Films\a.mkv' | Should -Be 'D:\Films\a.mkv'
     }
 }
 
@@ -687,18 +680,6 @@ function Test-PowerShellSpecificPath
     return $false
 }
 
-function ConvertTo-GlobLiteral
-{
-    [CmdletBinding()]
-    [OutputType([string])]
-    param (
-        [Parameter(Mandatory = $true)]
-        [string] $LiteralPath
-    )
-
-    return $LiteralPath -replace '\[', '[[]'
-}
-
 function ConvertTo-AbsolutePath
 {
     [CmdletBinding()]
@@ -763,7 +744,7 @@ function ConvertTo-AbsoluteMask
 
 - [ ] **Step 4: Déclarer les exports et monter la version**
 
-Dans `Tetram.Common/Tetram.Common.psd1`, passer `ModuleVersion` à `'1.2.0'`, ajouter les quatre noms à
+Dans `Tetram.Common/Tetram.Common.psd1`, passer `ModuleVersion` à `'1.2.0'`, ajouter les trois noms à
 `FunctionsToExport` et compléter les notes de version :
 
 ```powershell
@@ -777,22 +758,22 @@ Dans `Tetram.Common/Tetram.Common.psd1`, passer `ModuleVersion` à `'1.2.0'`, aj
         'Format-FileSize', 'Format-Duration'
         'Show-CommandLine'
         'Test-PowerShellSpecificPath'
-        'ConvertTo-GlobLiteral', 'ConvertTo-AbsolutePath', 'ConvertTo-AbsoluteMask'
+        'ConvertTo-AbsolutePath', 'ConvertTo-AbsoluteMask'
     )
 ```
 
 ```powershell
             ReleaseNotes = @'
 - 1.1.0 : Renommage des fonctions pour verbes approuvés.
-- 1.2.0 : Utilitaires de chemin pour processus natifs (syntaxe PowerShell, glob, absolutisation).
+- 1.2.0 : Utilitaires de chemin pour processus natifs (syntaxe PowerShell, absolutisation).
 '@
 ```
 
 - [ ] **Step 5: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `pwsh -NoProfile -Command "Invoke-Pester -Path tests/Tetram.Common -Output Detailed"`
-Expected : PASS, dont les 11 nouveaux cas. Le test « Registers every FunctionsToExport from the manifest »
-couvre au passage les quatre nouveaux exports.
+Expected : PASS, dont les 9 nouveaux cas. Le test « Registers every FunctionsToExport from the manifest »
+couvre au passage les trois nouveaux exports.
 
 - [ ] **Step 6: Vérifier que les autres modules ne cassent pas**
 
@@ -817,9 +798,9 @@ git commit -m "feat(common): utilitaires de chemin pour processus natifs"
 
 **Interfaces:**
 
-- Consumes: `Test-PowerShellSpecificPath -Path`, `ConvertTo-GlobLiteral -LiteralPath`,
-  `ConvertTo-AbsolutePath -Path`, `ConvertTo-AbsoluteMask -Mask` de `Tetram.Common` (Task 5), visibles
-  depuis le module grâce à l'`Import-Module` du `psm1`
+- Consumes: `Test-PowerShellSpecificPath -Path`, `ConvertTo-AbsolutePath -Path`,
+  `ConvertTo-AbsoluteMask -Mask` de `Tetram.Common` (Task 5), visibles depuis le module grâce à
+  l'`Import-Module` du `psm1`
 - Produces: `Resolve-WhisperSource [-Path <string[]>] [-LiteralPath <string[]>]` → `[string[]]`, consommée
   par `Get-MediaTranscript` en Task 9.
 
@@ -868,13 +849,13 @@ Describe 'Resolve-WhisperSource' {
         }
     }
 
-    It 'résout une entrée à crochets et neutralise les crochets du résultat' {
+    It 'résout une entrée à crochets sans neutraliser les crochets du résultat' {
         InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             Set-Content -LiteralPath (Join-Path $Work 'film[1].mkv') -Value 'x'
             $got = @(Resolve-WhisperSource -Path @((Join-Path $Work 'film[1].mkv')))
             $got.Count | Should -Be 1
-            $got[0] | Should -Be (Join-Path $Work 'film[[]1].mkv')
+            $got[0] | Should -Be (Join-Path $Work 'film[1].mkv')
         }
     }
 
@@ -893,7 +874,7 @@ Describe 'Resolve-WhisperSource' {
             $literal = Join-Path $Work 'film[1].mkv'
             $got = @(Resolve-WhisperSource -Path @($mask) -LiteralPath @($literal))
             $got[0] | Should -Be $mask
-            $got[1] | Should -Be (Join-Path $Work 'film[[]1].mkv')
+            $got[1] | Should -Be (Join-Path $Work 'film[1].mkv')
         }
     }
 
@@ -935,7 +916,7 @@ function Resolve-WhisperSource {
             # Une résolution vide ne se rabat pas sur le littéral : ce serait inventer une interprétation
             # que l'appelant n'a pas demandée, et faire signaler par whisper un fichier jamais désigné.
             foreach ($resolved in @(Resolve-Path -Path $entry -ErrorAction SilentlyContinue)) {
-                $sources += ConvertTo-GlobLiteral -LiteralPath $resolved.ProviderPath
+                $sources += $resolved.ProviderPath
             }
             continue
         }
@@ -947,12 +928,12 @@ function Resolve-WhisperSource {
             continue
         }
 
-        $sources += ConvertTo-GlobLiteral -LiteralPath (ConvertTo-AbsolutePath -Path $entry)
+        $sources += ConvertTo-AbsolutePath -Path $entry
     }
 
     foreach ($entry in @($LiteralPath)) {
         if ([string]::IsNullOrWhiteSpace($entry)) { continue }
-        $sources += ConvertTo-GlobLiteral -LiteralPath (ConvertTo-AbsolutePath -Path $entry)
+        $sources += ConvertTo-AbsolutePath -Path $entry
     }
 
     return $sources
@@ -1505,13 +1486,13 @@ git commit -m "feat(whisper): commande Get-MediaTranscript"
 - Create: `docs/help/Tetram.Media.Whisper/Tetram.Media.Whisper.md`
 - Create: `docs/help/Tetram.Media.Whisper/Get-MediaTranscript.md`
 - Create: `Tetram.Media.Whisper/fr-FR/Tetram.Media.Whisper-Help.xml`
-- Create: `docs/help/Tetram.Common/Test-PowerShellSpecificPath.md`, `ConvertTo-GlobLiteral.md`,
+- Create: `docs/help/Tetram.Common/Test-PowerShellSpecificPath.md`,
   `ConvertTo-AbsolutePath.md`, `ConvertTo-AbsoluteMask.md`
 - Modify: `Tetram.Common/fr-FR/Tetram.Common-Help.xml` (régénéré)
 
 **Interfaces:**
 
-- Consumes: la commande publique de Task 9 et son commentaire `.EXTERNALHELP`, plus les quatre fonctions
+- Consumes: la commande publique de Task 9 et son commentaire `.EXTERNALHELP`, plus les trois fonctions
   exportées par `Tetram.Common` en Task 5
 - Produces: l'aide complète, condition du critère de succès « `Get-Help` exploitable, pas un stub ».
 
@@ -1519,7 +1500,7 @@ git commit -m "feat(whisper): commande Get-MediaTranscript"
 
 Run: `pwsh -NoProfile -File tools/New-HelpMarkdown.ps1 -Verbose`
 Expected : création de `docs/help/Tetram.Media.Whisper/` avec la page module et `Get-MediaTranscript.md`,
-et des quatre nouvelles pages sous `docs/help/Tetram.Common/`.
+et des trois nouvelles pages sous `docs/help/Tetram.Common/`.
 
 - [ ] **Step 2: Rédiger le fond en français**
 
@@ -1562,7 +1543,7 @@ versionné ; le modèle est téléchargé au premier usage, le premier appel est
 flux audio est transcrit ; jamais de traduction ; une réexécution réécrit les transcripts existants ;
 la commande n'accepte pas d'entrée pipeline, un masque sur `-Path` remplaçant `Get-ChildItem | ...`.
 
-- [ ] **Step 3: Rédiger les quatre pages de `Tetram.Common`**
+- [ ] **Step 3: Rédiger les trois pages de `Tetram.Common`**
 
 Ces fonctions étant désormais exportées, leur aide fait partie de la surface publique du module commun.
 Contenu attendu, une page par fonction :
@@ -1574,10 +1555,6 @@ Contenu attendu, une page par fonction :
   relatif et un masque `*` / `?`, que les outils natifs savent lire. Exemples :
   `Test-PowerShellSpecificPath -Path 'D:\Films\film[1].mkv'` et
   `Test-PowerShellSpecificPath -Path 'D:\Films\*.mkv'`.
-- `ConvertTo-GlobLiteral` — Synopsis : « Échappe les crochets d'un chemin littéral pour un consommateur
-  de glob. » Description : `[` devient `[[]`, convention glob, pour qu'un chemin réellement nommé
-  `film[1].mkv` ne soit pas pris pour une classe de caractères. Exemple :
-  `ConvertTo-GlobLiteral -LiteralPath 'D:\Films\film[1].mkv'`.
 - `ConvertTo-AbsolutePath` — Synopsis : « Absolutise un chemin, même inexistant. » Description : développe
   `~`, puis absolutise relativement à l'emplacement PowerShell courant. Notes : contrairement à
   `Resolve-Path`, n'échoue pas sur un chemin inexistant ; la base est l'emplacement PowerShell et non le
@@ -1592,7 +1569,7 @@ Contenu attendu, une page par fonction :
 
 Run: `pwsh -NoProfile -File tools/New-HelpMaml.ps1 -Force -Verbose`
 Expected : `Tetram.Media.Whisper/fr-FR/Tetram.Media.Whisper-Help.xml` créé, et
-`Tetram.Common/fr-FR/Tetram.Common-Help.xml` régénéré avec les quatre nouvelles fonctions.
+`Tetram.Common/fr-FR/Tetram.Common-Help.xml` régénéré avec les trois nouvelles fonctions.
 
 - [ ] **Step 5: Vérifier que les deux aides se chargent**
 
@@ -1692,8 +1669,8 @@ git commit -m "test(whisper): transcription réelle taggée Integration"
 | ------------------------------------------------------------------------------------------------- | -------------- |
 | Manifeste, export unique, PS 7 Core, dot-source de `Private/`                                     | Task 3         |
 | Ordre stable des arguments (chemins nus), formats, modèle, langue                                 | Task 4         |
-| Conversions de chemin : `~`, absolutisation, échappement glob, syntaxe PowerShell                 | Task 5         |
-| Masque transmis tel quel, spécificités PowerShell traduites, crochets neutralisés                 | Task 5, Task 6 |
+| Conversions de chemin : `~`, absolutisation, syntaxe PowerShell                                   | Task 5         |
+| Masque transmis tel quel, spécificités PowerShell traduites, crochets sans neutralisation         | Task 5, Task 6 |
 | Dossier, fichier-liste et chemin inexistant transmis sans validation                              | Task 6         |
 | Entrée à crochets sans correspondance : aucun élément                                             | Task 6, Task 9 |
 | Résolution du binaire façon `Get-FFmpegPath`, override `-WhisperPath`                             | Task 7, Task 9 |

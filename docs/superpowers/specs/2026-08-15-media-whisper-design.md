@@ -79,7 +79,7 @@ l'exécution du binaire.
 | `Tetram.Media.Whisper/Tetram.Media.Whisper.psd1`            | Manifeste v1.0.0, PS 7+ / Core, export de `Get-MediaTranscript` |
 | `Tetram.Media.Whisper/Tetram.Media.Whisper.psm1`            | Commande publique + orchestration                               |
 | `Tetram.Media.Whisper/Private/Whisper.ps1`                  | `Get-WhisperPath`, `Resolve-WhisperSource`, `Get-WhisperArguments`, `Invoke-Whisper` |
-| `Tetram.Common/`                                            | **+** les quatre conversions de chemin génériques, exportées (v1.2.0) |
+| `Tetram.Common/`                                            | **+** les trois conversions de chemin génériques, exportées (v1.2.0) |
 | `Tetram.Media.Whisper/Purfview-Whisper-Faster/.keep`        | Marqueur du dossier d'accueil du binaire (seul fichier suivi)   |
 | `Tetram.Media.Whisper/fr-FR/Tetram.Media.Whisper-Help.xml`  | MAML généré via `tools/New-HelpMaml.ps1`                        |
 | `docs/help/Tetram.Media.Whisper/`                           | Page module + `Get-MediaTranscript.md` (fr-FR, PlatyPS)         |
@@ -252,24 +252,23 @@ Règle, appliquée entrée par entrée. Aucun cas ne teste l'existence de quoi q
 
 | Entrée de `-Path` | Traitement |
 |---|---|
-| Contient `[`, un échappement backtick, ou vise un PSDrive hors système de fichiers | **Résolue** par PowerShell ; un élément par fichier trouvé ; crochets neutralisés. Résolution vide → l'entrée **ne produit aucun élément** |
+| Contient `[`, un échappement backtick, ou vise un PSDrive hors système de fichiers | **Résolue** par PowerShell ; un élément par fichier trouvé, transmis sans neutralisation. Résolution vide → l'entrée **ne produit aucun élément** |
 | Contient `*` ou `?`, y compris dans un segment intermédiaire (`D:\Films\*\*.mkv`) | **Transmise telle quelle**, en un seul élément, après absolutisation du préfixe sans métacaractère (couvre `.\*.mkv` et `~`) |
-| Aucun métacaractère | Transmise absolue telle quelle, crochets neutralisés. Fichier, dossier ou chemin inexistant : la commande ne fait pas la différence, le binaire acceptant fichier comme dossier |
+| Aucun métacaractère | Transmise absolue telle quelle, sans neutralisation. Fichier, dossier ou chemin inexistant : la commande ne fait pas la différence, le binaire acceptant fichier comme dossier |
 
 `-LiteralPath` ne suit aucune de ces règles : ses entrées sont toujours littérales, jamais résolues, et sont
-transmises absolues avec les crochets neutralisés.
+transmises absolues sans neutralisation, crochets compris.
 
 ### Conversions de chemin : dans `Tetram.Common`, pas dans le module
 
 La règle ci-dessus est une **politique** propre à whisper, parce qu'elle découle d'une de ses propriétés :
 il globalise lui-même. Les conversions qu'elle enchaîne, elles, ne connaissent rien à whisper — développer
-`~`, absolutiser sans exiger l'existence, échapper les crochets à la convention glob, reconnaître de la
-syntaxe que seul PowerShell comprend. Elles valent pour n'importe quel exécutable natif qui globalise.
+`~`, absolutiser sans exiger l'existence, reconnaître de la syntaxe que seul PowerShell comprend. Elles
+valent pour n'importe quel exécutable natif qui globalise.
 
 Elles sont donc portées par `Tetram.Common`, exportées, sous des noms sans infixe comme le reste du module
-commun : `Test-PowerShellSpecificPath`, `ConvertTo-GlobLiteral`, `ConvertTo-AbsolutePath`,
-`ConvertTo-AbsoluteMask`. `Tetram.Common` passe en 1.2.0, et ces quatre fonctions reçoivent leur page
-d'aide au même titre que les autres exports.
+commun : `Test-PowerShellSpecificPath`, `ConvertTo-AbsolutePath`, `ConvertTo-AbsoluteMask`. `Tetram.Common`
+passe en 1.2.0, et ces trois fonctions reçoivent leur page d'aide au même titre que les autres exports.
 
 Seul `Resolve-WhisperSource` reste privé au module : c'est lui qui décide *quelle* conversion appliquer à
 quelle entrée.
@@ -298,9 +297,10 @@ Conséquence assumée : une source fautive — masque sans correspondance, chemi
 contrepartie, la ligne de commande reste courte (un argument par entrée), `--check_files` fonctionne, et la
 commande n'a pas de règle de validation à maintenir en parallèle de celles du binaire.
 
-Neutralisation des crochets, pour les chemins **littéraux** transmis : `[` → `[[]`, convention glob. À
-confirmer au smoke test d'implémentation (première étape du plan) : si le binaire teste l'existence du chemin
-avant de globaliser, la neutralisation est inutile et sera retirée.
+Aucune neutralisation des crochets pour les chemins **littéraux** transmis : le smoke test d'implémentation
+(première étape du plan, confirmé) montre que le binaire teste l'existence du chemin donné avant de
+globaliser — un chemin littéral à crochets non échappé (`film[1].mkv`) est trouvé, la forme neutralisée au
+sens glob (`film[[]1].mkv`) ne l'est pas. Les chemins littéraux à crochets sont donc transmis tels quels.
 
 ## Flux d'exécution
 
@@ -390,8 +390,8 @@ Le module entre automatiquement dans la couverture du CI (découverte des `*.psm
 | Masque relatif `.\*.mkv`                                           | Préfixe absolutisé, masque conservé sur la feuille                                                                                                                                                         |
 | Source dossier, sur `-Path` comme sur `-LiteralPath`               | Transmise absolue telle quelle, un seul élément                                                                                                                                                            |
 | Source `.lst` / `.m3u`                                             | Transmise telle quelle ; comportement de fichier-liste documenté dans l'aide                                                                                                                               |
-| Entrée à crochets                                                  | Résolue par PowerShell, un élément par fichier, crochets neutralisés                                                                                                                                       |
-| Chemin littéral contenant des crochets                             | Crochets neutralisés dans l'argument transmis                                                                                                                                                              |
+| Entrée à crochets                                                  | Résolue par PowerShell, un élément par fichier, transmis sans neutralisation                                                                                                                               |
+| Chemin littéral contenant des crochets                             | Transmis tel quel, sans neutralisation                                                                                                                                                                     |
 | `-Path` seul / `-LiteralPath` seul / les deux                      | Jeux `Path` / `LiteralPath` / `Mixed` résolus sans ambiguïté                                                                                                                                               |
 | Jeu `Mixed`                                                        | Sources concaténées, `-Path` selon la règle de transmission puis `-LiteralPath` littéral, une seule invocation                                                                                             |
 | Valeur positionnelle                                               | Acceptée pour `-Path` dans le jeu `Path`, refusée dans le jeu `Mixed`                                                                                                                                      |
@@ -423,9 +423,11 @@ validation des sources. Le premier appel est donc long.
 - **`--check_files` et `--skip`** : l'aide du binaire indique qu'ils ne s'appliquent qu'à une entrée de type
 masque ou dossier. C'est l'une des raisons de transmettre les masques tels quels plutôt que de les résoudre :
 `--check_files`, toujours activé, reste alors opérant.
-- **Première étape du plan d'implémentation** : smoke test réel de la ligne de commande (sources en
-arguments nus, neutralisation des crochets) contre le binaire, avec un vrai fichier média court, avant
-d'écrire le reste du module.
+- **Smoke test réel (première étape du plan, confirmé)** : les sources en arguments nus (sans préfixe
+`file_list=`) sont acceptées, avec un vrai fichier média court. Les chemins littéraux à crochets ne doivent
+**pas** être neutralisés (`[` → `[[]`) : le binaire teste l'existence exacte du chemin donné avant de
+globaliser, donc un chemin neutralisé ne correspond à aucun fichier réel et échoue (`File not found \
+Invalid path`), alors que le chemin brut à crochets (ex. `sample[1].wav`) est transcrit normalement.
 
 ## Critères de succès
 
