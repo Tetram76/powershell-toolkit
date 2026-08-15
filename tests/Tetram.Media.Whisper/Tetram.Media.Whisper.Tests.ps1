@@ -153,6 +153,16 @@ Describe 'Get-MediaTranscript orchestration' {
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
     }
 
+    It 'ne throw pas et journalise si un chemin contient des caractères invalides' {
+        # GetFullPath lève sur NUL ; ConvertTo-AbsolutePath doit rester strict, c'est
+        # Get-MediaTranscript qui a promis de ne pas laisser remonter.
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper { throw 'ne doit pas tourner' }
+        $illegal = 'D:\foo' + [char]0 + 'bar.mkv'
+        { Get-MediaTranscript -LiteralPath $illegal } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 0
+    }
+
     It 'transmet une source inexistante sans erreur' {
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)

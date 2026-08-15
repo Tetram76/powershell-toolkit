@@ -44,38 +44,34 @@ function Get-MediaTranscript {
         [string] $WhisperPath
     )
 
+    # Contrat public : aucune exception vers l'appelant. ConvertTo-AbsolutePath (GetFullPath)
+    # peut lever ; le helper Common reste strict, c'est ici qu'on journalise.
     try {
         $exe = Get-WhisperPath -OverridePath $WhisperPath
-    }
-    catch {
-        Write-ErrorLog -Text $_.Exception.Message
-        return
-    }
 
-    $sources = @(Resolve-WhisperSource -Path $Path -LiteralPath $LiteralPath)
-    if ($sources.Count -eq 0) {
-        # Atteignable seulement si toutes les entrées étaient des motifs résolus à vide : le binding
-        # garantit au moins une source. Évite d'invoquer le binaire sans source.
-        Write-InfoLog -Text 'Aucune source à transcrire.' -Force
-        return
-    }
+        $sources = @(Resolve-WhisperSource -Path $Path -LiteralPath $LiteralPath)
+        if ($sources.Count -eq 0) {
+            # Atteignable seulement si toutes les entrées étaient des motifs résolus à vide : le binding
+            # garantit au moins une source. Évite d'invoquer le binaire sans source.
+            Write-InfoLog -Text 'Aucune source à transcrire.' -Force
+            return
+        }
 
-    $whisperArgs = Get-WhisperArguments -Source $sources -Format $Format -Model $Model -UseLanguage $UseLanguage
-    Write-DebugLog -Text ($whisperArgs -join ' ')
+        $whisperArgs = Get-WhisperArguments -Source $sources -Format $Format -Model $Model -UseLanguage $UseLanguage
+        Write-DebugLog -Text ($whisperArgs -join ' ')
 
-    $state = @{ ExitCode = $null }
-    try {
+        $state = @{ ExitCode = $null }
         Invoke-Whisper -Exe $exe -Arguments $whisperArgs -Cmdlet $PSCmdlet -State $state
+
+        # ExitCode nul = ShouldProcess a refusé (WhatIf), ce n'est pas un échec. Un code non nul en est un ;
+        # l'inverse n'est pas vrai, le binaire sortant en 0 même sans média trouvé.
+        if ($null -ne $state['ExitCode'] -and $state['ExitCode'] -ne 0) {
+            Write-ErrorLog -Text "faster-whisper-xxl a échoué (code $( $state['ExitCode'] )) sur '$( $sources[0] )'."
+        }
     }
     catch {
         Write-ErrorLog -Text $_.Exception.Message
         return
-    }
-
-    # ExitCode nul = ShouldProcess a refusé (WhatIf), ce n'est pas un échec. Un code non nul en est un ;
-    # l'inverse n'est pas vrai, le binaire sortant en 0 même sans média trouvé.
-    if ($null -ne $state['ExitCode'] -and $state['ExitCode'] -ne 0) {
-        Write-ErrorLog -Text "faster-whisper-xxl a échoué (code $( $state['ExitCode'] )) sur '$( $sources[0] )'."
     }
 }
 
