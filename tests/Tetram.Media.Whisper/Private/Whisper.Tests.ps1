@@ -195,6 +195,26 @@ Describe 'Resolve-WhisperSource' {
             $got | Should -Be @($entry)
         }
     }
+
+    It 'transmet un masque * / ? sans l''absolutiser' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            @(Resolve-WhisperSource -Path @('.\*.mkv')) | Should -Be @('.\*.mkv')
+            @(Resolve-WhisperSource -Path @('*.mkv')) | Should -Be @('*.mkv')
+        }
+    }
+
+    It 'ne prend pas le ? du préfixe Win32 \\?\ pour un joker' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            $long = '\\?\C:\Videos\film.mkv'
+            @(Resolve-WhisperSource -Path @($long)) | Should -Be @($long)
+        }
+    }
+
+    It 'transmet -LiteralPath tel quel, sans absolutiser' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            @(Resolve-WhisperSource -LiteralPath @('film[1].mkv')) | Should -Be @('film[1].mkv')
+        }
+    }
 }
 
 Describe 'Get-WhisperPath' {

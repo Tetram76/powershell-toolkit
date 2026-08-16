@@ -98,7 +98,7 @@ Describe 'Get-MediaTranscript orchestration' {
         $script:SeenArguments = $null
     }
 
-    It 'invoque le binaire une seule fois pour tout le lot' -Skip:(-not $IsWindows) {
+    It 'invoque le binaire une seule fois pour tout le lot' {
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
             $script:SeenArguments = $Arguments
@@ -110,7 +110,7 @@ Describe 'Get-MediaTranscript orchestration' {
         $script:SeenArguments[1] | Should -Be 'D:\b.mkv'
     }
 
-    It 'concatène -Path puis -LiteralPath dans le jeu Mixed' -Skip:(-not $IsWindows) {
+    It 'concatène -Path puis -LiteralPath dans le jeu Mixed' {
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
             $script:SeenArguments = $Arguments
@@ -154,13 +154,10 @@ Describe 'Get-MediaTranscript orchestration' {
     }
 
     It 'ne throw pas et journalise si un chemin contient des caractères invalides' {
-        # GetFullPath lève sur NUL ; ConvertTo-AbsolutePath doit rester strict, c'est
-        # Get-MediaTranscript qui a promis de ne pas laisser remonter.
-        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper { throw 'ne doit pas tourner' }
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper { throw 'accès refusé' }
         $illegal = 'D:\foo' + [char]0 + 'bar.mkv'
         { Get-MediaTranscript -LiteralPath $illegal } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
-        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 0
     }
 
     It 'transmet une source inexistante sans erreur' {

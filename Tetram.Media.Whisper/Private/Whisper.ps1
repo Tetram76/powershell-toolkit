@@ -67,19 +67,13 @@ function Resolve-WhisperSource {
             continue
         }
 
-        # Masque laissé intact : whisper globalise lui-même, et --check_files ne s'applique qu'à une
-        # entrée de type masque ou dossier.
-        if ($entry -match '[*?]') {
-            $sources += ConvertTo-AbsoluteMask -Mask $entry
-            continue
-        }
-
-        $sources += ConvertTo-AbsolutePath -Path $entry
+        # * / ? sont déjà le glob de whisper : on ne résout pas et on n'absolutise pas.
+        $sources += $entry
     }
 
     foreach ($entry in @($LiteralPath)) {
         if ([string]::IsNullOrWhiteSpace($entry)) { continue }
-        $sources += ConvertTo-AbsolutePath -Path $entry
+        $sources += $entry
     }
 
     return $sources

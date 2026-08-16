@@ -44,8 +44,7 @@ function Get-MediaTranscript {
         [string] $WhisperPath
     )
 
-    # Contrat public : aucune exception vers l'appelant. ConvertTo-AbsolutePath (GetFullPath)
-    # peut lever ; le helper Common reste strict, c'est ici qu'on journalise.
+    # Contrat public : aucune exception vers l'appelant.
     try {
         $exe = Get-WhisperPath -OverridePath $WhisperPath
 
