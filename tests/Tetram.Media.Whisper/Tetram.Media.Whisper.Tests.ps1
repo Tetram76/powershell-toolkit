@@ -98,7 +98,7 @@ Describe 'Get-MediaTranscript orchestration' {
         $script:SeenArguments = $null
     }
 
-    It 'invoque le binaire une seule fois pour tout le lot' {
+    It 'invoque le binaire une seule fois pour tout le lot' -Skip:(-not $IsWindows) {
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
             $script:SeenArguments = $Arguments
@@ -110,7 +110,7 @@ Describe 'Get-MediaTranscript orchestration' {
         $script:SeenArguments[1] | Should -Be 'D:\b.mkv'
     }
 
-    It 'concatène -Path puis -LiteralPath dans le jeu Mixed' {
+    It 'concatène -Path puis -LiteralPath dans le jeu Mixed' -Skip:(-not $IsWindows) {
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
             $script:SeenArguments = $Arguments

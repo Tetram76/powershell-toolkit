@@ -260,6 +260,8 @@ function ConvertTo-AbsoluteMask
         $rest = @($Mask.Substring($lastSep + 1) -split '[\\/]')
     }
 
+    # GetFullPath est OS-natif : '.\*.mkv' doit donner le cwd, pas cwd/./ sous Unix.
+    $prefixPath = $prefixPath -replace '[\\/]', $separator
     $absolutePrefix = (ConvertTo-AbsolutePath -Path $prefixPath).TrimEnd('\', '/')
     return (@($absolutePrefix) + $rest) -join $separator
 }

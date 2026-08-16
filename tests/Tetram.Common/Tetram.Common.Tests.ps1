@@ -140,7 +140,7 @@ Describe 'ConvertTo-AbsolutePath' {
         ConvertTo-AbsolutePath -Path '~/a.mkv' | Should -Be (Join-Path $HOME 'a.mkv')
     }
 
-    It 'laisse un chemin déjà absolu inchangé' {
+    It 'laisse un chemin déjà absolu inchangé' -Skip:(-not $IsWindows) {
         ConvertTo-AbsolutePath -Path 'D:\Films\a.mkv' | Should -Be 'D:\Films\a.mkv'
     }
 }
@@ -169,7 +169,7 @@ Describe 'ConvertTo-AbsoluteMask' {
         }
     }
 
-    It 'conserve un masque de segment intermédiaire' {
+    It 'conserve un masque de segment intermédiaire' -Skip:(-not $IsWindows) {
         ConvertTo-AbsoluteMask -Mask 'D:\Films\*\*.mkv' | Should -Be 'D:\Films\*\*.mkv'
     }
 
@@ -180,7 +180,7 @@ Describe 'ConvertTo-AbsoluteMask' {
         ConvertTo-AbsoluteMask -Mask '/*.mkv' | Should -Be $expected
     }
 
-    It 'conserve le séparateur de racine d''un masque disque' {
+    It 'conserve le séparateur de racine d''un masque disque' -Skip:(-not $IsWindows) {
         ConvertTo-AbsoluteMask -Mask 'D:\*.mkv' | Should -Be 'D:\*.mkv'
     }
 }
