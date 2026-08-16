@@ -33,6 +33,8 @@ function Get-WhisperArguments {
         '--postfix'
         '--print_progress'
         '--task', 'transcribe'
+        # Lot sans opérateur : le beep de fin du binaire n'a rien à signaler.
+        '--beep_off'
     )
 
     return $whisperArgs

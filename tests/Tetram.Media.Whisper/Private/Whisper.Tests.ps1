@@ -33,6 +33,7 @@ Describe 'Get-WhisperArguments' {
                 '--postfix'
                 '--print_progress'
                 '--task', 'transcribe'
+                '--beep_off'
             )
         }
     }
@@ -53,6 +54,7 @@ Describe 'Get-WhisperArguments' {
                 '--postfix'
                 '--print_progress'
                 '--task', 'transcribe'
+                '--beep_off'
             )
         }
     }
@@ -71,6 +73,7 @@ Describe 'Get-WhisperArguments' {
                 '--postfix'
                 '--print_progress'
                 '--task', 'transcribe'
+                '--beep_off'
             )
         }
     }
@@ -89,6 +92,7 @@ Describe 'Get-WhisperArguments' {
                 '--postfix'
                 '--print_progress'
                 '--task', 'transcribe'
+                '--beep_off'
             )
         }
     }
@@ -108,6 +112,7 @@ Describe 'Get-WhisperArguments' {
                 '--postfix'
                 '--print_progress'
                 '--task', 'transcribe'
+                '--beep_off'
             )
         }
     }
