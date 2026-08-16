@@ -172,4 +172,15 @@ Describe 'ConvertTo-AbsoluteMask' {
     It 'conserve un masque de segment intermédiaire' {
         ConvertTo-AbsoluteMask -Mask 'D:\Films\*\*.mkv' | Should -Be 'D:\Films\*\*.mkv'
     }
+
+    It 'conserve la racine du volume pour un masque au sommet' {
+        $root = [System.IO.Path]::GetPathRoot((Get-Location -PSProvider FileSystem).ProviderPath)
+        $expected = Join-Path $root '*.mkv'
+        ConvertTo-AbsoluteMask -Mask '\*.mkv' | Should -Be $expected
+        ConvertTo-AbsoluteMask -Mask '/*.mkv' | Should -Be $expected
+    }
+
+    It 'conserve le séparateur de racine d''un masque disque' {
+        ConvertTo-AbsoluteMask -Mask 'D:\*.mkv' | Should -Be 'D:\*.mkv'
+    }
 }

@@ -238,33 +238,30 @@ function ConvertTo-AbsoluteMask
     )
 
     $separator = [System.IO.Path]::DirectorySeparatorChar
-    $prefix = @()
-    $rest = @()
-    $inRest = $false
 
-    foreach ($segment in ($Mask -split '[\\/]'))
+    # -split '[\\/]' jette le séparateur : 'D:\*.mkv' devient préfixe 'D:' (cwd du lecteur)
+    # et '\*.mkv' un préfixe vide (ensuite forcé à '.'). Le préfixe se lit sur la chaîne d'origine.
+    $metaIndex = $Mask.IndexOfAny([char[]]@('*', '?'))
+    if ($metaIndex -lt 0)
     {
-        if (-not $inRest -and $segment -match '[*?]')
-        {
-            $inRest = $true
-        }
-        if ($inRest)
-        {
-            $rest += $segment
-        }
-        else
-        {
-            $prefix += $segment
-        }
+        return ConvertTo-AbsolutePath -Path $Mask
     }
 
-    $prefixPath = $prefix -join $separator
-    if ([string]::IsNullOrEmpty($prefixPath))
+    $before = $Mask.Substring(0, $metaIndex)
+    $lastSep = [Math]::Max($before.LastIndexOf([char]'\'), $before.LastIndexOf([char]'/'))
+    if ($lastSep -lt 0)
     {
         $prefixPath = '.'
+        $rest = @($Mask)
+    }
+    else
+    {
+        $prefixPath = $before.Substring(0, $lastSep + 1)
+        $rest = @($Mask.Substring($lastSep + 1) -split '[\\/]')
     }
 
-    return (@((ConvertTo-AbsolutePath -Path $prefixPath)) + $rest) -join $separator
+    $absolutePrefix = (ConvertTo-AbsolutePath -Path $prefixPath).TrimEnd('\', '/')
+    return (@($absolutePrefix) + $rest) -join $separator
 }
 
 function Show-CommandLine
