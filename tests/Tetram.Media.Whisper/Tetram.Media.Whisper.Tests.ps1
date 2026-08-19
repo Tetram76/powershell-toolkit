@@ -41,7 +41,16 @@ Describe 'Get-MediaTranscript binding' {
     }
 
     It 'refuse un appel sans aucune source' {
-        { Get-MediaTranscript -Format srt -ErrorAction Stop } | Should -Throw
+        # N'invoque jamais la cmdlet sans lier -Path ni -LiteralPath : PowerShell ne lèverait pas
+        # d'erreur de binding mais déclencherait son prompt interactif natif pour le paramètre
+        # obligatoire manquant, qui bloque en console réelle (seul un hôte non interactif comme la CI
+        # échoue immédiatement). On vérifie donc l'obligation via les métadonnées des jeux de paramètres.
+        $meta = Get-Command Get-MediaTranscript
+        foreach ($setName in @($meta.ParameterSets | Select-Object -ExpandProperty Name)) {
+            $set = $meta.ParameterSets | Where-Object Name -EQ $setName
+            $sourceParams = @($set.Parameters | Where-Object { $_.Name -in @('Path', 'LiteralPath') -and $_.IsMandatory })
+            $sourceParams.Count | Should -BeGreaterThan 0 -Because "le jeu '$setName' doit exiger Path ou LiteralPath"
+        }
     }
 
     It 'refuse un format hors liste' {
