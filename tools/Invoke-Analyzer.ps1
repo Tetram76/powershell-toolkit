@@ -1,18 +1,21 @@
-#Requires -Version 5.1
-[CmdletBinding()]
+#Requires -Version 7.0
+[CmdletBinding(DefaultParameterSetName = 'AdditionalPaths')]
 param(
+    [Parameter(ParameterSetName = 'AdditionalPaths')]
     [string[]] $AdditionalPaths = @(
         '.\tools'
         '.\tests'
     ),
 
+    # Cible un fichier (ou dossier) en particulier ; exclusif avec -AdditionalPaths
+    # (pas de scan des dossiers de modules dans ce cas).
+    [Parameter(Mandatory, ParameterSetName = 'Path')]
+    [string] $Path,
+
     [string] $Settings,
 
     # Phase 1 dépôt existant : ParseError + Error. Passer aussi 'Warning' quand le dépôt est stabilisé.
-    [string[]] $Severity = @('ParseError', 'Error'),
-
-    # Si renseigné (ex. CI), écrit un SARIF à partir de la même collecte $results avant la gate.
-    [string] $SarifOutputPath
+    [string[]] $Severity = @('ParseError', 'Error')
 )
 
 Set-StrictMode -Version Latest
@@ -20,6 +23,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Settings) {
+    # [string] non renseigné vaut '' (pas $null) : ??= ne s'applique pas ici.
     $Settings = Join-Path $PSScriptRoot 'PSScriptAnalyzerSettings.psd1'
 }
 
@@ -36,64 +40,49 @@ try {
 
     $results = [System.Collections.ArrayList]::new()
     $scanPaths = [System.Collections.Generic.List[string]]::new()
-    foreach ($item in @($AdditionalPaths)) {
-        if (Test-Path -LiteralPath $item) {
-            [void]$scanPaths.Add((Resolve-Path -LiteralPath $item).Path)
-        }
-    }
 
-    $moduleDirs = foreach ($dir in @(Get-ChildItem -LiteralPath $repoRoot -Directory)) {
-        if (Test-Path -LiteralPath (Join-Path $dir.FullName "$($dir.Name).psd1") -PathType Leaf) {
-            $dir
+    if ($PSCmdlet.ParameterSetName -eq 'Path') {
+        if (-not (Test-Path -LiteralPath $Path)) {
+            throw "Chemin introuvable : $Path"
         }
+        [void]$scanPaths.Add((Resolve-Path -LiteralPath $Path).Path)
     }
-    foreach ($dir in @($moduleDirs)) {
-        $moduleFiles = foreach ($file in @(Get-ChildItem -LiteralPath $dir.FullName -File)) {
-            if ($file.Extension -in @('.psm1', '.psd1', '.ps1')) {
-                $file
+    else {
+        foreach ($item in @($AdditionalPaths)) {
+            if (Test-Path -LiteralPath $item) {
+                [void]$scanPaths.Add((Resolve-Path -LiteralPath $item).Path)
             }
         }
-        $privateDir = Join-Path $dir.FullName 'Private'
-        if (Test-Path -LiteralPath $privateDir -PathType Container) {
-            $moduleFiles = @($moduleFiles) + @(Get-ChildItem -LiteralPath $privateDir -Filter '*.ps1' -File -Recurse)
+
+        $moduleDirs = foreach ($dir in @(Get-ChildItem -LiteralPath $repoRoot -Directory)) {
+            if (Test-Path -LiteralPath (Join-Path $dir.FullName "$($dir.Name).psd1") -PathType Leaf) {
+                $dir
+            }
         }
-        foreach ($f in @($moduleFiles)) {
-            [void]$scanPaths.Add($f.FullName)
+        foreach ($dir in @($moduleDirs)) {
+            $moduleFiles = foreach ($file in @(Get-ChildItem -LiteralPath $dir.FullName -File)) {
+                if ($file.Extension -in @('.psm1', '.psd1', '.ps1')) {
+                    $file
+                }
+            }
+            $privateDir = Join-Path $dir.FullName 'Private'
+            if (Test-Path -LiteralPath $privateDir -PathType Container) {
+                $moduleFiles = @($moduleFiles) + @(Get-ChildItem -LiteralPath $privateDir -Filter '*.ps1' -File -Recurse)
+            }
+            foreach ($f in @($moduleFiles)) {
+                [void]$scanPaths.Add($f.FullName)
+            }
         }
     }
 
     foreach ($scan in @($scanPaths)) {
         $isContainer = (Get-Item -LiteralPath $scan).PSIsContainer
         # PSScriptAnalyzer émet parfois CommandNotFound (Get-Command) en interne ;
-        # Stop transformerait ça en échec du script avant la gate $Severity.
-        $previousEap = $ErrorActionPreference
-        $ErrorActionPreference = 'Continue'
-        try {
-            $chunk = Invoke-ScriptAnalyzer -Path $scan -Recurse:$isContainer @analyzerParams
-        }
-        finally {
-            $ErrorActionPreference = $previousEap
-        }
+        # -ErrorAction Continue évite que $ErrorActionPreference = 'Stop' transforme
+        # ça en échec du script avant la gate $Severity.
+        $chunk = Invoke-ScriptAnalyzer -Path $scan -Recurse:$isContainer -ErrorAction Continue @analyzerParams
         if ($chunk) {
             [void]$results.AddRange(@($chunk))
-        }
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($SarifOutputPath)) {
-        $sarifParent = Split-Path -Parent $SarifOutputPath
-        if ($sarifParent -and -not (Test-Path -LiteralPath $sarifParent)) {
-            New-Item -ItemType Directory -Path $sarifParent -Force | Out-Null
-        }
-
-        $analysisResults = @($results)
-        # ConvertTo-SARIF 1.0 : sous StrictMode Latest, certains accès aux DiagnosticRecord échouent.
-        Set-StrictMode -Off
-        try {
-            Import-Module ConvertToSARIF -Force
-            $analysisResults | ConvertTo-SARIF -FilePath $SarifOutputPath
-        }
-        finally {
-            Set-StrictMode -Version Latest
         }
     }
 
