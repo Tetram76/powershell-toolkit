@@ -54,16 +54,32 @@ function Resolve-WhisperSource {
         if ([string]::IsNullOrWhiteSpace($entry)) { continue }
 
         if (Test-PowerShellSpecificPath -Path $entry) {
-            # WildcardPattern lit [x] comme une classe de caractères (un seul caractère du jeu), pas comme
-            # des crochets littéraux : sans cet échappement, un fichier réellement nommé "a[1].mkv" est
-            # invisible à Resolve-Path -Path (vérifié empiriquement, contrairement à -LiteralPath).
-            $pattern = $entry -replace '(?<!`)([\[\]])', '`$1'
+            $resolvedPaths = [System.Collections.Generic.List[string]]::new()
+
+            if ($entry.Contains('[')) {
+                # Un crochet est ambigu, et les deux lectures sont légitimes : nom de fichier réel
+                # (ex. "film[1].mkv", vérifié empiriquement introuvable par WildcardPattern sans cet
+                # échappement) ou classe de caractères glob (ex. "clip[12].mkv" -> clip1.mkv, clip2.mkv).
+                # On tente les deux et on fusionne : aucune des deux interprétations n'est présumée fausse.
+                $literalPattern = $entry -replace '(?<!`)([\[\]])', '`$1'
+                foreach ($resolved in @(Resolve-Path -Path $literalPattern -ErrorAction SilentlyContinue)) {
+                    $resolvedPaths.Add($resolved.ProviderPath)
+                }
+                foreach ($resolved in @(Resolve-Path -Path $entry -ErrorAction SilentlyContinue)) {
+                    if (-not $resolvedPaths.Contains($resolved.ProviderPath)) {
+                        $resolvedPaths.Add($resolved.ProviderPath)
+                    }
+                }
+            }
+            else {
+                foreach ($resolved in @(Resolve-Path -Path $entry -ErrorAction SilentlyContinue)) {
+                    $resolvedPaths.Add($resolved.ProviderPath)
+                }
+            }
 
             # Une résolution vide ne se rabat pas sur le littéral : ce serait inventer une interprétation
             # que l'appelant n'a pas demandée, et faire signaler par whisper un fichier jamais désigné.
-            foreach ($resolved in @(Resolve-Path -Path $pattern -ErrorAction SilentlyContinue)) {
-                $sources += $resolved.ProviderPath
-            }
+            $sources += $resolvedPaths
             continue
         }
 

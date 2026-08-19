@@ -176,6 +176,32 @@ Describe 'Resolve-WhisperSource' {
         }
     }
 
+    It 'résout une classe de caractères entre crochets vers les fichiers correspondants' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            Set-Content -LiteralPath (Join-Path $Work 'clip1.mkv') -Value 'x'
+            Set-Content -LiteralPath (Join-Path $Work 'clip2.mkv') -Value 'x'
+            Set-Content -LiteralPath (Join-Path $Work 'clip12.mkv') -Value 'x'
+            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work 'clip[12].mkv')))
+            $got.Count | Should -Be 2
+            $got | Should -Contain (Join-Path $Work 'clip1.mkv')
+            $got | Should -Contain (Join-Path $Work 'clip2.mkv')
+            $got | Should -Not -Contain (Join-Path $Work 'clip12.mkv')
+        }
+    }
+
+    It 'fusionne interprétation littérale et classe de caractères sans doublon' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            Set-Content -LiteralPath (Join-Path $Work 'film[1].mkv') -Value 'x'
+            Set-Content -LiteralPath (Join-Path $Work 'film1.mkv') -Value 'x'
+            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work 'film[1].mkv')))
+            $got.Count | Should -Be 2
+            $got | Should -Contain (Join-Path $Work 'film[1].mkv')
+            $got | Should -Contain (Join-Path $Work 'film1.mkv')
+        }
+    }
+
     It 'concatène -Path puis -LiteralPath' {
         InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
