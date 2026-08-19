@@ -181,6 +181,36 @@ function Test-IsLikelyPath
     return $false
 }
 
+function Test-PowerShellSpecificPath
+{
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string] $Path
+    )
+
+    # Les classes de caractères divergent entre PowerShell et le glob des outils natifs ([!a] = négation
+    # côté glob, jeu littéral côté PowerShell) : tout crochet impose une résolution PowerShell préalable.
+    if ($Path.Contains('[') -or $Path.Contains('`'))
+    {
+        return $true
+    }
+
+    # Qualifier de plus d'une lettre = PSDrive nommé, qu'un processus natif ne sait pas interpréter.
+    if ($Path -match '^(?<q>[A-Za-z][^\\/:]*):' -and $Matches['q'].Length -gt 1)
+    {
+        return $true
+    }
+
+    # Limite connue et acceptée : un PSDrive d'une seule lettre créé sans -Persist (ex. `New-PSDrive X ...`)
+    # n'est visible que de PowerShell ([System.IO.File]::Exists échoue dessus, vérifié empiriquement), pas
+    # d'un processus natif — mais le distinguer d'une vraie lettre de lecteur exigerait d'interroger
+    # [System.IO.DriveInfo]::GetDrives(), rendant ce test dépendant des lecteurs réels de la machine. Cas
+    # jugé trop marginal (création explicite et non persistée d'un PSDrive d'une lettre) pour ce coût.
+    return $false
+}
+
 function Show-CommandLine
 {
     [CmdletBinding()]
@@ -323,4 +353,5 @@ Export-ModuleMember -Function `
 	Show-Colors,
 Write-Log, Write-ErrorLog, Write-InfoLog, Write-DebugLog,
 Format-FileSize, Format-Duration,
-Show-CommandLine
+Show-CommandLine,
+Test-PowerShellSpecificPath

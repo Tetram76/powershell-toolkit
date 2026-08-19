@@ -103,3 +103,22 @@ Describe 'Show-CommandLine (-PassThru)' {
         $lines[1] | Should -BeExactly '    -i input.mkv'
     }
 }
+
+Describe 'Test-PowerShellSpecificPath' {
+
+    It 'reconnaît les crochets et l''échappement backtick' {
+        Test-PowerShellSpecificPath -Path 'D:\Films\film[1].mkv' | Should -BeTrue
+        Test-PowerShellSpecificPath -Path 'D:\Films\film`*.mkv' | Should -BeTrue
+    }
+
+    It 'reconnaît un PSDrive nommé' {
+        Test-PowerShellSpecificPath -Path 'Temp:\a.mkv' | Should -BeTrue
+    }
+
+    It 'laisse passer un chemin, un masque, une lettre de lecteur ou un UNC' {
+        Test-PowerShellSpecificPath -Path 'D:\Films\a.mkv' | Should -BeFalse
+        Test-PowerShellSpecificPath -Path 'D:\Films\*.mkv' | Should -BeFalse
+        Test-PowerShellSpecificPath -Path '.\a?.mkv' | Should -BeFalse
+        Test-PowerShellSpecificPath -Path '\\nas\films\a.mkv' | Should -BeFalse
+    }
+}

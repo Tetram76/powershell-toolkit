@@ -133,7 +133,9 @@ function Get-FFmpegPath
         }
     }
 
-    $fromPath = Get-Command ffmpeg -ErrorAction SilentlyContinue
+    # -CommandType Application : une fonction/alias de même nom dans la session primerait sinon sur
+    # l'exécutable du PATH, avec une Source vide ou trompeuse.
+    $fromPath = Get-Command ffmpeg -CommandType Application -ErrorAction SilentlyContinue
     if ($fromPath)
     {
         return $fromPath.Source
@@ -170,7 +172,9 @@ function Get-FfprobePath
         }
     }
 
-    $fromPath = Get-Command ffprobe -ErrorAction SilentlyContinue
+    # -CommandType Application : une fonction/alias de même nom dans la session primerait sinon sur
+    # l'exécutable du PATH, avec une Source vide ou trompeuse.
+    $fromPath = Get-Command ffprobe -CommandType Application -ErrorAction SilentlyContinue
     if ($fromPath)
     {
         return $fromPath.Source

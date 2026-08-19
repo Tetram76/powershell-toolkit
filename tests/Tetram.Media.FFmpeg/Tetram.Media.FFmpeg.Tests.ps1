@@ -202,4 +202,22 @@ Describe 'Resolve-FFToolsDefaultBase' {
             { Get-FFmpegPath } | Should -Throw -ExpectedMessage '*Tetram.Media.FFmpeg*'
         }
     }
+
+    It 'ignore une fonction ffmpeg/ffprobe de même nom au lieu de renvoyer une Source vide' {
+        InModuleScope 'Tetram.Media.FFmpeg' {
+            function ffmpeg { 'ne doit jamais être choisie' }
+            function ffprobe { 'ne doit jamais être choisie' }
+            try {
+                $script:FFToolsSearchRoot = Join-Path ([IO.Path]::GetTempPath()) ('empty-' + [guid]::NewGuid().ToString('N'))
+                New-Item -ItemType Directory -Path $script:FFToolsSearchRoot -Force | Out-Null
+                $script:FFToolsBaseResolved = $false
+                $script:FFToolsDefaultBase = $null
+                { Get-FFmpegPath } | Should -Throw -ExpectedMessage '*Tetram.Media.FFmpeg*'
+                { Get-FfprobePath } | Should -Throw -ExpectedMessage '*Tetram.Media.FFmpeg*'
+            }
+            finally {
+                Remove-Item -Path 'function:ffmpeg', 'function:ffprobe' -ErrorAction SilentlyContinue
+            }
+        }
+    }
 }
