@@ -203,6 +203,11 @@ function Test-PowerShellSpecificPath
         return $true
     }
 
+    # Limite connue et acceptée : un PSDrive d'une seule lettre créé sans -Persist (ex. `New-PSDrive X ...`)
+    # n'est visible que de PowerShell ([System.IO.File]::Exists échoue dessus, vérifié empiriquement), pas
+    # d'un processus natif — mais le distinguer d'une vraie lettre de lecteur exigerait d'interroger
+    # [System.IO.DriveInfo]::GetDrives(), rendant ce test dépendant des lecteurs réels de la machine. Cas
+    # jugé trop marginal (création explicite et non persistée d'un PSDrive d'une lettre) pour ce coût.
     return $false
 }
 
