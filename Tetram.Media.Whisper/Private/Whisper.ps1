@@ -53,6 +53,14 @@ function Resolve-WhisperSource {
     foreach ($entry in @($Path)) {
         if ([string]::IsNullOrWhiteSpace($entry)) { continue }
 
+        # '~' n'est compris que de PowerShell ; passé tel quel, whisper (natif) le prendrait au pied de la
+        # lettre (vérifié empiriquement : [System.IO.File]::Exists échoue sur un chemin en '~'). Expansion
+        # textuelle avant tout autre test, sans passer par Resolve-Path : un masque comme '~\Videos\*.mkv'
+        # reste ainsi un seul argument transmis à whisper, et l'existence n'est jamais testée ici.
+        if ($entry -eq '~' -or $entry.StartsWith('~/') -or $entry.StartsWith('~\')) {
+            $entry = Join-Path $HOME $entry.Substring(1).TrimStart('/', '\')
+        }
+
         if (Test-PowerShellSpecificPath -Path $entry) {
             $resolvedPaths = [System.Collections.Generic.List[string]]::new()
 

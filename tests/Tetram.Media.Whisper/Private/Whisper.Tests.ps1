@@ -241,6 +241,26 @@ Describe 'Resolve-WhisperSource' {
             @(Resolve-WhisperSource -LiteralPath @('film[1].mkv')) | Should -Be @('film[1].mkv')
         }
     }
+
+    It 'développe ~ sans tester l''existence' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            @(Resolve-WhisperSource -Path @('~\Videos\film.mkv')) | Should -Be @((Join-Path $HOME 'Videos\film.mkv'))
+            @(Resolve-WhisperSource -Path @('~/Videos/film.mkv')) | Should -Be @((Join-Path $HOME 'Videos/film.mkv'))
+        }
+    }
+
+    It 'développe ~ sans casser le masque qui le suit' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            $expected = Join-Path $HOME 'Videos\*.mkv'
+            @(Resolve-WhisperSource -Path @('~\Videos\*.mkv')) | Should -Be @($expected)
+        }
+    }
+
+    It 'ne développe pas ~ dans -LiteralPath' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            @(Resolve-WhisperSource -LiteralPath @('~\Videos\film.mkv')) | Should -Be @('~\Videos\film.mkv')
+        }
+    }
 }
 
 Describe 'Get-WhisperPath' {
