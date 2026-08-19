@@ -122,26 +122,3 @@ Describe 'Test-PowerShellSpecificPath' {
         Test-PowerShellSpecificPath -Path '\\nas\films\a.mkv' | Should -BeFalse
     }
 }
-
-Describe 'ConvertTo-AbsolutePath' {
-
-    It 'absolutise relativement à l''emplacement PowerShell, sans exiger l''existence' {
-        Push-Location -LiteralPath $TestDrive
-        try {
-            $expected = Join-Path ((Get-Location -PSProvider FileSystem).ProviderPath) 'absent.mkv'
-            ConvertTo-AbsolutePath -Path 'absent.mkv' | Should -Be $expected
-        }
-        finally {
-            Pop-Location
-        }
-    }
-
-    It 'développe ~' {
-        ConvertTo-AbsolutePath -Path '~/a.mkv' | Should -Be (Join-Path $HOME 'a.mkv')
-    }
-
-    It 'laisse un chemin déjà absolu inchangé' -Skip:(-not $IsWindows) {
-        ConvertTo-AbsolutePath -Path 'D:\Films\a.mkv' | Should -Be 'D:\Films\a.mkv'
-    }
-}
-

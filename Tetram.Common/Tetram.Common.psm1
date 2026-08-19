@@ -206,28 +206,6 @@ function Test-PowerShellSpecificPath
     return $false
 }
 
-function ConvertTo-AbsolutePath
-{
-    [CmdletBinding()]
-    [OutputType([string])]
-    param (
-        [Parameter(Mandatory = $true)]
-        [string] $Path
-    )
-
-    $expanded = $Path
-    if ($expanded -eq '~' -or $expanded.StartsWith('~/') -or $expanded.StartsWith('~\'))
-    {
-        $expanded = Join-Path $HOME $expanded.Substring(1).TrimStart('/', '\')
-    }
-
-    # GetFullPath et pas Resolve-Path : le chemin peut ne pas exister. La base est l'emplacement
-    # PowerShell, qui ne coïncide pas forcément avec le répertoire de travail du processus — seul connu
-    # des exécutables lancés depuis PowerShell.
-    $base = (Get-Location -PSProvider FileSystem).ProviderPath
-    return [System.IO.Path]::GetFullPath($expanded, $base)
-}
-
 function Show-CommandLine
 {
     [CmdletBinding()]
@@ -371,5 +349,4 @@ Export-ModuleMember -Function `
 Write-Log, Write-ErrorLog, Write-InfoLog, Write-DebugLog,
 Format-FileSize, Format-Duration,
 Show-CommandLine,
-Test-PowerShellSpecificPath,
-ConvertTo-AbsolutePath
+Test-PowerShellSpecificPath

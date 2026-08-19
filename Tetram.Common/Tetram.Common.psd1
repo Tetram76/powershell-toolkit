@@ -24,7 +24,6 @@
         'Format-FileSize', 'Format-Duration'
         'Show-CommandLine'
         'Test-PowerShellSpecificPath'
-        'ConvertTo-AbsolutePath'
     )
     CmdletsToExport = @()
     AliasesToExport = @()
@@ -41,7 +40,7 @@
             )
             ReleaseNotes = @'
 - 1.1.0 : Renommage des fonctions pour verbes approuvés.
-- 1.2.0 : Utilitaires de chemin pour processus natifs (syntaxe PowerShell, absolutisation).
+- 1.2.0 : Détection de syntaxe PowerShell spécifique pour processus natifs.
 '@
         }
     }

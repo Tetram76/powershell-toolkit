@@ -18,10 +18,6 @@ Fonctions de journalisation, de formatage, et utilitaires de chemin pour process
 
 ## Tetram.Common Cmdlets
 
-### [ConvertTo-AbsolutePath](ConvertTo-AbsolutePath.md)
-
-Absolutise un chemin, même inexistant.
-
 ### [Test-PowerShellSpecificPath](Test-PowerShellSpecificPath.md)
 
 Indique si un chemin emploie de la syntaxe que seul PowerShell comprend.
