@@ -197,7 +197,11 @@ function Resolve-StreamsExistingPath {
     param([string] $LiteralPath)
     try {
         # GetFullPath laisse `~` littéral ; le provider PowerShell le développe.
-        return (Resolve-Path -LiteralPath $LiteralPath).Path
+        # -ErrorAction SilentlyContinue : un chemin absent est un cas nominal pour l'appelant (retourne
+        # $null), pas une erreur à afficher — sans ça, Resolve-Path écrit une erreur non terminante sur
+        # la console (visible même quand ce cas est traité normalement plus haut), indépendamment du
+        # catch ci-dessous qui ne couvre que les erreurs réellement terminantes.
+        return (Resolve-Path -LiteralPath $LiteralPath -ErrorAction SilentlyContinue).Path
     }
     catch {
         return $null
