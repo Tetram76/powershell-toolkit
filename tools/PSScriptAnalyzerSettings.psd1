@@ -13,6 +13,14 @@
 @{
     ExcludeRules = @(
         'PSAvoidUsingWriteHost'
+
+        # Bug moteur PowerShell (CommandInfo.Parameters non thread-safe, "runspace affinity" :
+        # https://github.com/PowerShell/PowerShell/issues/4003), exploité par UseCorrectCasing
+        # via CommandInfo.get_Parameters() : NullReferenceException sporadique à chaque scan,
+        # indépendante du code analysé. Contournement documenté côté PSScriptAnalyzer
+        # (https://github.com/PowerShell/PSScriptAnalyzer/issues/1516, #1881) : ne jamais
+        # réactiver cette règle sans revérifier que le bug moteur est corrigé.
+        'PSUseCorrectCasing'
     )
 
     # Laisser @() vide pour conserver « toutes les règles par défaut − ExcludeRules ».
@@ -32,10 +40,6 @@
         }
 
         PSAvoidTrailingWhitespace = @{
-            Enable = $true
-        }
-
-        PSUseCorrectCasing = @{
             Enable = $true
         }
 
