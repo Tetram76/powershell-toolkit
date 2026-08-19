@@ -253,34 +253,43 @@ Règle, appliquée entrée par entrée. Aucun cas ne teste l'existence de quoi q
 | Entrée de `-Path` | Traitement |
 |---|---|
 | Contient `[`, un échappement backtick, ou vise un PSDrive hors système de fichiers | **Résolue** par PowerShell ; un élément par fichier trouvé, transmis sans neutralisation. Résolution vide → l'entrée **ne produit aucun élément** |
-| Contient `*` ou `?`, y compris dans un segment intermédiaire (`D:\Films\*\*.mkv`) | **Transmise telle quelle**, en un seul élément, après absolutisation du préfixe sans métacaractère (couvre `.\*.mkv` et `~`) |
-| Aucun métacaractère | Transmise absolue telle quelle, sans neutralisation. Fichier, dossier ou chemin inexistant : la commande ne fait pas la différence, le binaire acceptant fichier comme dossier |
+| Contient `*` ou `?`, y compris dans un segment intermédiaire (`D:\Films\*\*.mkv`) | **Transmise telle quelle**, en un seul élément, sans absolutisation (couvre `.\*.mkv`) ; seul `~` en tête est développé textuellement avant ce test |
+| Aucun métacaractère | Transmise telle quelle, sans neutralisation ni absolutisation. Fichier, dossier ou chemin inexistant : la commande ne fait pas la différence, le binaire acceptant fichier comme dossier |
 
-`-LiteralPath` ne suit aucune de ces règles : ses entrées sont toujours littérales, jamais résolues, et sont
-transmises absolues sans neutralisation, crochets compris.
+`-LiteralPath` ne suit aucune de ces règles : ses entrées sont toujours littérales, jamais résolues, jamais
+absolutisées, et sont transmises telles quelles sans neutralisation, crochets compris.
 
-### Conversions de chemin : dans `Tetram.Common`, pas dans le module
+### Détection de syntaxe PowerShell : dans `Tetram.Common`, pas dans le module
 
 La règle ci-dessus est une **politique** propre à whisper, parce qu'elle découle d'une de ses propriétés :
-il globalise lui-même. Les conversions qu'elle enchaîne, elles, ne connaissent rien à whisper — développer
-`~`, absolutiser sans exiger l'existence, reconnaître de la syntaxe que seul PowerShell comprend. Elles
-valent pour n'importe quel exécutable natif qui globalise.
+il globalise lui-même. Reconnaître de la syntaxe que seul PowerShell comprend, en revanche, ne connaît rien
+à whisper et vaut pour n'importe quel exécutable natif qui globalise lui-même.
 
-Elles sont donc portées par `Tetram.Common`, exportées, sous des noms sans infixe comme le reste du module
-commun : `Test-PowerShellSpecificPath`, `ConvertTo-AbsolutePath`, `ConvertTo-AbsoluteMask`. `Tetram.Common`
-passe en 1.2.0, et ces trois fonctions reçoivent leur page d'aide au même titre que les autres exports.
+Ce classificateur est donc porté par `Tetram.Common`, exporté sous un nom sans infixe comme le reste du
+module commun : `Test-PowerShellSpecificPath`. `Tetram.Common` passe en 1.2.0, et cette fonction reçoit sa
+page d'aide au même titre que les autres exports.
 
-Seul `Resolve-WhisperSource` reste privé au module : c'est lui qui décide *quelle* conversion appliquer à
-quelle entrée.
+**Aucune absolutisation n'a lieu nulle part** dans ce flux : ni dans `Tetram.Common`, ni dans
+`Resolve-WhisperSource`. Une entrée reste relative si l'appelant l'a fournie relative ; whisper reçoit
+l'argument tel que PowerShell l'a résolu ou tel que l'appelant l'a écrit, sans passage par
+`GetFullPath`/`Resolve-Path` en dehors du cas où `Test-PowerShellSpecificPath` déclenche une résolution
+(voir ci-dessous). Deux fonctions antérieures qui absolutisaient (`ConvertTo-AbsolutePath`,
+`ConvertTo-AbsoluteMask`) ont été retirées de `Tetram.Common` en cours de revue : la première cassait sous
+Unix (`\` traité comme caractère littéral par `GetFullPath`, pas comme séparateur), la seconde sur les
+masques disque-relatifs Windows (`D:*.mkv`) ; aucun appelant de production ne les utilisait plus une fois
+`Resolve-WhisperSource` réécrit pour ne plus absolutiser.
+
+Seul `Resolve-WhisperSource` reste privé au module : c'est lui qui décide *si* `Test-PowerShellSpecificPath`
+s'applique à une entrée, et qui résout via `Resolve-Path` quand c'est le cas.
 
 Une résolution vide ne se rabat pas sur le littéral : la résolution a établi que l'entrée est un motif, la
 retransmettre telle quelle en tant que chemin inventerait une interprétation que l'appelant n'a pas
 demandée, et ferait signaler par whisper un fichier manquant qui n'a jamais été désigné.
 
-L'absolutisation utilise `[System.IO.Path]::GetFullPath` relatif à l'emplacement PowerShell courant, et non
-`Resolve-Path` qui échouerait sur un chemin inexistant. Elle reste indispensable : l'emplacement PowerShell
-et le répertoire de travail du processus ne coïncident pas nécessairement, et whisper ne connaît que le
-second.
+Le cas `~`/`~/`/`~\` en tête d'entrée est un développement textuel dédié dans `Resolve-WhisperSource`
+(substitution par `$HOME`), pas une absolutisation générale : un masque comme `~\Videos\*.mkv` doit rester
+un seul argument glob pour whisper, ce qu'une résolution via `Resolve-Path` casserait en fichiers
+individuels.
 
 ### Ce que l'argument positionnel du binaire accepte
 
@@ -387,8 +396,8 @@ Le module entre automatiquement dans la couverture du CI (découverte des `*.psm
 | `-UseLanguage` absent / `fr`                                       | Aucun `--language` / `--language fr`                                                                                                                                                                       |
 | Sources multiples                                                  | Une seule invocation, toutes les sources dans la ligne                                                                                                                                                     |
 | Masque `*` / `?`, y compris `D:\Films\*\*.mkv`                     | Transmis tel quel, un seul élément, aucune résolution PowerShell                                                                                                                                           |
-| Masque relatif `.\*.mkv`                                           | Préfixe absolutisé, masque conservé sur la feuille                                                                                                                                                         |
-| Source dossier, sur `-Path` comme sur `-LiteralPath`               | Transmise absolue telle quelle, un seul élément                                                                                                                                                            |
+| Masque relatif `.\*.mkv`                                           | Transmis tel quel, sans absolutisation du préfixe                                                                                                                                                          |
+| Source dossier, sur `-Path` comme sur `-LiteralPath`               | Transmise telle quelle (jamais absolutisée), un seul élément                                                                                                                                               |
 | Source `.lst` / `.m3u`                                             | Transmise telle quelle ; comportement de fichier-liste documenté dans l'aide                                                                                                                               |
 | Entrée à crochets                                                  | Résolue par PowerShell, un élément par fichier, transmis sans neutralisation                                                                                                                               |
 | Chemin littéral contenant des crochets                             | Transmis tel quel, sans neutralisation                                                                                                                                                                     |
