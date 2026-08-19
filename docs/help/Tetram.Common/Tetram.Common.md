@@ -18,10 +18,6 @@ Fonctions de journalisation, de formatage, et utilitaires de chemin pour process
 
 ## Tetram.Common Cmdlets
 
-### [ConvertTo-AbsoluteMask](ConvertTo-AbsoluteMask.md)
-
-Absolutise le préfixe d'un masque sans toucher au masque.
-
 ### [ConvertTo-AbsolutePath](ConvertTo-AbsolutePath.md)
 
 Absolutise un chemin, même inexistant.

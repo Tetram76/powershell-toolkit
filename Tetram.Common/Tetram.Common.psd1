@@ -24,7 +24,7 @@
         'Format-FileSize', 'Format-Duration'
         'Show-CommandLine'
         'Test-PowerShellSpecificPath'
-        'ConvertTo-AbsolutePath', 'ConvertTo-AbsoluteMask'
+        'ConvertTo-AbsolutePath'
     )
     CmdletsToExport = @()
     AliasesToExport = @()

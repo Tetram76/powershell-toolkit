@@ -228,44 +228,6 @@ function ConvertTo-AbsolutePath
     return [System.IO.Path]::GetFullPath($expanded, $base)
 }
 
-function ConvertTo-AbsoluteMask
-{
-    [CmdletBinding()]
-    [OutputType([string])]
-    param (
-        [Parameter(Mandatory = $true)]
-        [string] $Mask
-    )
-
-    $separator = [System.IO.Path]::DirectorySeparatorChar
-
-    # -split '[\\/]' jette le séparateur : 'D:\*.mkv' devient préfixe 'D:' (cwd du lecteur)
-    # et '\*.mkv' un préfixe vide (ensuite forcé à '.'). Le préfixe se lit sur la chaîne d'origine.
-    $metaIndex = $Mask.IndexOfAny([char[]]@('*', '?'))
-    if ($metaIndex -lt 0)
-    {
-        return ConvertTo-AbsolutePath -Path $Mask
-    }
-
-    $before = $Mask.Substring(0, $metaIndex)
-    $lastSep = [Math]::Max($before.LastIndexOf([char]'\'), $before.LastIndexOf([char]'/'))
-    if ($lastSep -lt 0)
-    {
-        $prefixPath = '.'
-        $rest = @($Mask)
-    }
-    else
-    {
-        $prefixPath = $before.Substring(0, $lastSep + 1)
-        $rest = @($Mask.Substring($lastSep + 1) -split '[\\/]')
-    }
-
-    # GetFullPath est OS-natif : '.\*.mkv' doit donner le cwd, pas cwd/./ sous Unix.
-    $prefixPath = $prefixPath -replace '[\\/]', $separator
-    $absolutePrefix = (ConvertTo-AbsolutePath -Path $prefixPath).TrimEnd('\', '/')
-    return (@($absolutePrefix) + $rest) -join $separator
-}
-
 function Show-CommandLine
 {
     [CmdletBinding()]
@@ -410,4 +372,4 @@ Write-Log, Write-ErrorLog, Write-InfoLog, Write-DebugLog,
 Format-FileSize, Format-Duration,
 Show-CommandLine,
 Test-PowerShellSpecificPath,
-ConvertTo-AbsolutePath, ConvertTo-AbsoluteMask
+ConvertTo-AbsolutePath
