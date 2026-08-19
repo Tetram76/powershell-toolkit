@@ -117,7 +117,9 @@ function Get-WhisperPath {
         return $default
     }
 
-    $fromPath = Get-Command -Name 'faster-whisper-xxl' -ErrorAction SilentlyContinue
+    # -CommandType Application : une fonction/alias de même nom dans la session primerait sinon sur
+    # l'exécutable du PATH (vérifié empiriquement), avec une Source vide ou trompeuse.
+    $fromPath = Get-Command -Name 'faster-whisper-xxl' -CommandType Application -ErrorAction SilentlyContinue
     if ($fromPath) {
         return $fromPath.Source
     }

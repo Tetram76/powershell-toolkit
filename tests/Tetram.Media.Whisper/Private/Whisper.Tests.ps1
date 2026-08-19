@@ -301,6 +301,22 @@ Describe 'Get-WhisperPath' {
             }
         }
     }
+
+    It 'ignore une fonction de même nom au lieu de renvoyer une Source vide' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            function faster-whisper-xxl { 'ne doit jamais être choisie' }
+            $saved = $script:WhisperRoot
+            try {
+                $script:WhisperRoot = Join-Path $Work 'vide'
+                { Get-WhisperPath } | Should -Throw '*Purfview*'
+            }
+            finally {
+                $script:WhisperRoot = $saved
+                Remove-Item -Path 'function:faster-whisper-xxl' -ErrorAction SilentlyContinue
+            }
+        }
+    }
 }
 
 Describe 'Invoke-Whisper' {
