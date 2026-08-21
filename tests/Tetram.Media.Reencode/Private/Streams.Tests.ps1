@@ -63,6 +63,138 @@ Describe 'Select-AudioStreams' {
     }
 }
 
+Describe 'Select-AttachmentStreams' {
+
+    It 'pose le mimetype FFmpeg ttf (application/x-truetype-font) quand le codec est absent' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = $null; tags = @{ mimetype = 'application/x-truetype-font'; filename = 'Arial' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
+            $tracks[0].__targetMimetype | Should -BeExactly 'application/x-truetype-font'
+            $tracks[0].__recode | Should -BeTrue
+            $tracks[0].__process | Should -BeTrue
+            $tracks[0].__copy | Should -BeFalse
+        }
+    }
+
+    It 'pose le mimetype FFmpeg otf (application/vnd.ms-opentype) quand le codec est absent' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = $null; tags = @{ mimetype = $null; filename = 'CustomFont.otf' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
+            $tracks[0].__targetMimetype | Should -BeExactly 'application/vnd.ms-opentype'
+            $tracks[0].__recode | Should -BeTrue
+            $tracks[0].__process | Should -BeTrue
+            $tracks[0].__copy | Should -BeFalse
+        }
+    }
+
+    It 'mappe font/otf (sans le mot opentype) vers application/vnd.ms-opentype, pas vers ttf' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = $null; tags = @{ mimetype = 'font/otf'; filename = 'SomeFont' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
+            $tracks[0].__targetMimetype | Should -BeExactly 'application/vnd.ms-opentype'
+        }
+    }
+
+    It 'mappe une police .woff vers application/x-truetype-font (seul type ttf que ffprobe reconnaît)' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = $null; tags = @{ mimetype = $null; filename = 'Subtitle.woff' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
+            $tracks[0].__targetMimetype | Should -BeExactly 'application/x-truetype-font'
+        }
+    }
+
+    It 'mappe une police .woff2 vers application/x-truetype-font (mkv_mime_tags)' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = $null; tags = @{ mimetype = $null; filename = 'Subtitle.woff2' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
+            $tracks[0].__targetMimetype | Should -BeExactly 'application/x-truetype-font'
+        }
+    }
+
+    It 'mappe une police .ttc vers application/x-truetype-font (mkv_mime_tags)' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = $null; tags = @{ mimetype = $null; filename = 'Family.ttc' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
+            $tracks[0].__targetMimetype | Should -BeExactly 'application/x-truetype-font'
+        }
+    }
+
+    It 'ne modifie pas le codec déjà renseigné (ttf/otf) d''une police conservée' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = 'otf'; tags = @{ mimetype = $null; filename = 'Deja.otf' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
+            $tracks[0].codec_name | Should -BeExactly 'otf'
+            $tracks[0].__copy | Should -BeTrue
+            $tracks[0].__process | Should -BeFalse
+        }
+    }
+
+    It 'ne modifie pas le codec d''une police non conservée (pas de sous-titres ass)' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = $null; tags = @{ mimetype = 'application/x-truetype-font'; filename = 'Arial' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $false
+            $tracks[0].__copy | Should -BeFalse
+            $tracks[0].codec_name | Should -BeNullOrEmpty
+        }
+    }
+}
+
 Describe 'Select-VideoStreams — color_space' {
 
     It 'conserve color_space=gbr sur chaque VideoTrack' {

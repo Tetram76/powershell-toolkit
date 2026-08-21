@@ -156,3 +156,78 @@ Describe 'Get-FFmpegArgs — color space remap' {
         }
     }
 }
+
+Describe 'Get-FFmpegArgs — pièces jointes police' {
+
+    It 'conserve -c:t copy et pose le mimetype FFmpeg (application/x-truetype-font)' {
+        $attachment = [pscustomobject]@{
+            _index            = 0
+            __process         = $true
+            __copy            = $false
+            __targetMimetype  = 'application/x-truetype-font'
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Attachment = $attachment } {
+            param($Attachment)
+
+            $args = Get-FFmpegArgs `
+                -VideoCodec 'AV1' `
+                -Quality 'Low' `
+                -Upscale '' `
+                -UpscaleWidth 0 `
+                -UpscaleHeight 0 `
+                -UpscaleFit '' `
+                -ConfigUpscaleWidth 0 `
+                -ClearStreamsTitle $false `
+                -VideoTracks @() `
+                -IsSource10Bit $false `
+                -SourceChroma '420' `
+                -AudioTracks @() `
+                -SubtitleTracks @() `
+                -AttachmentTracks @($Attachment)
+
+            $cIdx = [array]::IndexOf($args, '-c:t:0')
+            $cIdx | Should -BeGreaterThan -1
+            $args[$cIdx + 1] | Should -BeExactly 'copy'
+            $metaIdx = [array]::IndexOf($args, '-metadata:s:t:0')
+            $metaIdx | Should -BeGreaterThan -1
+            $args[$metaIdx + 1] | Should -BeExactly 'mimetype=application/x-truetype-font'
+            [array]::IndexOf($args, '-map_metadata') | Should -BeLessThan $metaIdx
+            $args | Should -Contain '0:t:0'
+        }
+    }
+
+    It 'conserve copy sans mimetype forcé quand la police a déjà un codec' {
+        $attachment = [pscustomobject]@{
+            _index     = 0
+            __process  = $false
+            __copy     = $true
+            codec_name = 'otf'
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Attachment = $attachment } {
+            param($Attachment)
+
+            $args = Get-FFmpegArgs `
+                -VideoCodec 'AV1' `
+                -Quality 'Low' `
+                -Upscale '' `
+                -UpscaleWidth 0 `
+                -UpscaleHeight 0 `
+                -UpscaleFit '' `
+                -ConfigUpscaleWidth 0 `
+                -ClearStreamsTitle $false `
+                -VideoTracks @() `
+                -IsSource10Bit $false `
+                -SourceChroma '420' `
+                -AudioTracks @() `
+                -SubtitleTracks @() `
+                -AttachmentTracks @($Attachment)
+
+            $cIdx = [array]::IndexOf($args, '-c:t:0')
+            $cIdx | Should -BeGreaterThan -1
+            $args[$cIdx + 1] | Should -BeExactly 'copy'
+            $args | Should -Not -Contain '-metadata:s:t:0'
+        }
+    }
+}
