@@ -422,8 +422,7 @@ function Invoke-ReencodeFile
         }
         else
         {
-            if (($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and ($hasSubtitlesToConvert -eq 0) -and
-                    ($hasAttachmentsToConvert -eq 0) -and
+            if (($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and ($hasSubtitlesToConvert -eq 0) -and ($hasAttachmentsToConvert -eq 0) -and
                     ($OriginalFile.Extension -ieq $FinalExtension) -and -not $hasTracksDropped)
             {
                 Write-InfoLog "No reencoding needed for '$Filename'"
