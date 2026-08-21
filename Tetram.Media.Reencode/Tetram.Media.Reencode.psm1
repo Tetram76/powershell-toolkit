@@ -403,6 +403,7 @@ function Invoke-ReencodeFile
         $hasVideoToConvert = @(@($videoResult.VideoTracks) | Where-Object { -not $_.__copy }).Count
         $hasAudioToConvert = @(@($AudioTracks) | Where-Object { -not $_.__copy }).Count
         $hasSubtitlesToConvert = @(@($subtitleResult.SubtitleTracks) | Where-Object { -not $_.__copy }).Count
+        $hasAttachmentsToConvert = @(@($AttachmentTracks) | Where-Object { -not $_.__copy }).Count
 
         $hasTracksDropped = (
         @(@($videoResult.VideoTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0 -or
@@ -422,6 +423,7 @@ function Invoke-ReencodeFile
         else
         {
             if (($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and ($hasSubtitlesToConvert -eq 0) -and
+                    ($hasAttachmentsToConvert -eq 0) -and
                     ($OriginalFile.Extension -ieq $FinalExtension) -and -not $hasTracksDropped)
             {
                 Write-InfoLog "No reencoding needed for '$Filename'"

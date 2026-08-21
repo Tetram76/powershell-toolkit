@@ -318,20 +318,32 @@ function Get-FFmpegArgs
         $new_index++
     }
 
-    $SelectedAttachmentTracks = ($AttachmentTracks ?? @()) | Where-Object { $_.__copy } | Select-Object _index
+    $SelectedAttachmentTracks = ($AttachmentTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __targetMimetype
     Write-Verbose "SelectedAttachmentTracks:`n $( $SelectedAttachmentTracks | Format-List | Out-String )"
     $new_index = 0
+    $attachmentMimetypeArgs = @()
     foreach ($stream in $SelectedAttachmentTracks)
     {
         $ffmpegArgs += @(
             '-map', "0:t:$( $stream._index )"
             "-c:t:$new_index", 'copy'
         )
+        if ($stream.__process -and $stream.__targetMimetype)
+        {
+            # Après -map_metadata 0, sinon le mimetype source (absent / non mappé) écrase celui-ci.
+            $attachmentMimetypeArgs += @(
+                "-metadata:s:t:$new_index", "mimetype=$( $stream.__targetMimetype )"
+            )
+        }
         $new_index++
     }
 
+    # keep as much metadata as possible
     $ffmpegArgs += @(
         '-map_metadata', '0'
+    )
+    # and then, override with custom metadata
+    $ffmpegArgs += @(
         '-metadata', 'MOVIE/ENCODER='
         '-metadata', 'MAJOR_BRAND='
         '-metadata', 'MINOR_VERSION='
@@ -356,6 +368,10 @@ function Get-FFmpegArgs
         '-metadata:s', '_STATISTICS_WRITING_DATE_UTC='
         '-metadata:s', '_STATISTICS_WRITING_DATE_UTC-eng='
         '-metadata:s', 'encoder='
+    )
+    $ffmpegArgs += $attachmentMimetypeArgs
+
+    $ffmpegArgs += @(
         '-map_chapters', '0'
     )
 

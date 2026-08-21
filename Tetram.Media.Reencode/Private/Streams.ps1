@@ -377,10 +377,24 @@ function Select-AttachmentStreams
         foreach ($stream in $AttachmentTracks)
         {
             $stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
-            $isFont = ($stream.codec_name -in @('ttf', 'otf')) -or
-                    ($stream.tags.mimetype -match '\bfont\b|truetype|opentype') -or
+            $isFontByCodec = $stream.codec_name -in @('ttf', 'otf')
+            $isFontByMetadata = ($stream.tags.mimetype -match '\bfont\b|truetype|opentype') -or
                     ($stream.tags.filename -match '\.(ttf|otf|woff2?|ttc)$')
+            $isFont = $isFontByCodec -or $isFontByMetadata
             $keepStream = (-not $isFont) -or $HasAssSubtitles
+
+            if ($keepStream -and $isFontByMetadata -and -not $isFontByCodec)
+            {
+                # Matroska n'a pas de codec_id sur les attachments : ffprobe ne remplit
+                # codec_name (ttf/otf) que depuis FileMediaType via mkv_mime_tags.
+                # Doc FFmpeg (-attach) : -c copy + -metadata:s:t mimetype=...
+                $isOtf = ($stream.tags.mimetype -match 'opentype') -or ($stream.tags.filename -match '\.otf$')
+                $stream | Add-Member -NotePropertyName '__targetMimetype' -NotePropertyValue (
+                    $isOtf ? 'application/vnd.ms-opentype' : 'application/x-truetype-font'
+                ) -Force
+                $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $true -Force
+            }
+
             Set-StreamProcessingState $stream $keepStream | Out-Null
         }
 
