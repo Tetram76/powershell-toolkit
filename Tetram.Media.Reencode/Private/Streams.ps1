@@ -362,6 +362,28 @@ function Select-SubtitleStreams
     }
 }
 
+function Get-FontAttachmentTargetMimetype
+{
+    param(
+        [string] $Mimetype,
+        [string] $Filename
+    )
+
+    $mime = [string]$Mimetype
+    $name = [string]$Filename
+
+    # ffprobe (matroskadec mkv_mime_tags + av_strstart) ne pose un codec_id
+    # que pour ces préfixes : application/vnd.ms-opentype → otf,
+    # application/x-truetype-font / application/x-font → ttf.
+    # font/otf (RFC 8081) ne contient pas « opentype » et n'est pas dans la table.
+    if ($mime -match 'opentype' -or $mime -match '(^|/)otf$' -or $name -match '\.otf$')
+    {
+        return 'application/vnd.ms-opentype'
+    }
+
+    return 'application/x-truetype-font'
+}
+
 function Select-AttachmentStreams
 {
     param(
@@ -388,11 +410,14 @@ function Select-AttachmentStreams
                 # Matroska n'a pas de codec_id sur les attachments : ffprobe ne remplit
                 # codec_name (ttf/otf) que depuis FileMediaType via mkv_mime_tags.
                 # Doc FFmpeg (-attach) : -c copy + -metadata:s:t mimetype=...
-                $isOtf = ($stream.tags.mimetype -match 'opentype') -or ($stream.tags.filename -match '\.otf$')
-                $stream | Add-Member -NotePropertyName '__targetMimetype' -NotePropertyValue (
-                    $isOtf ? 'application/vnd.ms-opentype' : 'application/x-truetype-font'
-                ) -Force
-                $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $true -Force
+                $targetMimetype = Get-FontAttachmentTargetMimetype `
+                    -Mimetype ([string]$stream.tags.mimetype) `
+                    -Filename ([string]$stream.tags.filename)
+                if ($targetMimetype)
+                {
+                    $stream | Add-Member -NotePropertyName '__targetMimetype' -NotePropertyValue $targetMimetype -Force
+                    $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $true -Force
+                }
             }
 
             Set-StreamProcessingState $stream $keepStream | Out-Null
