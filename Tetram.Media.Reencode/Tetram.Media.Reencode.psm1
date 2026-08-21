@@ -429,7 +429,8 @@ function Invoke-ReencodeFile
             }
         }
 
-        $mediaDuration = ($ffprobeOutput.format.Keys -contains "duration") ? $ffprobeOutput.format.duration : 0
+        $mediaDurationSeconds = ($ffprobeOutput.format.Keys -contains "duration") ? $ffprobeOutput.format.duration : 0
+        $mediaDuration = $mediaDurationSeconds ? [TimeSpan]::FromSeconds([double]::Parse($mediaDurationSeconds, [cultureinfo]'')) : $null
 
         $NewFilename = $OriginalFile.BaseName + $FinalExtension
         $TempFilename = $State.BaseTempFilename + $FinalExtension
@@ -441,7 +442,8 @@ function Invoke-ReencodeFile
             return
         }
 
-        Write-InfoLog "Processing '$Filename'..." -Force
+        $durationText = $mediaDuration ? (Format-Duration -TimeSpan $mediaDuration) : 'unknown duration'
+        Write-InfoLog "Processing '$Filename' ($durationText, $( Format-FileSize -Size $OriginalFileSize ))..." -Force
         if (Test-Path $TempFilename -PathType Leaf)
         {
             if ( $Cmdlet.ShouldProcess($TempFilename, 'Remove temp file'))
@@ -547,8 +549,7 @@ function Invoke-ReencodeFile
             $NewFileSize = $NewFile.Length
             $Result = if ($mediaDuration)
             {
-                $Duration = [TimeSpan]::FromSeconds([double]::Parse($mediaDuration, [cultureinfo]''))
-                [EncodingResult]::new($OriginalFileSize, $NewFileSize, $Duration, (Get-Date) - $start)
+                [EncodingResult]::new($OriginalFileSize, $NewFileSize, $mediaDuration, (Get-Date) - $start)
             }
             else
             {
