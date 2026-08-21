@@ -63,6 +63,45 @@ Describe 'Select-AudioStreams' {
     }
 }
 
+Describe 'Get-FontAttachmentTargetMimetype' {
+
+    It 'fait primer l''extension .otf sur un mimetype ttf déjà mappé (codec ttf)' {
+        InModuleScope 'Tetram.Media.Reencode' {
+            Get-FontAttachmentTargetMimetype `
+                -Mimetype 'application/x-truetype-font' `
+                -Filename 'CustomFont.otf' `
+                -Codec 'ttf' |
+                Should -BeExactly 'application/vnd.ms-opentype'
+        }
+    }
+
+    It 'fait primer l''extension .ttf sur un mimetype opentype déjà mappé (codec otf)' {
+        InModuleScope 'Tetram.Media.Reencode' {
+            Get-FontAttachmentTargetMimetype `
+                -Mimetype 'application/vnd.ms-opentype' `
+                -Filename 'CustomFont.ttf' `
+                -Codec 'otf' |
+                Should -BeExactly 'application/x-truetype-font'
+        }
+    }
+
+    It 'se sert du mimetype font/otf seulement quand ffprobe n''a pas posé de codec' {
+        InModuleScope 'Tetram.Media.Reencode' {
+            Get-FontAttachmentTargetMimetype `
+                -Mimetype 'font/otf' `
+                -Filename 'SomeFont' `
+                -Codec '' |
+                Should -BeExactly 'application/vnd.ms-opentype'
+
+            Get-FontAttachmentTargetMimetype `
+                -Mimetype 'font/otf' `
+                -Filename 'SomeFont' `
+                -Codec 'ttf' |
+                Should -BeExactly 'application/x-truetype-font'
+        }
+    }
+}
+
 Describe 'Select-AttachmentStreams' {
 
     It 'pose le mimetype FFmpeg ttf (application/x-truetype-font) quand le codec est absent' {
@@ -158,6 +197,42 @@ Describe 'Select-AttachmentStreams' {
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
             $tracks[0].__targetMimetype | Should -BeExactly 'application/x-truetype-font'
+        }
+    }
+
+    It 'corrige le mimetype quand le codec est ttf mais le fichier est un otf' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = 'ttf'; tags = @{ mimetype = 'application/x-truetype-font'; filename = 'CustomFont.otf' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
+            $tracks[0].__targetMimetype | Should -BeExactly 'application/vnd.ms-opentype'
+            $tracks[0].__recode | Should -BeTrue
+            $tracks[0].__process | Should -BeTrue
+            $tracks[0].__copy | Should -BeFalse
+        }
+    }
+
+    It 'corrige le mimetype quand le codec est otf mais le fichier est un ttf' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = 'otf'; tags = @{ mimetype = 'application/vnd.ms-opentype'; filename = 'CustomFont.ttf' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
+            $tracks[0].__targetMimetype | Should -BeExactly 'application/x-truetype-font'
+            $tracks[0].__recode | Should -BeTrue
+            $tracks[0].__process | Should -BeTrue
+            $tracks[0].__copy | Should -BeFalse
         }
     }
 

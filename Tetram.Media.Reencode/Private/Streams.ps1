@@ -366,17 +366,28 @@ function Get-FontAttachmentTargetMimetype
 {
     param(
         [string] $Mimetype,
-        [string] $Filename
+        [string] $Filename,
+        [string] $Codec
     )
 
     $mime = [string]$Mimetype
     $name = [string]$Filename
 
-    # ffprobe (matroskadec mkv_mime_tags + av_strstart) ne pose un codec_id
-    # que pour ces préfixes : application/vnd.ms-opentype → otf,
-    # application/x-truetype-font / application/x-font → ttf.
-    # font/otf (RFC 8081) ne contient pas « opentype » et n'est pas dans la table.
-    if ($mime -match 'opentype' -or $mime -match '(^|/)otf$' -or $name -match '\.otf$')
+    # L'extension est indépendante du FileMediaType Matroska.
+    if ($name -match '\.otf$')
+    {
+        return 'application/vnd.ms-opentype'
+    }
+    if ($name -match '\.(ttf|woff2?|ttc)$')
+    {
+        return 'application/x-truetype-font'
+    }
+
+    # ffprobe (mkv_mime_tags + av_strstart) pose ttf/otf depuis le mime :
+    # application/vnd.ms-opentype → otf, application/x-truetype-font / x-font → ttf.
+    # Ce mime n'est alors plus une preuve. font/otf (RFC 8081) n'est pas dans la table
+    # (pas de codec) : c'est le seul cas où le mime courant informe encore le type.
+    if ($Codec -notin @('ttf', 'otf') -and ($mime -match 'opentype' -or $mime -match '(^|/)otf$'))
     {
         return 'application/vnd.ms-opentype'
     }
@@ -405,18 +416,28 @@ function Select-AttachmentStreams
             $isFont = $isFontByCodec -or $isFontByMetadata
             $keepStream = (-not $isFont) -or $HasAssSubtitles
 
-            if ($keepStream -and $isFontByMetadata -and -not $isFontByCodec)
+            if ($keepStream -and $isFont)
             {
                 # Matroska n'a pas de codec_id sur les attachments : ffprobe ne remplit
                 # codec_name (ttf/otf) que depuis FileMediaType via mkv_mime_tags.
                 # Doc FFmpeg (-attach) : -c copy + -metadata:s:t mimetype=...
-                $targetMimetype = Get-FontAttachmentTargetMimetype `
-                    -Mimetype ([string]$stream.tags.mimetype) `
-                    -Filename ([string]$stream.tags.filename)
-                if ($targetMimetype)
+                $filename = [string]$stream.tags.filename
+                $codec = [string]$stream.codec_name
+                $filenameDisagreesWithCodec =
+                    ($codec -eq 'ttf' -and $filename -match '\.otf$') -or
+                    ($codec -eq 'otf' -and $filename -match '\.(ttf|woff2?|ttc)$')
+
+                if ((-not $isFontByCodec) -or $filenameDisagreesWithCodec)
                 {
-                    $stream | Add-Member -NotePropertyName '__targetMimetype' -NotePropertyValue $targetMimetype -Force
-                    $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $true -Force
+                    $targetMimetype = Get-FontAttachmentTargetMimetype `
+                        -Mimetype ([string]$stream.tags.mimetype) `
+                        -Filename $filename `
+                        -Codec $codec
+                    if ($targetMimetype)
+                    {
+                        $stream | Add-Member -NotePropertyName '__targetMimetype' -NotePropertyValue $targetMimetype -Force
+                        $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $true -Force
+                    }
                 }
             }
 
