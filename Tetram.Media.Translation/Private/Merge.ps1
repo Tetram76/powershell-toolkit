@@ -1,6 +1,6 @@
 Set-StrictMode -Version 3.0
 
-# Gemini ne fournit que du texte indexé par cueId. Toute la structure
+# Le modèle ne fournit que du texte indexé par cueId. Toute la structure
 # technique (identifiants SRT natifs, timestamps, champs ASS) reste celle
 # de la source. Une omission de cueId ne doit jamais décaler les suivants.
 
@@ -232,7 +232,7 @@ function Get-CanonicalSubtitleCue {
     return @($cue)
 }
 
-function Test-GeminiIntegerCueId {
+function Test-IntegerCueId {
     param($Value)
 
     if ($null -eq $Value) {
@@ -254,7 +254,7 @@ function Test-GeminiIntegerCueId {
     }
 }
 
-function ConvertFrom-GeminiCueTranslationJson {
+function ConvertFrom-CueTranslationJson {
     param(
         [Parameter(Mandatory)][AllowEmptyString()][string] $Json,
         [Parameter(Mandatory)][int] $CueCount
@@ -264,17 +264,17 @@ function ConvertFrom-GeminiCueTranslationJson {
         $parsed = ConvertFrom-Json -InputObject $Json -NoEnumerate -ErrorAction Stop
     }
     catch {
-        throw 'la réponse Gemini n''est pas un JSON exploitable.'
+        throw 'la réponse du modèle n''est pas un JSON exploitable.'
     }
 
     if ($null -eq $parsed -or $parsed -is [string] -or $parsed -isnot [System.Collections.IList]) {
-        throw 'la racine de la réponse Gemini doit être un tableau JSON.'
+        throw 'la racine de la réponse du modèle doit être un tableau JSON.'
     }
 
     $map = [System.Collections.Generic.Dictionary[int, string]]::new()
     foreach ($item in $parsed) {
         if ($null -eq $item) {
-            throw 'un élément de la réponse Gemini n''est pas un objet JSON.'
+            throw 'un élément de la réponse du modèle n''est pas un objet JSON.'
         }
 
         if ($item -is [System.Collections.IDictionary]) {
@@ -293,11 +293,11 @@ function ConvertFrom-GeminiCueTranslationJson {
         }
 
         if (-not $hasCueId -or -not $hasText) {
-            throw 'un objet de la réponse Gemini n''a pas les propriétés cueId et text.'
+            throw 'un objet de la réponse du modèle n''a pas les propriétés cueId et text.'
         }
 
-        if (-not (Test-GeminiIntegerCueId -Value $cueIdProp)) {
-            throw 'un cueId de la réponse Gemini n''est pas un entier valide.'
+        if (-not (Test-IntegerCueId -Value $cueIdProp)) {
+            throw 'un cueId de la réponse du modèle n''est pas un entier valide.'
         }
 
         $cueId = [int]$cueIdProp
@@ -408,15 +408,15 @@ function Merge-AssTranslatedSubtitle {
         $cueId++
         $prefix = $Matches[1] + $Matches[2]
         $field = Get-AssDialogueField -Line $entry -TextIndex $sourceTextIndex
-        $geminiText = Get-CueTranslationText -TranslationByCueId $TranslationByCueId -CueId $cueId
-        Assert-AssTextContract -SourceText $field[$sourceTextIndex] -TranslationText $geminiText
+        $translatedText = Get-CueTranslationText -TranslationByCueId $TranslationByCueId -CueId $cueId
+        Assert-AssTextContract -SourceText $field[$sourceTextIndex] -TranslationText $translatedText
 
         if ($sourceTextIndex -eq 0) {
-            $prefix + $geminiText
+            $prefix + $translatedText
         }
         else {
             $head = $field[0..($sourceTextIndex - 1)] -join ','
-            $prefix + $head + ',' + $geminiText
+            $prefix + $head + ',' + $translatedText
         }
     }
 

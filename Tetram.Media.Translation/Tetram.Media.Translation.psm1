@@ -1,6 +1,7 @@
 Set-StrictMode -Version 3.0
 
 . (Join-Path $PSScriptRoot 'Private' 'Merge.ps1')
+. (Join-Path $PSScriptRoot 'Private' 'Llm.ps1')
 
 function Get-RawSubtitleOutputPath {
     param([Parameter(Mandatory)][string] $OutputPath)
@@ -30,7 +31,12 @@ function ConvertTo-FrenchSubtitle {
 
         [string] $OutputPath,
 
-        [string] $Model = 'gemini-3.6-flash'
+        [ValidateSet('Gemini', 'Ollama')]
+        [string] $Provider = 'Gemini',
+
+        [string] $Model,
+
+        [switch] $AllowModelDownload
     )
 
     Set-StrictMode -Version Latest
@@ -39,9 +45,20 @@ function ConvertTo-FrenchSubtitle {
 
     # --- Configuration -----------------------------------------------------------
 
-    $apiKey = $env:GEMINI_API_KEY
+    if ($Provider -eq 'Ollama') {
+        if ([string]::IsNullOrWhiteSpace($Model)) {
+            throw "Le paramètre -Model est obligatoire avec -Provider Ollama.`nIndiquez le modèle Ollama à utiliser avec -Model '<nom-du-modèle>'."
+        }
+    }
+    elseif ([string]::IsNullOrWhiteSpace($Model)) {
+        $Model = 'gemini-3.6-flash'
+    }
 
-    if ([string]::IsNullOrWhiteSpace($apiKey)) {
+    if ($AllowModelDownload -and $Provider -ne 'Ollama') {
+        throw '-AllowModelDownload est applicable uniquement avec -Provider Ollama.'
+    }
+
+    if ($Provider -eq 'Gemini' -and [string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
         throw 'La variable d''environnement GEMINI_API_KEY n''est pas définie.'
     }
 
@@ -50,7 +67,7 @@ function ConvertTo-FrenchSubtitle {
 
     $subtitleFile = Get-Item -LiteralPath $SubtitlePath
 
-    # Avant Gemini : un .txt / .vtt ne doit pas consommer de quota.
+    # Un .txt / .vtt n'est pas une source : échouer avant quota Gemini ou pull Ollama.
     $null = Get-SubtitleMergeKind -Extension $subtitleFile.Extension
 
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
@@ -106,79 +123,19 @@ $transcript
 "@
 
 
-    # --- Appel Gemini ------------------------------------------------------------
+    # --- Appel LLM ----------------------------------------------------------------
 
-    $body = @{
-        contents = @(
-            @{
-                role  = 'user'
-                parts = @(
-                    @{ text = $instructions }
-                    @{ text = $subtitlePart }
-                    @{ text = $transcriptPart }
-                )
-            }
-        )
+    $promptPart = @(
+        $instructions
+        $subtitlePart
+        $transcriptPart
+    )
 
-        generationConfig = @{
-            thinkingConfig   = @{
-                thinkingLevel = 'low'
-            }
-            responseMimeType = 'application/json'
-            responseSchema   = @{
-                type  = 'ARRAY'
-                items = @{
-                    type       = 'OBJECT'
-                    properties = @{
-                        cueId = @{
-                            type = 'INTEGER'
-                        }
-                        text  = @{
-                            type = 'STRING'
-                        }
-                    }
-                    required   = @('cueId', 'text')
-                }
-            }
-        }
-    } | ConvertTo-Json -Depth 12
-
-    $uri = "https://generativelanguage.googleapis.com/v1beta/models/${Model}:generateContent"
-
-    $response = Invoke-RestMethod `
-        -Method Post `
-        -Uri $uri `
-        -Headers @{
-            'x-goog-api-key' = $apiKey
-        } `
-        -ContentType 'application/json; charset=utf-8' `
-        -Body $body
-
-
-    # --- Extraction de la réponse ------------------------------------------------
-
-    if (-not $response.candidates -or $response.candidates.Count -eq 0) {
-        throw 'Gemini n''a retourné aucun candidat.'
-    }
-
-    $candidate = $response.candidates[0]
-
-    if ($candidate.finishReason -ne 'STOP') {
-        throw "La génération Gemini ne s'est pas terminée normalement : $($candidate.finishReason)"
-    }
-
-    $result = (
-        $candidate.content.parts |
-            ForEach-Object {
-                if ($_.PSObject.Properties['text']) {
-                    $_.text
-                }
-            }
-    ) -join ''
-
-    if ([string]::IsNullOrWhiteSpace($result)) {
-        throw 'Gemini a retourné un résultat vide.'
-    }
+    $result = Invoke-TranslationLlm `
+        -Provider $Provider `
+        -Model $Model `
+        -PromptPart $promptPart `
+        -AllowModelDownload:$AllowModelDownload
 
 
     # --- Écriture ---------------------------------------------------------------
@@ -188,7 +145,7 @@ $transcript
 
     try {
         $sourceText = @($canonicalCue | ForEach-Object { $_.text })
-        $translationByCueId = ConvertFrom-GeminiCueTranslationJson -Json $result -CueCount $canonicalCue.Count
+        $translationByCueId = ConvertFrom-CueTranslationJson -Json $result -CueCount $canonicalCue.Count
         Assert-CueTranslationNotEmptied -SourceText $sourceText -TranslationByCueId $translationByCueId
         $mergedResult = Merge-TranslatedSubtitle `
             -Source $subtitle `
@@ -196,14 +153,14 @@ $transcript
             -Extension $subtitleFile.Extension
     }
     catch {
-        Write-Host "Réponse brute Gemini conservée : $rawPath"
+        Write-Host "Réponse brute du modèle conservée : $rawPath"
         Write-Warning "La reconstruction du sous-titre final a échoué : $($_.Exception.Message)"
         return
     }
 
     [IO.File]::WriteAllText($OutputPath, $mergedResult, $utf8)
 
-    Write-Host "Réponse brute Gemini : $rawPath"
+    Write-Host "Réponse brute du modèle : $rawPath"
     Write-Host "Sous-titres traduits : $OutputPath"
 }
 
