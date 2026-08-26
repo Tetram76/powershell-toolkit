@@ -59,6 +59,11 @@ function Resolve-LlmModelSpec {
         throw 'Le nom de modèle est vide.'
     }
 
+    # Sinon model][thinking] serait un Name valide (model]) : le ] n'est contrôlé que dans le suffixe.
+    if ($name.Contains('[') -or $name.Contains(']')) {
+        throw 'Syntaxe de modèle invalide : le nom de modèle ne doit pas contenir de crochets.'
+    }
+
     $inner = $spec.Substring($open + 1, $spec.Length - $open - 2)
     if ($inner.Contains('[') -or $inner.Contains(']')) {
         throw 'Syntaxe de modèle invalide : le suffixe d''options doit être terminal.'

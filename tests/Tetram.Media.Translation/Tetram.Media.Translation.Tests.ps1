@@ -687,15 +687,28 @@ Describe 'ConvertTo-FrenchSubtitle' {
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') -PathType Leaf | Should -BeTrue
     }
 
-    It 'exige Model avec Provider Ollama sans appeler le réseau' {
+    It 'utilise qwen3.5:9b par défaut avec Provider Ollama' {
         $env:GEMINI_API_KEY = $null
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            throw 'Ollama ne devait pas être appelé'
+            param($Uri, $Method, $Body)
+            $u = [string]$Uri
+            Add-CurrentRestCall -Uri $u -Method $Method -Body $Body
+            if ($u -like '*/api/tags') {
+                return New-OllamaTagsResponse 'qwen3.5:9b'
+            }
+            if ($u -like '*/api/chat') {
+                return New-OllamaChatResponse $script:HelloJson
+            }
+            throw "URI inattendue : $u"
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama } |
-            Should -Throw -ExpectedMessage '*Model*Ollama*'
-        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama
+
+        $chat = @(Get-RestCall '/api/chat')
+        $chat.Count | Should -Be 1
+        $parsed = ConvertFrom-OllamaRequestBody $chat[0].Body
+        $parsed.model | Should -Be 'qwen3.5:9b'
+        $parsed.think | Should -BeFalse
     }
 
     It 'lève une erreur actionnable si Ollama est inaccessible' {

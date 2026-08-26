@@ -18,10 +18,6 @@ Si la réponse du modèle est acceptée au niveau transport, elle est conservée
 
 Sans `-OutputPath`, le fichier final est écrit à côté de la source, avec le suffixe `.fr` avant l'extension (`episode.ass` → `episode.fr.ass`). Si le fichier final ou le `.raw.json` correspondant existe déjà, la commande échoue sans écraser et sans appeler le modèle.
 
-### Gemini
-
-Provider par défaut. Modèle par défaut : `gemini-3.6-flash`. Prérequis : variable d'environnement `GEMINI_API_KEY`.
-
 ### Model spec (`-Model`)
 
 `-Model` accepte un suffixe d'options terminal :
@@ -34,25 +30,55 @@ Provider par défaut. Modèle par défaut : `gemini-3.6-flash`. Prérequis : var
 
 Les options sont retirées du nom avant tout appel fournisseur ou téléchargement. `fast` n'existe pas aujourd'hui. `thinking=&lt;level&gt;` est actuellement pris en charge uniquement par Gemini. Les niveaux syntaxiques Gemini sont `minimal`, `low`, `medium` et `high` ; les niveaux réellement supportés dépendent du modèle Gemini. Ollama n'utilise `thinking` que comme booléen dans l'abstraction actuelle.
 
-Gemini `gemini-3.6-flash` : `thinkingLevel=low`. Gemini `gemini-3.6-flash[thinking]` : `thinkingLevel=medium`. Gemini `gemini-3.6-flash[thinking=high]` : `thinkingLevel=high`. Ollama `qwen3.5:9b` : `think=false`. Ollama `qwen3.5:9b[thinking]` : `think=true`.
+| Provider | Model spec | Comportement |
+| --- | --- | --- |
+| Gemini | `gemini-3.6-flash` | `thinkingLevel=low` |
+| Gemini | `gemini-3.6-flash[thinking]` | `thinkingLevel=medium` |
+| Gemini | `gemini-3.6-flash[thinking=high]` | `thinkingLevel=high` |
+| Ollama | `qwen3.5:9b` | `think=false` |
+| Ollama | `qwen3.5:9b[thinking]` | `think=true` |
 
 Sans option, Gemini utilise `thinkingLevel=low` (défaut du projet, distinct du défaut Google du modèle).
+
+### Gemini
+
+Provider par défaut. Modèle par défaut : `gemini-3.6-flash`. Prérequis : variable d'environnement `GEMINI_API_KEY`.
 
 #### Modèles Gemini intéressants à tester
 
 Liste informative : elle ne change pas le modèle par défaut. La disponibilité, les quotas et les niveaux de thinking peuvent évoluer. Références : &lt;https://ai.google.dev/gemini-api/docs/models&gt;, &lt;https://ai.google.dev/gemini-api/docs/thinking&gt;.
 
-`gemini-3.6-flash` : modèle par défaut / baseline actuelle. Bon équilibre vitesse / qualité, structured outputs, grand contexte, thinking configurable. Niveaux Google actuellement documentés : `minimal`, `low`, `medium`, `high`.
+##### `gemini-3.6-flash`
 
-`gemini-3.7-flash` : candidat à benchmarker pour privilégier la qualité / capacité, sans changer la baseline actuelle. Niveaux Google actuellement documentés : `low`, `medium`, `high`.
+Modèle par défaut / baseline actuelle. Bon équilibre vitesse / qualité, structured outputs, grand contexte, thinking configurable. La documentation Google indique actuellement `minimal`, `low`, `medium`, `high`.
 
-`gemini-3.5-flash` : alternative stable à comparer si utile, sans affirmation de supériorité pour la traduction.
+```powershell
+-Model 'gemini-3.6-flash'
+-Model 'gemini-3.6-flash[thinking]'
+-Model 'gemini-3.6-flash[thinking=high]'
+```
 
-`gemini-3.5-flash-lite` : potentiellement intéressante pour la latence, le coût et le haut débit sur des lots importants, à benchmarker séparément pour la qualité linguistique.
+##### `gemini-3.7-flash`
+
+Candidat à benchmarker pour privilégier la qualité / capacité, sans changer la baseline actuelle. La documentation Google actuelle annonce `low`, `medium`, `high`.
+
+```powershell
+-Model 'gemini-3.7-flash'
+-Model 'gemini-3.7-flash[thinking]'
+-Model 'gemini-3.7-flash[thinking=high]'
+```
+
+##### `gemini-3.5-flash`
+
+Alternative stable à comparer si utile. Candidate de benchmark, sans affirmation de supériorité pour la traduction.
+
+##### `gemini-3.5-flash-lite`
+
+Potentiellement intéressante pour la latence, le coût et le haut débit sur des lots importants, à benchmarker séparément pour la qualité linguistique.
 
 ### Ollama
 
-Ollama doit être installé et démarré. L'API attendue est `http://localhost:11434`. `-Model` est obligatoire. `GEMINI_API_KEY` n'est pas utilisée. `-AllowModelDownload` autorise le téléchargement du modèle s'il n'est pas déjà installé.
+Ollama doit être installé et démarré. L'API attendue est `http://localhost:11434`. Modèle par défaut : `qwen3.5:9b`. `GEMINI_API_KEY` n'est pas utilisée. `-AllowModelDownload` autorise le téléchargement du modèle s'il n'est pas déjà installé.
 
 #### Modèles Ollama intéressants à tester
 
@@ -60,13 +86,48 @@ Cette liste est une shortlist de benchmark, pas une validation de qualité pour 
 
 Les tailles indiquées correspondent approximativement au fichier modèle publié par Ollama. La RAM/VRAM réellement nécessaire dépend du modèle, de la quantification, du contexte et de l'offload CPU/GPU.
 
-`qwen3.5:9b` : environ 6.6 GB, contexte 256K, thinking disponible. Premier candidat raisonnable pour une machine locale de capacité intermédiaire. Référence : &lt;https://ollama.com/library/qwen3.5&gt;.
+##### `qwen3.5:9b`
 
-`qwen3.5:27b` : environ 17 GB, contexte 256K. Candidat qualité plus lourd que 9b.
+Modèle par défaut Ollama / premier candidat raisonnable pour une machine locale de capacité intermédiaire. Environ 6.6 GB de fichier modèle, contexte 256K, thinking disponible, forte couverture multilingue annoncée par la famille. Référence : &lt;https://ollama.com/library/qwen3.5&gt;.
 
-`qwen3.8:27b` : environ 18 GB, contexte 256K, modèle très récent. `reasoning_effort` n'est pas mappé aujourd'hui. Référence : &lt;https://ollama.com/library/qwen3.8&gt;.
+```powershell
+-Model 'qwen3.5:9b'
+-Model 'qwen3.5:9b[thinking]'
+```
 
-`gemma3:12b` / `gemma3:27b` : alternatives de famille différente à Qwen (environ 8.1 GB / 17 GB, contexte 128K, plus de 140 langues annoncées). Cette famille n'utilise pas `[thinking]` dans l'abstraction actuelle. Référence : &lt;https://ollama.com/library/gemma3&gt;.
+##### `qwen3.5:27b`
+
+Environ 17 GB, contexte 256K, thinking disponible. Candidat qualité plus lourd que 9b.
+
+```powershell
+-Model 'qwen3.5:27b'
+-Model 'qwen3.5:27b[thinking]'
+```
+
+##### `qwen3.8:27b`
+
+Environ 18 GB, contexte 256K, thinking disponible, modèle très récent. Candidat à benchmarker si le matériel le permet. Les réglages spécifiques comme `reasoning_effort` ne sont pas mappés aujourd'hui. Référence : &lt;https://ollama.com/library/qwen3.8&gt;.
+
+```powershell
+-Model 'qwen3.8:27b'
+-Model 'qwen3.8:27b[thinking]'
+```
+
+##### `gemma3:12b`
+
+Environ 8.1 GB, contexte 128K, plus de 140 langues annoncées. Alternative de famille différente à Qwen, intéressante pour comparer la qualité multilingue. Cette famille n'utilise pas l'option `[thinking]` dans l'abstraction actuelle. Référence : &lt;https://ollama.com/library/gemma3&gt;.
+
+```powershell
+-Model 'gemma3:12b'
+```
+
+##### `gemma3:27b`
+
+Environ 17 GB, contexte 128K, plus de 140 langues annoncées. Alternative multilingue plus lourde.
+
+```powershell
+-Model 'gemma3:27b'
+```
 
 Installation Windows :
 
@@ -141,7 +202,7 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Model</maml:name>
         <maml:description>
-          <maml:para>Identifiant du modèle, éventuellement suivi d'un suffixe d'options terminal : `&lt;model&gt;`, `&lt;model&gt;[thinking]`, `&lt;model&gt;[thinking=&lt;level&gt;]`. Avec Gemini, défaut interne `gemini-3.6-flash` (thinking `low`) si le paramètre est omis. Avec `-Provider Ollama`, le paramètre est obligatoire ; aucun modèle Ollama n'est choisi par défaut. Les options sont retirées du nom avant l'appel fournisseur.</maml:para>
+          <maml:para>Identifiant du modèle, éventuellement suivi d'un suffixe d'options terminal : `&lt;model&gt;`, `&lt;model&gt;[thinking]`, `&lt;model&gt;[thinking=&lt;level&gt;]`. Si le paramètre est omis : `gemini-3.6-flash` (thinking `low`) avec Gemini, `qwen3.5:9b` (`think=false`) avec `-Provider Ollama`. Les options sont retirées du nom avant l'appel fournisseur.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -201,7 +262,7 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
 
 Gemini : `GEMINI_API_KEY` obligatoire ; modèle par défaut `gemini-3.6-flash` ; thinking projet `low` sans option, `medium` avec `[thinking]`, niveau explicite avec `[thinking=&lt;level&gt;]` (`minimal`, `low`, `medium`, `high`).
 
-Ollama : doit être installé et démarré (`winget install --id Ollama.Ollama -e`, &lt;https://ollama.com/download/windows&gt;, `ollama serve`). `-Model` obligatoire. `GEMINI_API_KEY` inutile. `-AllowModelDownload` autorise le téléchargement d'un modèle absent (`ollama pull &lt;model&gt;` en alternative manuelle, sans le suffixe `[thinking]`). `-AllowModelDownload` est refusé avec Gemini. `[thinking]` envoie `think=true` ; sans option, `think=false` est envoyé explicitement. `[thinking=&lt;level&gt;]` n'est pas supporté pour Ollama.</maml:para>
+Ollama : doit être installé et démarré (`winget install --id Ollama.Ollama -e`, &lt;https://ollama.com/download/windows&gt;, `ollama serve`). Modèle par défaut `qwen3.5:9b`. `GEMINI_API_KEY` inutile. `-AllowModelDownload` autorise le téléchargement d'un modèle absent (`ollama pull &lt;model&gt;` en alternative manuelle, sans le suffixe `[thinking]`). `-AllowModelDownload` est refusé avec Gemini. `[thinking]` envoie `think=true` ; sans option, `think=false` est envoyé explicitement. `[thinking=&lt;level&gt;]` n'est pas supporté pour Ollama.</maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -236,9 +297,9 @@ Ollama : doit être installé et démarré (`winget install --id Ollama.Ollama -
       <command:example>
         <maml:title>--------- Example 4: Traduire via Ollama ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama -Model llama3.2</dev:code>
+        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama</dev:code>
         <dev:remarks>
-          <maml:para>Ollama doit déjà tourner sur `http://localhost:11434`. `-Model` est obligatoire. Aucun modèle Ollama n'est choisi par défaut.</maml:para>
+          <maml:para>Ollama doit déjà tourner sur `http://localhost:11434`. Sans `-Model`, `qwen3.5:9b` est utilisé.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
