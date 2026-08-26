@@ -1,0 +1,23 @@
+---
+document type: module
+Help Version: 1.0.0
+HelpInfoUri: ''
+Locale: fr-FR
+Module Guid: f4c86b9c-9c56-4bc8-b6b4-2ab400192367
+Module Name: Tetram.Media.Translation
+ms.date: 08/26/2026
+PlatyPS schema version: 2024-05-01
+title: Tetram.Media.Translation Module
+---
+
+# Tetram.Media.Translation Module
+
+## Description
+
+Traduction française de sous-titres via Gemini, à partir du fichier source et d'une transcription Whisper. Une seule commande exportée. Importer `.\Tetram.Media.Translation`.
+
+## Tetram.Media.Translation Cmdlets
+
+### [ConvertTo-FrenchSubtitle](ConvertTo-FrenchSubtitle.md)
+
+Produit un fichier de sous-titres français à partir d'un sous-titre source et d'une transcription Whisper, via Gemini.
