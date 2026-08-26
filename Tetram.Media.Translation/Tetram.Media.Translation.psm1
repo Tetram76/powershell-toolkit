@@ -38,6 +38,9 @@ function ConvertTo-FrenchSubtitle {
 
     $subtitleFile = Get-Item -LiteralPath $SubtitlePath
 
+    # Avant Gemini : un .txt / .vtt ne doit pas consommer de quota.
+    $null = Get-SubtitleMergeKind -Extension $subtitleFile.Extension
+
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
         $OutputPath = Join-Path `
             $subtitleFile.DirectoryName `
