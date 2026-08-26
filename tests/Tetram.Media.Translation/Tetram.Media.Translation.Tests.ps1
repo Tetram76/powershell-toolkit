@@ -139,12 +139,17 @@ Describe 'ConvertTo-FrenchSubtitle' {
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
 
         $output = Join-Path $script:Work 'episode.fr.ass'
+        $raw = Join-Path $script:Work 'episode.fr.raw.ass'
         Test-Path -LiteralPath $output -PathType Leaf | Should -BeTrue
+        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
+        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $translated
         $written = (Get-Content -LiteralPath $output -Raw -Encoding utf8) -replace '\r\n', "`n"
         $written | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
         $written | Should -Not -Match 'Hello'
-        $bytes = [IO.File]::ReadAllBytes($output)
-        ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) | Should -BeFalse
+        foreach ($path in @($output, $raw)) {
+            $bytes = [IO.File]::ReadAllBytes($path)
+            ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) | Should -BeFalse
+        }
     }
 
     It 'appelle le modèle par défaut gemini-3.6-flash' {
@@ -182,6 +187,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
             Should -Throw -ExpectedMessage "*aucun candidat*"
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.ass') | Should -BeFalse
     }
 
     It 'lève si finishReason n''est pas STOP' {
@@ -203,6 +209,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
             Should -Throw -ExpectedMessage "*MAX_TOKENS*"
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.ass') | Should -BeFalse
     }
 
     It 'lève si le texte utile est vide' {
@@ -224,6 +231,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
             Should -Throw -ExpectedMessage "*résultat vide*"
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.ass') | Should -BeFalse
     }
 
     It 'écrit sur OutputPath quand il est fourni' {
@@ -249,6 +257,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $written = (Get-Content -LiteralPath $custom -Raw -Encoding utf8) -replace '\r\n', "`n"
         $written | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        $raw = Join-Path $script:Work 'custom.fr.raw.ass'
+        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.ass') | Should -BeFalse
     }
 
     It 'restaure le timestamp SRT source quand Gemini le corrompt' {
@@ -273,13 +284,16 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
 
-        $written = (Get-Content -LiteralPath (Join-Path $script:Work 'episode.fr.srt') -Raw -Encoding utf8) -replace '\r\n', "`n"
+        $output = Join-Path $script:Work 'episode.fr.srt'
+        $raw = Join-Path $script:Work 'episode.fr.raw.srt'
+        $written = (Get-Content -LiteralPath $output -Raw -Encoding utf8) -replace '\r\n', "`n"
         $written | Should -Match '00:05:59,237 --> 00:06:00,057'
         $written | Should -Match 'texte français'
         $written | Should -Not -Match '00:09:59,237'
+        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $translated
     }
 
-    It 'n''écrit aucun fichier si le nombre de cues SRT diffère' {
+    It 'conserve le raw mais n''écrit pas le final si le nombre de cues SRT diffère' {
         $env:GEMINI_API_KEY = 'test-key'
         $script:SubtitlePath = Join-Path $script:Work 'episode.srt'
         Set-Content -LiteralPath $script:SubtitlePath -Value "1`n00:00:01,000 --> 00:00:02,000`nA`n`n2`n00:00:03,000 --> 00:00:04,000`nB`n" -Encoding utf8
@@ -299,8 +313,55 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
-            Should -Throw -ExpectedMessage '*cues*'
+        $warn = $null
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        $raw = Join-Path $script:Work 'episode.fr.raw.srt'
+        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
+        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $translated
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.srt') | Should -BeFalse
+        "$warn" | Should -Match 'reconstruction'
+    }
+
+    It 'conserve le raw et n''écrit pas le final si Gemini altère une balise ASS' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $translated = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\b1}Bonjour{\i0}`n"
+        Set-Content -LiteralPath $script:SubtitlePath -Value "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\i1}Hello{\i0}`n" -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            [pscustomobject]@{
+                candidates = @(
+                    [pscustomobject]@{
+                        finishReason = 'STOP'
+                        content      = [pscustomobject]@{
+                            parts = @(
+                                [pscustomobject]@{ thought = $false; text = $translated }
+                            )
+                        }
+                    }
+                )
+            }
+        }
+
+        $warn = $null
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        $raw = Join-Path $script:Work 'episode.fr.raw.ass'
+        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
+        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $translated
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        "$warn" | Should -Match 'reconstruction'
+    }
+
+    It 'refuse un raw déjà présent avant tout appel Gemini' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $raw = Join-Path $script:Work 'episode.fr.raw.ass'
+        Set-Content -LiteralPath $raw -Value 'ne-pas-ecraser' -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            throw 'Gemini ne devait pas être appelé'
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+            Should -Throw -ExpectedMessage '*existe déjà*'
+        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
+        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)).Trim() | Should -Be 'ne-pas-ecraser'
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
     }
 }

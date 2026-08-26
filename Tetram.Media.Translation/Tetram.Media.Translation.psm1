@@ -2,6 +2,19 @@ Set-StrictMode -Version 3.0
 
 . (Join-Path $PSScriptRoot 'Private' 'Merge.ps1')
 
+function Get-RawSubtitleOutputPath {
+    param([Parameter(Mandatory)][string] $OutputPath)
+
+    $parent = Split-Path -Parent $OutputPath
+    $stem = [IO.Path]::GetFileNameWithoutExtension($OutputPath)
+    $extension = [IO.Path]::GetExtension($OutputPath)
+    $rawName = "$stem.raw$extension"
+    if ([string]::IsNullOrEmpty($parent)) {
+        return $rawName
+    }
+    return Join-Path $parent $rawName
+}
+
 function ConvertTo-FrenchSubtitle {
     <#
 .EXTERNALHELP Tetram.Media.Translation-Help.xml
@@ -49,6 +62,11 @@ function ConvertTo-FrenchSubtitle {
 
     if (Test-Path -LiteralPath $OutputPath) {
         throw "Le fichier de sortie existe déjà : $OutputPath"
+    }
+
+    $rawPath = Get-RawSubtitleOutputPath -OutputPath $OutputPath
+    if (Test-Path -LiteralPath $rawPath) {
+        throw "Le fichier de réponse brute existe déjà : $rawPath"
     }
 
 
@@ -147,17 +165,24 @@ $transcript
 
     # --- Écriture ---------------------------------------------------------------
 
-    $mergedResult = Merge-TranslatedSubtitle `
-        -Source $subtitle `
-        -Translation $result `
-        -Extension $subtitleFile.Extension
+    $utf8 = [Text.UTF8Encoding]::new($false)
+    [IO.File]::WriteAllText($rawPath, $result, $utf8)
 
-    [IO.File]::WriteAllText(
-        $OutputPath,
-        $mergedResult,
-        [Text.UTF8Encoding]::new($false)
-    )
+    try {
+        $mergedResult = Merge-TranslatedSubtitle `
+            -Source $subtitle `
+            -Translation $result `
+            -Extension $subtitleFile.Extension
+    }
+    catch {
+        Write-Host "Réponse brute Gemini conservée : $rawPath"
+        Write-Warning "La reconstruction du sous-titre final a échoué : $($_.Exception.Message)"
+        return
+    }
 
+    [IO.File]::WriteAllText($OutputPath, $mergedResult, $utf8)
+
+    Write-Host "Réponse brute Gemini : $rawPath"
     Write-Host "Sous-titres traduits : $OutputPath"
 }
 
