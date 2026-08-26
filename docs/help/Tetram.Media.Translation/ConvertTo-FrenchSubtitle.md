@@ -30,7 +30,7 @@ ConvertTo-FrenchSubtitle -SubtitlePath <string> -TranscriptPath <string> [-Outpu
 
 Importer `.\Tetram.Media.Translation` (PowerShell 7+). La commande envoie à Gemini le fichier de sous-titres source et une transcription Whisper de la piste japonaise.
 
-La réponse brute de Gemini est toujours conservée dans un fichier `.raw` dérivé de la sortie (`episode.fr.ass` → `episode.fr.raw.ass`). Le fichier final n'est écrit que si la reconstruction technique depuis la source est sûre. Une génération brute peut donc être conservée même lorsque le fichier final ne peut pas être reconstruit (warning, pas d'exception de fusion).
+Si la réponse Gemini est acceptée (candidat présent, `finishReason` STOP, texte non vide), elle est conservée telle quelle dans un fichier `.raw` dérivé de la sortie (`episode.fr.ass` → `episode.fr.raw.ass`). Aucun `.raw` n'est créé si Gemini n'a pas de candidat, si `finishReason` n'est pas STOP, ou si le texte est vide. Le fichier final n'est écrit que si la reconstruction technique depuis la source est sûre. Un candidat accepté peut donc être conservé même lorsque le fichier final ne peut pas être reconstruit (warning, pas d'exception de fusion).
 
 Sans `-OutputPath`, le fichier final est écrit à côté de la source, avec le suffixe `.fr` avant l'extension (`episode.ass` → `episode.fr.ass`). Si le fichier final ou le `.raw` correspondant existe déjà, la commande échoue sans écraser et sans appeler Gemini.
 
@@ -161,7 +161,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Prérequis : PowerShell 7+ et `GEMINI_API_KEY`. Les chemins `-SubtitlePath` et `-TranscriptPath` sont littéraux (pas de jokers). La commande lève une exception si la clé est absente, si la sortie ou le `.raw` existe déjà, ou si la réponse Gemini est inutilisable. Un échec de reconstruction technique conserve le `.raw` et émet un warning.
+Prérequis : PowerShell 7+ et `GEMINI_API_KEY`. Les chemins `-SubtitlePath` et `-TranscriptPath` sont littéraux (pas de jokers). La commande lève une exception si la clé est absente, si la sortie ou le `.raw` existe déjà, ou si la réponse Gemini est inutilisable (aucun candidat, `finishReason` autre que STOP, texte vide) : dans ces cas aucun `.raw` n'est écrit. Un échec de reconstruction technique conserve le `.raw` et émet un warning.
 
 ## RELATED LINKS
 
