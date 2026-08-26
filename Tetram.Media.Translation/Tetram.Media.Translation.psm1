@@ -45,13 +45,13 @@ function ConvertTo-FrenchSubtitle {
 
     # --- Configuration -----------------------------------------------------------
 
-    if ($Provider -eq 'Ollama') {
-        if ([string]::IsNullOrWhiteSpace($Model)) {
-            throw "Le paramètre -Model est obligatoire avec -Provider Ollama.`nIndiquez le modèle Ollama à utiliser avec -Model '<nom-du-modèle>'."
+    if ([string]::IsNullOrWhiteSpace($Model)) {
+        if ($Provider -eq 'Ollama') {
+            $Model = 'qwen3.5:9b'
         }
-    }
-    elseif ([string]::IsNullOrWhiteSpace($Model)) {
-        $Model = 'gemini-3.6-flash'
+        else {
+            $Model = 'gemini-3.6-flash'
+        }
     }
 
     if ($AllowModelDownload -and $Provider -ne 'Ollama') {

@@ -96,7 +96,7 @@ Potentiellement intéressante pour la latence, le coût et le haut débit sur de
 
 ### Ollama
 
-Ollama doit être installé et démarré. L'API attendue est `http://localhost:11434`. `-Model` est obligatoire. `GEMINI_API_KEY` n'est pas utilisée. `-AllowModelDownload` autorise le téléchargement du modèle s'il n'est pas déjà installé.
+Ollama doit être installé et démarré. L'API attendue est `http://localhost:11434`. Modèle par défaut : `qwen3.5:9b`. `GEMINI_API_KEY` n'est pas utilisée. `-AllowModelDownload` autorise le téléchargement du modèle s'il n'est pas déjà installé.
 
 #### Modèles Ollama intéressants à tester
 
@@ -106,7 +106,7 @@ Les tailles indiquées correspondent approximativement au fichier modèle publi�
 
 ##### `qwen3.5:9b`
 
-Environ 6.6 GB de fichier modèle, contexte 256K, thinking disponible, forte couverture multilingue annoncée par la famille. Premier candidat raisonnable pour une machine locale de capacité intermédiaire. Référence : <https://ollama.com/library/qwen3.5>.
+Modèle par défaut Ollama / premier candidat raisonnable pour une machine locale de capacité intermédiaire. Environ 6.6 GB de fichier modèle, contexte 256K, thinking disponible, forte couverture multilingue annoncée par la famille. Référence : <https://ollama.com/library/qwen3.5>.
 
 ```powershell
 -Model 'qwen3.5:9b'
@@ -195,10 +195,10 @@ ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D
 
 ### Example 4: Traduire via Ollama
 
-Ollama doit déjà tourner sur `http://localhost:11434`. `-Model` est obligatoire. Aucun modèle Ollama n'est choisi par défaut.
+Ollama doit déjà tourner sur `http://localhost:11434`. Sans `-Model`, `qwen3.5:9b` est utilisé.
 
 ```powershell
-ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama -Model llama3.2
+ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama
 ```
 
 ### Example 5: Autoriser le téléchargement d'un modèle Ollama absent
@@ -234,7 +234,7 @@ HelpMessage: ''
 
 ### -Model
 
-Identifiant du modèle, éventuellement suivi d'un suffixe d'options terminal : `<model>`, `<model>[thinking]`, `<model>[thinking=<level>]`. Avec Gemini, défaut interne `gemini-3.6-flash` (thinking `low`) si le paramètre est omis. Avec `-Provider Ollama`, le paramètre est obligatoire ; aucun modèle Ollama n'est choisi par défaut. Les options sont retirées du nom avant l'appel fournisseur.
+Identifiant du modèle, éventuellement suivi d'un suffixe d'options terminal : `<model>`, `<model>[thinking]`, `<model>[thinking=<level>]`. Si le paramètre est omis : `gemini-3.6-flash` (thinking `low`) avec Gemini, `qwen3.5:9b` (`think=false`) avec `-Provider Ollama`. Les options sont retirées du nom avant l'appel fournisseur.
 
 ```yaml
 Type: System.String
@@ -356,7 +356,7 @@ Prérequis : PowerShell 7+. Les chemins `-SubtitlePath` et `-TranscriptPath` son
 
 Gemini : `GEMINI_API_KEY` obligatoire ; modèle par défaut `gemini-3.6-flash` ; thinking projet `low` sans option, `medium` avec `[thinking]`, niveau explicite avec `[thinking=<level>]` (`minimal`, `low`, `medium`, `high`).
 
-Ollama : doit être installé et démarré (`winget install --id Ollama.Ollama -e`, <https://ollama.com/download/windows>, `ollama serve`). `-Model` obligatoire. `GEMINI_API_KEY` inutile. `-AllowModelDownload` autorise le téléchargement d'un modèle absent (`ollama pull <model>` en alternative manuelle, sans le suffixe `[thinking]`). `-AllowModelDownload` est refusé avec Gemini. `[thinking]` envoie `think=true` ; sans option, `think=false` est envoyé explicitement. `[thinking=<level>]` n'est pas supporté pour Ollama.
+Ollama : doit être installé et démarré (`winget install --id Ollama.Ollama -e`, <https://ollama.com/download/windows>, `ollama serve`). Modèle par défaut `qwen3.5:9b`. `GEMINI_API_KEY` inutile. `-AllowModelDownload` autorise le téléchargement d'un modèle absent (`ollama pull <model>` en alternative manuelle, sans le suffixe `[thinking]`). `-AllowModelDownload` est refusé avec Gemini. `[thinking]` envoie `think=true` ; sans option, `think=false` est envoyé explicitement. `[thinking=<level>]` n'est pas supporté pour Ollama.
 
 ## RELATED LINKS
 
