@@ -4,7 +4,7 @@
     GUID = 'f4c86b9c-9c56-4bc8-b6b4-2ab400192367'
     Author = 'TRL'
     CompanyName = 'Tetram'
-    Description = 'Traduction française de sous-titres via Gemini ou Ollama, à partir du fichier source et d''une transcription Whisper.'
+    Description = 'Traduction française de sous-titres via Gemini ou Ollama, à partir du fichier source et d''une transcription Whisper. -Model accepte un suffixe optionnel [thinking] ou [thinking=<level>].'
     PowerShellVersion = '7.0'
     CompatiblePSEditions = @('Core')
     RequiredModules = @()
