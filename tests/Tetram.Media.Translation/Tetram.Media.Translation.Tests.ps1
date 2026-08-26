@@ -85,6 +85,15 @@ BeforeAll {
             Body   = $Body
         })
     }
+
+    function script:Find-InfoLogIndex([string] $Like) {
+        for ($i = 0; $i -lt $script:InfoLogs.Count; $i++) {
+            if ($script:InfoLogs[$i] -like $Like) {
+                return $i
+            }
+        }
+        return -1
+    }
 }
 
 Describe 'Tetram.Media.Translation manifest' {
@@ -112,6 +121,13 @@ Describe 'Tetram.Media.Translation exports' {
         $names = @(Get-Command -Module 'Tetram.Media.Translation' | Select-Object -ExpandProperty Name | Sort-Object)
         $names | Should -Be @('ConvertTo-FrenchSubtitle')
     }
+
+    It 'rend Write-InfoLog disponible dans le session state du module' {
+        $cmd = InModuleScope 'Tetram.Media.Translation' {
+            Get-Command -Name Write-InfoLog -ErrorAction Stop
+        }
+        $cmd.Name | Should -Be 'Write-InfoLog'
+    }
 }
 
 Describe 'ConvertTo-FrenchSubtitle' {
@@ -136,6 +152,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         Set-Content -LiteralPath $script:TranscriptPath -Value 'こんにちは' -Encoding utf8
         $script:LastGeminiBody = $null
         $script:RestCalls = [System.Collections.Generic.List[object]]::new()
+        $script:InfoLogs = [System.Collections.Generic.List[string]]::new()
     }
 
     AfterEach {
@@ -1151,5 +1168,232 @@ Describe 'ConvertTo-FrenchSubtitle' {
             Should -Throw -ExpectedMessage '*vide*'
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+    }
+
+    Context 'jalons de progression' {
+        BeforeEach {
+            Mock -ModuleName Tetram.Media.Translation Write-InfoLog {
+                param(
+                    [string] $Text,
+                    [switch] $Force
+                )
+                $script:InfoLogs.Add([string]$Text)
+            }
+        }
+
+        It 'journalise l''invocation Gemini par défaut avec thinking=low' {
+            $env:GEMINI_API_KEY = 'test-key'
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                New-GeminiStopResponse $script:HelloJson
+            }
+
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
+
+            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
+            Should -Invoke -ModuleName Tetram.Media.Translation Write-InfoLog -Times 0 -ParameterFilter { [bool]$Force }
+        }
+
+        It 'journalise l''invocation Gemini [thinking] avec thinking=medium' {
+            $env:GEMINI_API_KEY = 'test-key'
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                New-GeminiStopResponse $script:HelloJson
+            }
+
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Model 'gemini-3.6-flash[thinking]'
+
+            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=medium)..."
+            @($script:InfoLogs | Where-Object { $_ -like '*gemini-3.6-flash[thinking]*' }) | Should -HaveCount 0
+        }
+
+        It 'journalise l''invocation Ollama sans thinking' {
+            $env:GEMINI_API_KEY = $null
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                $u = [string]$Uri
+                if ($u -like '*/api/tags') {
+                    return New-OllamaTagsResponse 'qwen3.5:9b'
+                }
+                if ($u -like '*/api/chat') {
+                    return New-OllamaChatResponse $script:HelloJson
+                }
+                throw "URI inattendue : $u"
+            }
+
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b'
+
+            $script:InfoLogs | Should -Contain "Invocation d'Ollama avec 'qwen3.5:9b' (thinking=false)..."
+        }
+
+        It 'journalise l''invocation Ollama [thinking] sans le suffixe dans le nom' {
+            $env:GEMINI_API_KEY = $null
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                $u = [string]$Uri
+                if ($u -like '*/api/tags') {
+                    return New-OllamaTagsResponse 'qwen3.5:9b'
+                }
+                if ($u -like '*/api/chat') {
+                    return New-OllamaChatResponse $script:HelloJson
+                }
+                throw "URI inattendue : $u"
+            }
+
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b[thinking]'
+
+            $script:InfoLogs | Should -Contain "Invocation d'Ollama avec 'qwen3.5:9b' (thinking=true)..."
+            @($script:InfoLogs | Where-Object { $_ -like '*qwen3.5:9b[thinking]*' }) | Should -HaveCount 0
+        }
+
+        It 'journalise le téléchargement Ollama puis l''invocation dans cet ordre' {
+            $env:GEMINI_API_KEY = $null
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                $u = [string]$Uri
+                if ($u -like '*/api/tags') {
+                    return New-OllamaTagsResponse 'autre-modele'
+                }
+                if ($u -like '*/api/pull') {
+                    return [pscustomobject]@{ status = 'success' }
+                }
+                if ($u -like '*/api/chat') {
+                    return New-OllamaChatResponse $script:HelloJson
+                }
+                throw "URI inattendue : $u"
+            }
+
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b' -AllowModelDownload
+
+            $download = Find-InfoLogIndex "Téléchargement du modèle Ollama 'qwen3.5:9b'..."
+            $done = Find-InfoLogIndex "Modèle Ollama 'qwen3.5:9b' téléchargé."
+            $invoke = Find-InfoLogIndex "Invocation d'Ollama avec 'qwen3.5:9b' (thinking=false)..."
+            $download | Should -BeGreaterOrEqual 0
+            $done | Should -BeGreaterThan $download
+            $invoke | Should -BeGreaterThan $done
+        }
+
+        It 'n''annonce pas de téléchargement si le modèle Ollama est déjà présent' {
+            $env:GEMINI_API_KEY = $null
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                $u = [string]$Uri
+                if ($u -like '*/api/tags') {
+                    return New-OllamaTagsResponse 'qwen3.5:9b'
+                }
+                if ($u -like '*/api/chat') {
+                    return New-OllamaChatResponse $script:HelloJson
+                }
+                throw "URI inattendue : $u"
+            }
+
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b'
+
+            @($script:InfoLogs | Where-Object { $_ -like '*Téléchargement du modèle*' }) | Should -HaveCount 0
+            $script:InfoLogs | Should -Contain "Invocation d'Ollama avec 'qwen3.5:9b' (thinking=false)..."
+        }
+
+        It 'n''annonce ni succès de pull ni invocation si le téléchargement Ollama échoue' {
+            $env:GEMINI_API_KEY = $null
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                $u = [string]$Uri
+                if ($u -like '*/api/tags') {
+                    return New-OllamaTagsResponse 'autre-modele'
+                }
+                if ($u -like '*/api/pull') {
+                    throw 'pull model manifest: file does not exist'
+                }
+                throw "URI inattendue : $u"
+            }
+
+            {
+                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 -AllowModelDownload
+            } | Should -Throw
+
+            $script:InfoLogs | Should -Contain "Téléchargement du modèle Ollama 'llama3.2'..."
+            @($script:InfoLogs | Where-Object { $_ -like '*téléchargé*' }) | Should -HaveCount 0
+            @($script:InfoLogs | Where-Object { $_ -like '*Invocation d''Ollama*' }) | Should -HaveCount 0
+        }
+
+        It 'n''annonce ni téléchargement ni invocation si le modèle Ollama est absent sans AllowModelDownload' {
+            $env:GEMINI_API_KEY = $null
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                $u = [string]$Uri
+                if ($u -like '*/api/tags') {
+                    return New-OllamaTagsResponse 'autre-modele'
+                }
+                throw "URI inattendue : $u"
+            }
+
+            {
+                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2
+            } | Should -Throw -ExpectedMessage '*AllowModelDownload*'
+
+            @($script:InfoLogs | Where-Object { $_ -like '*Téléchargement du modèle*' }) | Should -HaveCount 0
+            @($script:InfoLogs | Where-Object { $_ -like '*Invocation d''Ollama*' }) | Should -HaveCount 0
+        }
+
+        It 'n''annonce pas l''invocation Ollama si /api/tags échoue' {
+            $env:GEMINI_API_KEY = $null
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                $u = [string]$Uri
+                if ($u -like '*/api/tags') {
+                    throw 'Unable to connect to the remote server'
+                }
+                throw "URI inattendue : $u"
+            }
+
+            {
+                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2
+            } | Should -Throw -ExpectedMessage '*localhost:11434*'
+
+            @($script:InfoLogs | Where-Object { $_ -like '*Invocation d''Ollama*' }) | Should -HaveCount 0
+        }
+
+        It 'n''annonce ni raw ni reconstruction si le transport Gemini échoue' {
+            $env:GEMINI_API_KEY = 'test-key'
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                [pscustomobject]@{ candidates = @() }
+            }
+
+            {
+                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
+            } | Should -Throw -ExpectedMessage '*aucun candidat*'
+
+            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
+            @($script:InfoLogs | Where-Object { $_ -like '*Réponse brute*' }) | Should -HaveCount 0
+            @($script:InfoLogs | Where-Object { $_ -like '*Reconstruction*' }) | Should -HaveCount 0
+        }
+
+        It 'annonce raw puis reconstruction et conserve le raw si le JSON métier est invalide' {
+            $env:GEMINI_API_KEY = 'test-key'
+            $json = 'ceci n''est pas du JSON {'
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                New-GeminiStopResponse $json
+            }
+
+            $warn = $null
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+
+            $raw = Join-Path $script:Work 'episode.fr.raw.json'
+            $script:InfoLogs | Should -Contain "Réponse brute du modèle enregistrée : $raw"
+            $script:InfoLogs | Should -Contain 'Reconstruction du sous-titre final...'
+            (Find-InfoLogIndex "Réponse brute du modèle enregistrée : $raw") | Should -BeLessThan (Find-InfoLogIndex 'Reconstruction du sous-titre final...')
+            "$warn" | Should -Match 'reconstruction'
+            Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
+            [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+            Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        }
+
+        It 'annonce raw puis reconstruction après une réponse Gemini valide' {
+            $env:GEMINI_API_KEY = 'test-key'
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                New-GeminiStopResponse $script:HelloJson
+            }
+
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
+
+            $raw = Join-Path $script:Work 'episode.fr.raw.json'
+            $invoke = Find-InfoLogIndex "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
+            $rawLog = Find-InfoLogIndex "Réponse brute du modèle enregistrée : $raw"
+            $rebuild = Find-InfoLogIndex 'Reconstruction du sous-titre final...'
+            $invoke | Should -BeGreaterOrEqual 0
+            $rawLog | Should -BeGreaterThan $invoke
+            $rebuild | Should -BeGreaterThan $rawLog
+        }
     }
 }

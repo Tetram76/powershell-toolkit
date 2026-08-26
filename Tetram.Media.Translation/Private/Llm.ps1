@@ -198,6 +198,8 @@ function Invoke-OllamaModelPull {
         stream = $false
     } | ConvertTo-Json -Compress
 
+    Write-InfoLog -Text "Téléchargement du modèle Ollama '$Model'..."
+
     try {
         $response = Invoke-RestMethod `
             -Method Post `
@@ -240,6 +242,8 @@ Installez-le manuellement :
 $detail
 "@
     }
+
+    Write-InfoLog -Text "Modèle Ollama '$Model' téléchargé."
 }
 
 function Get-GeminiThinkingLevel {
@@ -334,6 +338,8 @@ function Invoke-GeminiTranslationLlm {
 
     $uri = "https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent"
 
+    Write-InfoLog -Text "Invocation de Gemini avec '$modelName' (thinking=$thinkingLevel)..."
+
     $response = Invoke-RestMethod `
         -Method Post `
         -Uri $uri `
@@ -411,6 +417,8 @@ Solutions :
         think    = $think
         format   = Get-CueTranslationJsonSchema
     } | ConvertTo-Json -Depth 12
+
+    Write-InfoLog -Text "Invocation d'Ollama avec '$modelName' (thinking=$($think.ToString().ToLowerInvariant()))..."
 
     $response = Invoke-RestMethod `
         -Method Post `
