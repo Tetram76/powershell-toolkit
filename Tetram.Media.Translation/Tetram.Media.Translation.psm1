@@ -55,41 +55,18 @@ function ConvertTo-FrenchSubtitle {
 
     # --- Prompt ------------------------------------------------------------------
 
-    $instructions = @'
-Tu es chargé de produire des sous-titres français à partir de deux sources :
+    $promptPath = Join-Path `
+        $PSScriptRoot `
+        'Resources/ConvertTo-FrenchSubtitle.prompt.md'
 
-1. le fichier de sous-titres extrait de la vidéo ;
-2. une transcription Whisper de la piste audio japonaise.
+    if (-not (Test-Path -LiteralPath $promptPath -PathType Leaf)) {
+        throw "Le fichier de prompt est introuvable : $promptPath"
+    }
 
-Les deux sources sont complémentaires.
-
-Utilise la transcription Whisper pour comprendre le dialogue japonais, lever les
-ambiguïtés et corriger si nécessaire une mauvaise interprétation du sous-titre
-source.
-
-Produis une traduction française naturelle et adaptée à des sous-titres.
-
-Contraintes impératives :
-
-- conserve le format exact du fichier de sous-titres source ;
-- conserve l'ordre des événements ;
-- conserve les timecodes existants ;
-- conserve les styles, positions, métadonnées et autres champs techniques ;
-- conserve les tags de formatage ;
-- traduis uniquement le texte destiné à être lu par le spectateur ;
-- ne supprime ni n'ajoute de dialogue sans nécessité manifeste ;
-- ne modifie pas la transcription Whisper ;
-- n'invente pas de contenu absent des sources ;
-- utilise le contexte des répliques pour produire un français naturel et cohérent ;
-- conserve la cohérence des noms, tutoiements/vouvoiements et registres de langue
-  au cours de l'épisode.
-
-Ta réponse doit contenir UNIQUEMENT le contenu complet du fichier de sous-titres
-traduit.
-
-Ne mets pas le résultat dans un bloc Markdown.
-N'ajoute aucune explication avant ou après le fichier.
-'@
+    $instructions = Get-Content `
+        -LiteralPath $promptPath `
+        -Raw `
+        -Encoding UTF8
 
     $subtitlePart = @"
 ===== SOUS-TITRES SOURCE =====
