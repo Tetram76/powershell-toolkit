@@ -178,7 +178,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
                         finishReason = 'STOP'
                         content      = [pscustomobject]@{
                             parts = @(
-                                [pscustomobject]@{ thought = $true; text = 'raisonnement' }
+                                [pscustomobject]@{ thought = $true }
                             )
                         }
                     }
