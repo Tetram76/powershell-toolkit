@@ -16,6 +16,11 @@ Describe 'Tetram.Media.Translation manifest' {
     It 'passe Test-ModuleManifest' {
         { Test-ModuleManifest -Path $script:ManifestTranslation -ErrorAction Stop } | Should -Not -Throw
     }
+
+    It 'embarque Resources/ConvertTo-FrenchSubtitle.prompt.md' {
+        $promptPath = Join-Path $script:ModuleRootTranslation 'Resources' 'ConvertTo-FrenchSubtitle.prompt.md'
+        Test-Path -LiteralPath $promptPath -PathType Leaf | Should -BeTrue
+    }
 }
 
 Describe 'Tetram.Media.Translation exports' {
@@ -64,6 +69,20 @@ Describe 'ConvertTo-FrenchSubtitle' {
     It 'refuse une transcription introuvable au binding' {
         { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath (Join-Path $script:Work 'absent.txt') } |
             Should -Throw
+    }
+
+    It 'lève si le fichier de prompt est introuvable' {
+        $env:GEMINI_API_KEY = 'test-key'
+        Mock -ModuleName Tetram.Media.Translation Test-Path {
+            param($LiteralPath, $PathType)
+            if ($LiteralPath -like '*ConvertTo-FrenchSubtitle.prompt.md') {
+                return $false
+            }
+            return Microsoft.PowerShell.Management\Test-Path @PSBoundParameters
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+            Should -Throw -ExpectedMessage "*prompt*"
     }
 
     It 'lève si GEMINI_API_KEY est absente' {
