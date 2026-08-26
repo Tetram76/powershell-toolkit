@@ -331,7 +331,9 @@ function Assert-CueTranslationNotEmptied {
     for ($i = 0; $i -lt $SourceText.Count; $i++) {
         $cueId = $i + 1
         $translated = Get-CueTranslationText -TranslationByCueId $TranslationByCueId -CueId $cueId
-        if (-not [string]::IsNullOrEmpty($SourceText[$i]) -and [string]::IsNullOrEmpty($translated)) {
+        # Un text réduit à des espaces n'est pas une proposition linguistique ;
+        # IsNullOrEmpty le laisserait passer et produirait un final « vide ».
+        if (-not [string]::IsNullOrWhiteSpace($SourceText[$i]) -and [string]::IsNullOrWhiteSpace($translated)) {
             throw "le texte du cueId $cueId est vide alors que la source ne l'est pas."
         }
     }

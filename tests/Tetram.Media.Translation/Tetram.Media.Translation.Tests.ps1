@@ -466,6 +466,22 @@ Describe 'ConvertTo-FrenchSubtitle' {
         "$warn" | Should -Match 'vide'
     }
 
+    It 'conserve le raw.json et n''écrit pas le final si text n''est que des espaces sur une source non vide' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $json = '[{"cueId":1,"text":" "}]'
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            New-GeminiStopResponse $json
+        }
+
+        $warn = $null
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        $raw = Join-Path $script:Work 'episode.fr.raw.json'
+        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
+        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        "$warn" | Should -Match 'vide'
+    }
+
     It 'conserve le raw.json et n''écrit pas le final si Gemini altère une balise ASS' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":"{\\b1}Bonjour{\\i0}"}]'
