@@ -1,5 +1,7 @@
 Set-StrictMode -Version 3.0
 
+. (Join-Path $PSScriptRoot 'Private' 'Merge.ps1')
+
 function ConvertTo-FrenchSubtitle {
     <#
 .EXTERNALHELP Tetram.Media.Translation-Help.xml
@@ -142,9 +144,14 @@ $transcript
 
     # --- Écriture ---------------------------------------------------------------
 
+    $mergedResult = Merge-TranslatedSubtitle `
+        -Source $subtitle `
+        -Translation $result `
+        -Extension $subtitleFile.Extension
+
     [IO.File]::WriteAllText(
         $OutputPath,
-        $result,
+        $mergedResult,
         [Text.UTF8Encoding]::new($false)
     )
 
