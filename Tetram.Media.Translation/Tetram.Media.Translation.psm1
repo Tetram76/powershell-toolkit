@@ -1,5 +1,11 @@
 Set-StrictMode -Version 3.0
 
+@(
+    'Tetram.Common'
+) | ForEach-Object {
+    Import-Module -Name (Join-Path $PSScriptRoot '..' $_) -Force
+}
+
 . (Join-Path $PSScriptRoot 'Private' 'Merge.ps1')
 . (Join-Path $PSScriptRoot 'Private' 'Llm.ps1')
 
@@ -143,7 +149,10 @@ $transcript
     $utf8 = [Text.UTF8Encoding]::new($false)
     [IO.File]::WriteAllText($rawPath, $result, $utf8)
 
+    Write-InfoLog -Text "Réponse brute du modèle enregistrée : $rawPath"
+
     try {
+        Write-InfoLog -Text 'Reconstruction du sous-titre final...'
         $sourceText = @($canonicalCue | ForEach-Object { $_.text })
         $translationByCueId = ConvertFrom-CueTranslationJson -Json $result -CueCount $canonicalCue.Count
         Assert-CueTranslationNotEmptied -SourceText $sourceText -TranslationByCueId $translationByCueId
