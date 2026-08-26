@@ -1190,7 +1190,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
 
             $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
-            Should -Invoke -ModuleName Tetram.Media.Translation Write-InfoLog -Times 0 -ParameterFilter { [bool]$Force }
+            Should -Invoke -ModuleName Tetram.Media.Translation Write-InfoLog -Times 1 -ParameterFilter {
+                [bool]$Force -and $Text -eq "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
+            }
         }
 
         It 'journalise l''invocation Gemini [thinking] avec thinking=medium' {
