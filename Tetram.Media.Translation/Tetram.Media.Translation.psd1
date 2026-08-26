@@ -4,7 +4,7 @@
     GUID = 'f4c86b9c-9c56-4bc8-b6b4-2ab400192367'
     Author = 'TRL'
     CompanyName = 'Tetram'
-    Description = 'Traduction française de sous-titres via Gemini, à partir du fichier source et d''une transcription Whisper.'
+    Description = 'Traduction française de sous-titres via Gemini ou Ollama, à partir du fichier source et d''une transcription Whisper.'
     PowerShellVersion = '7.0'
     CompatiblePSEditions = @('Core')
     RequiredModules = @()
@@ -18,9 +18,9 @@
     VariablesToExport = @()
     PrivateData = @{
         PSData = @{
-            Tags = @('gemini', 'subtitle', 'translation', 'media', 'ps7')
+            Tags = @('gemini', 'ollama', 'subtitle', 'translation', 'media', 'ps7')
             ReleaseNotes = @'
-- 1.0.0 : ConvertTo-FrenchSubtitle (Gemini, couple sous-titre + transcription Whisper).
+- 1.0.0 : ConvertTo-FrenchSubtitle (Gemini ou Ollama, couple sous-titre + transcription Whisper).
 '@
         }
     }

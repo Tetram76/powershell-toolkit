@@ -4,19 +4,41 @@
     <command:details>
       <command:name>ConvertTo-FrenchSubtitle</command:name>
       <maml:description>
-        <maml:para>Produit un fichier de sous-titres français à partir d'un sous-titre source et d'une transcription Whisper, via Gemini.</maml:para>
+        <maml:para>Produit un fichier de sous-titres français à partir d'un sous-titre source et d'une transcription Whisper, via Gemini ou Ollama.</maml:para>
       </maml:description>
       <command:verb>ConvertTo</command:verb>
       <command:noun>FrenchSubtitle</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Importer `.\Tetram.Media.Translation` (PowerShell 7+). La commande parse la source principale en cues canoniques (`cueId`, `start`, `end`, `text`) et envoie ce JSON à Gemini, avec la transcription Whisper telle quelle. Gemini retourne une proposition JSON `{ cueId, text }`.
+      <maml:para>Importer `.\Tetram.Media.Translation` (PowerShell 7+). La commande parse la source principale en cues canoniques (`cueId`, `start`, `end`, `text`) et envoie ce JSON au modèle, avec la transcription Whisper telle quelle. Le modèle retourne une proposition JSON `{ cueId, text }`.
 
-Si la réponse Gemini est acceptée (candidat présent, `finishReason` STOP, texte non vide), elle est conservée telle quelle dans un fichier `.raw.json` dérivé de la sortie (`episode.fr.ass` → `episode.fr.raw.json`). Aucun `.raw.json` n'est créé si Gemini n'a pas de candidat, si `finishReason` n'est pas STOP, ou si le texte est vide. Le fichier final est reconstruit depuis la source principale (identifiants et timestamps natifs, champs techniques ASS) en remplaçant uniquement le texte via `cueId`. Un candidat incomplet ou invalide (cue manquant, dupliqué, hors plage, JSON illisible, texte vidé) est conservé sans produire de final (warning, pas d'exception de reconstruction).
+Le fournisseur se choisit avec `-Provider` (`Gemini` ou `Ollama`). Sans `-Provider`, Gemini est utilisé.
 
-Sans `-OutputPath`, le fichier final est écrit à côté de la source, avec le suffixe `.fr` avant l'extension (`episode.ass` → `episode.fr.ass`). Si le fichier final ou le `.raw.json` correspondant existe déjà, la commande échoue sans écraser et sans appeler Gemini.
+Si la réponse du modèle est acceptée au niveau transport, elle est conservée telle quelle dans un fichier `.raw.json` dérivé de la sortie (`episode.fr.ass` → `episode.fr.raw.json`). Aucun `.raw.json` n'est créé si le transport échoue (Gemini : aucun candidat, `finishReason` autre que STOP, texte vide ; Ollama : réponse absente, génération inachevée, contenu vide). Le fichier final est reconstruit depuis la source principale (identifiants et timestamps natifs, champs techniques ASS) en remplaçant uniquement le texte via `cueId`. Un candidat incomplet ou invalide (cue manquant, dupliqué, hors plage, JSON illisible, texte vidé) est conservé sans produire de final (warning, pas d'exception de reconstruction).
 
-Prérequis : variable d'environnement `GEMINI_API_KEY`. Modèle par défaut : `gemini-3.6-flash`.
+Sans `-OutputPath`, le fichier final est écrit à côté de la source, avec le suffixe `.fr` avant l'extension (`episode.ass` → `episode.fr.ass`). Si le fichier final ou le `.raw.json` correspondant existe déjà, la commande échoue sans écraser et sans appeler le modèle.
+
+### Gemini
+
+Provider par défaut. Modèle par défaut : `gemini-3.6-flash`. Prérequis : variable d'environnement `GEMINI_API_KEY`.
+
+### Ollama
+
+Ollama doit être installé et démarré. L'API attendue est `http://localhost:11434`. `-Model` est obligatoire. `GEMINI_API_KEY` n'est pas utilisée. `-AllowModelDownload` autorise le téléchargement du modèle s'il n'est pas déjà installé.
+
+Installation Windows :
+
+```powershell
+winget install --id Ollama.Ollama -e
+```
+
+Téléchargement officiel : &lt;https://ollama.com/download/windows&gt;
+
+Téléchargement manuel d'un modèle :
+
+```powershell
+ollama pull &lt;model&gt;
+```
 
 Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affiché sur la console.</maml:para>
     </maml:description>
@@ -55,13 +77,29 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
             <maml:name>System.String</maml:name>
           </dev:type>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>AllowModelDownload</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>AllowModelDownload</maml:name>
+        <maml:description>
+          <maml:para>Autorise le téléchargement du modèle Ollama demandé s'il n'est pas déjà installé. Applicable uniquement avec `-Provider Ollama`. Sans ce switch, un modèle absent provoque une erreur indiquant `ollama pull &lt;model&gt;`.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Model</maml:name>
         <maml:description>
-          <maml:para>Identifiant du modèle Gemini. Défaut : `gemini-3.6-flash`.</maml:para>
+          <maml:para>Identifiant du modèle. Avec Gemini, défaut interne `gemini-3.6-flash` si le paramètre est omis. Avec `-Provider Ollama`, le paramètre est obligatoire ; aucun modèle Ollama n'est choisi par défaut.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -73,6 +111,20 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
         <maml:description>
           <maml:para>Chemin du fichier traduit. S'il est omis : même dossier que `-SubtitlePath`, basename + `.fr` + extension source. Échoue si le fichier existe déjà.</maml:para>
         </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Provider</maml:name>
+        <maml:description>
+          <maml:para>Fournisseur LLM. `Gemini` (défaut) ou `Ollama` (API locale `http://localhost:11434`).</maml:para>
+        </maml:description>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Gemini</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Ollama</command:parameterValue>
+        </command:parameterValueGroup>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
           <maml:name>System.String</maml:name>
@@ -103,7 +155,11 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Prérequis : PowerShell 7+ et `GEMINI_API_KEY`. Les chemins `-SubtitlePath` et `-TranscriptPath` sont littéraux (pas de jokers). La commande lève une exception si la clé est absente, si la sortie ou le `.raw.json` existe déjà, ou si la réponse Gemini est inutilisable (aucun candidat, `finishReason` autre que STOP, texte vide) : dans ces cas aucun `.raw.json` n'est écrit. Un échec de reconstruction (JSON incomplet ou invalide, contrat ASS `{...}` / `\N`) conserve le `.raw.json` et émet un warning.</maml:para>
+        <maml:para>Prérequis : PowerShell 7+. Les chemins `-SubtitlePath` et `-TranscriptPath` sont littéraux (pas de jokers). La commande lève une exception si la sortie ou le `.raw.json` existe déjà, ou si la réponse du modèle est inutilisable au niveau transport : dans ces cas aucun `.raw.json` n'est écrit. Un échec de reconstruction (JSON incomplet ou invalide, contrat ASS `{...}` / `\N`) conserve le `.raw.json` et émet un warning.
+
+Gemini : `GEMINI_API_KEY` obligatoire ; modèle par défaut `gemini-3.6-flash`.
+
+Ollama : doit être installé et démarré (`winget install --id Ollama.Ollama -e`, &lt;https://ollama.com/download/windows&gt;, `ollama serve`). `-Model` obligatoire. `GEMINI_API_KEY` inutile. `-AllowModelDownload` autorise le téléchargement d'un modèle absent (`ollama pull &lt;model&gt;` en alternative manuelle). `-AllowModelDownload` est refusé avec Gemini.</maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -112,7 +168,7 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
         <maml:introduction></maml:introduction>
         <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt'</dev:code>
         <dev:remarks>
-          <maml:para>Le fichier traduit est écrit à côté de la source, avec le suffixe `.fr`.</maml:para>
+          <maml:para>Le fichier traduit est écrit à côté de la source, avec le suffixe `.fr`. Gemini est utilisé.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
@@ -128,6 +184,22 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
         <maml:introduction></maml:introduction>
         <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Model 'gemini-3.6-flash'</dev:code>
         <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 4: Traduire via Ollama ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama -Model llama3.2</dev:code>
+        <dev:remarks>
+          <maml:para>Ollama doit déjà tourner sur `http://localhost:11434`. `-Model` est obligatoire. Aucun modèle Ollama n'est choisi par défaut.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 5: Autoriser le téléchargement d'un modèle Ollama absent ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama -Model llama3.2 -AllowModelDownload</dev:code>
+        <dev:remarks>
+          <maml:para>Si le modèle n'est pas installé localement, la commande appelle l'API Ollama pour le télécharger, puis lance la génération.</maml:para>
+        </dev:remarks>
       </command:example>
     </command:examples>
     <command:relatedLinks>
