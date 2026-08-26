@@ -149,10 +149,10 @@ $transcript
     $utf8 = [Text.UTF8Encoding]::new($false)
     [IO.File]::WriteAllText($rawPath, $result, $utf8)
 
-    Write-InfoLog -Text "Réponse brute du modèle enregistrée : $rawPath"
+    Write-InfoLog -Text "Réponse brute du modèle enregistrée : $rawPath" -Force
 
     try {
-        Write-InfoLog -Text 'Reconstruction du sous-titre final...'
+        Write-InfoLog -Text 'Reconstruction du sous-titre final...' -Force
         $sourceText = @($canonicalCue | ForEach-Object { $_.text })
         $translationByCueId = ConvertFrom-CueTranslationJson -Json $result -CueCount $canonicalCue.Count
         Assert-CueTranslationNotEmptied -SourceText $sourceText -TranslationByCueId $translationByCueId
