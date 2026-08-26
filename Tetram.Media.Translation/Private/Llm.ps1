@@ -24,6 +24,106 @@ function Get-CueTranslationJsonSchema {
     }
 }
 
+function New-LlmModelOptionTable {
+    return [System.Collections.Generic.Dictionary[string, object]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+}
+
+function Resolve-LlmModelSpec {
+    param([Parameter(Mandatory)][string] $Model)
+
+    $spec = $Model.Trim()
+    if ([string]::IsNullOrWhiteSpace($spec)) {
+        throw 'Le nom de modèle est vide.'
+    }
+
+    if ($spec.IndexOf('[') -lt 0) {
+        if ($spec.Contains(']')) {
+            throw 'Syntaxe de modèle invalide : crochet fermant sans suffixe d''options.'
+        }
+
+        return [pscustomobject]@{
+            Name    = $spec
+            Options = New-LlmModelOptionTable
+        }
+    }
+
+    if (-not $spec.EndsWith(']', [StringComparison]::Ordinal)) {
+        throw 'Syntaxe de modèle invalide : crochets non fermés.'
+    }
+
+    $open = $spec.IndexOf('[')
+    $name = $spec.Substring(0, $open).Trim()
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        throw 'Le nom de modèle est vide.'
+    }
+
+    $inner = $spec.Substring($open + 1, $spec.Length - $open - 2)
+    if ($inner.Contains('[') -or $inner.Contains(']')) {
+        throw 'Syntaxe de modèle invalide : le suffixe d''options doit être terminal.'
+    }
+
+    if ([string]::IsNullOrWhiteSpace($inner)) {
+        throw 'Syntaxe de modèle invalide : liste d''options vide.'
+    }
+
+    $options = New-LlmModelOptionTable
+    foreach ($rawPart in ($inner -split ',')) {
+        $part = $rawPart.Trim()
+        if ([string]::IsNullOrWhiteSpace($part)) {
+            throw 'Option sans nom.'
+        }
+
+        $eq = $part.IndexOf('=')
+        $optName = $null
+        $optValue = $null
+        if ($eq -lt 0) {
+            $optName = $part
+        }
+        else {
+            $optName = $part.Substring(0, $eq).Trim()
+            $optValue = $part.Substring($eq + 1).Trim()
+            if ([string]::IsNullOrWhiteSpace($optName)) {
+                throw 'Option sans nom.'
+            }
+            if ([string]::IsNullOrWhiteSpace($optValue)) {
+                throw 'Valeur d''option vide.'
+            }
+        }
+
+        if ($options.ContainsKey($optName)) {
+            throw "Option de modèle dupliquée : $optName."
+        }
+
+        $canonical = $null
+        foreach ($recognized in @('thinking')) {
+            if ($optName.Equals($recognized, [StringComparison]::OrdinalIgnoreCase)) {
+                $canonical = $recognized
+                break
+            }
+        }
+        if ($null -eq $canonical) {
+            throw @"
+Option de modèle inconnue : $optName.
+Options reconnues : thinking.
+"@
+        }
+
+        # Seule thinking normalise sa valeur : les futures options pourront garder la casse d'origine.
+        if ($null -ne $optValue -and $canonical -eq 'thinking') {
+            $optValue = $optValue.ToLowerInvariant()
+        }
+
+        $options[$canonical] = $optValue
+    }
+
+    return [pscustomobject]@{
+        Name    = $name
+        Options = $options
+    }
+}
+
 function Test-OllamaModelListed {
     param(
         [Parameter(Mandatory)][string] $Model,
@@ -111,36 +211,85 @@ $($_.Exception.Message)
 "@
     }
 
-    if ($null -ne $response -and $response.PSObject.Properties['error'] -and -not [string]::IsNullOrWhiteSpace([string]$response.error)) {
-        throw @"
-Le téléchargement du modèle Ollama '$Model' a échoué.
-
-Installez-le manuellement :
-  ollama pull $Model
-
-$($response.error)
-"@
+    # /api/pull en stream=false termine par { "status": "success" } ; un HTTP 200
+    # sans ce statut (corps vide ou objet partiel) n'est pas un pull réussi.
+    $status = $null
+    if ($null -ne $response -and $response.PSObject.Properties['status']) {
+        $status = [string]$response.status
     }
+    if ([string]::IsNullOrWhiteSpace($status) -or -not $status.Equals('success', [StringComparison]::OrdinalIgnoreCase)) {
+        $detail = $null
+        if ($null -ne $response -and $response.PSObject.Properties['error'] -and -not [string]::IsNullOrWhiteSpace([string]$response.error)) {
+            $detail = [string]$response.error
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($status)) {
+            $detail = $status
+        }
 
-    if ($null -ne $response -and $response.PSObject.Properties['status'] -and -not [string]::IsNullOrWhiteSpace([string]$response.status) -and [string]$response.status -ne 'success') {
         throw @"
 Le téléchargement du modèle Ollama '$Model' a échoué.
 
 Installez-le manuellement :
   ollama pull $Model
 
-$($response.status)
+$detail
 "@
     }
 }
 
+function Get-GeminiThinkingLevel {
+    param([Parameter(Mandatory)] $ModelSpec)
+
+    # Google documente medium par défaut pour plusieurs Flash ; le projet force low
+    # tant que le Model spec ne demande pas explicitement thinking.
+    $level = 'low'
+    if ($ModelSpec.Options.ContainsKey('thinking')) {
+        $value = $ModelSpec.Options['thinking']
+        if ($null -eq $value) {
+            $level = 'medium'
+        }
+        else {
+            $level = [string]$value
+        }
+    }
+
+    $recognized = @('minimal', 'low', 'medium', 'high')
+    if ($level -notin $recognized) {
+        throw @"
+Niveau de thinking Gemini inconnu : $level.
+Niveaux reconnus : minimal, low, medium, high.
+"@
+    }
+
+    return $level
+}
+
+function Get-OllamaThinkPreference {
+    param([Parameter(Mandatory)] $ModelSpec)
+
+    if (-not $ModelSpec.Options.ContainsKey('thinking')) {
+        return $false
+    }
+
+    if ($null -ne $ModelSpec.Options['thinking']) {
+        throw @"
+L'option thinking avec une valeur est actuellement réservée à Gemini.
+Avec Ollama, utilisez soit '<model>', soit '<model>[thinking]'.
+"@
+    }
+
+    return $true
+}
+
 function Invoke-GeminiTranslationLlm {
     param(
-        [Parameter(Mandatory)][string] $Model,
+        [Parameter(Mandatory)] $ModelSpec,
         [Parameter(Mandatory)][AllowEmptyCollection()][string[]] $PromptPart
     )
 
     $apiKey = $env:GEMINI_API_KEY
+    $modelName = $ModelSpec.Name
+    $thinkingLevel = Get-GeminiThinkingLevel -ModelSpec $ModelSpec
     $part = @(
         $PromptPart | ForEach-Object {
             @{ text = $_ }
@@ -157,7 +306,7 @@ function Invoke-GeminiTranslationLlm {
 
         generationConfig = @{
             thinkingConfig   = @{
-                thinkingLevel = 'low'
+                thinkingLevel = $thinkingLevel
             }
             responseMimeType = 'application/json'
             responseSchema   = @{
@@ -178,7 +327,7 @@ function Invoke-GeminiTranslationLlm {
         }
     } | ConvertTo-Json -Depth 12
 
-    $uri = "https://generativelanguage.googleapis.com/v1beta/models/${Model}:generateContent"
+    $uri = "https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent"
 
     $response = Invoke-RestMethod `
         -Method Post `
@@ -217,31 +366,36 @@ function Invoke-GeminiTranslationLlm {
 
 function Invoke-OllamaTranslationLlm {
     param(
-        [Parameter(Mandatory)][string] $Model,
+        [Parameter(Mandatory)] $ModelSpec,
         [Parameter(Mandatory)][AllowEmptyCollection()][string[]] $PromptPart,
         [switch] $AllowModelDownload
     )
 
+    # Certaines familles Ollama activent thinking par défaut ; le flag doit être
+    # envoyé même à false pour que '<model>' et '<model>[thinking]' restent distincts.
+    $think = Get-OllamaThinkPreference -ModelSpec $ModelSpec
+    $modelName = $ModelSpec.Name
+
     $tags = Get-OllamaTags
-    $installed = Test-OllamaModelListed -Model $Model -TagResponse $tags
+    $installed = Test-OllamaModelListed -Model $modelName -TagResponse $tags
     if (-not $installed) {
         if (-not $AllowModelDownload) {
             throw @"
-Le modèle Ollama '$Model' n'est pas installé localement.
+Le modèle Ollama '$modelName' n'est pas installé localement.
 
 Solutions :
   - relancez la commande avec -AllowModelDownload ;
   - ou installez le modèle manuellement :
-      ollama pull $Model
+      ollama pull $modelName
 "@
         }
 
-        Invoke-OllamaModelPull -Model $Model
+        Invoke-OllamaModelPull -Model $modelName
     }
 
     $uri = "$script:OllamaBaseUri/api/chat"
     $body = @{
-        model    = $Model
+        model    = $modelName
         messages = @(
             @{
                 role    = 'user'
@@ -249,6 +403,7 @@ Solutions :
             }
         )
         stream   = $false
+        think    = $think
         format   = Get-CueTranslationJsonSchema
     } | ConvertTo-Json -Depth 12
 
@@ -290,13 +445,15 @@ function Invoke-TranslationLlm {
         [switch] $AllowModelDownload
     )
 
+    $modelSpec = Resolve-LlmModelSpec -Model $Model
+
     switch ($Provider) {
         'Gemini' {
-            return Invoke-GeminiTranslationLlm -Model $Model -PromptPart $PromptPart
+            return Invoke-GeminiTranslationLlm -ModelSpec $modelSpec -PromptPart $PromptPart
         }
         'Ollama' {
             return Invoke-OllamaTranslationLlm `
-                -Model $Model `
+                -ModelSpec $modelSpec `
                 -PromptPart $PromptPart `
                 -AllowModelDownload:$AllowModelDownload
         }
