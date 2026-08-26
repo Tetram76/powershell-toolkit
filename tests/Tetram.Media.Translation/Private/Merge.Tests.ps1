@@ -50,6 +50,16 @@ Describe 'Merge-TranslatedSubtitle SRT' {
                 Should -Throw -ExpectedMessage '*cues*'
         }
     }
+
+    It 'lève si un bloc Gemini n''a pas de ligne avec -->' {
+        InModuleScope 'Tetram.Media.Translation' {
+            $source = "37`n00:05:59,237 --> 00:06:00,057`nEnglish text`n"
+            $translation = "37`ntexte français`n"
+
+            { Merge-TranslatedSubtitle -Source $source -Translation $translation -Extension '.srt' } |
+                Should -Throw -ExpectedMessage '*-->*'
+        }
+    }
 }
 
 Describe 'Merge-TranslatedSubtitle ASS' {

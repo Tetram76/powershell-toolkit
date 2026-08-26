@@ -56,15 +56,15 @@ function ConvertFrom-SrtCueList {
 function Get-SrtTranslationText {
     param([Parameter(Mandatory)][string[]] $Line)
 
-    # Id + ligne avec --> (même timestamp invalide) : le texte utile est en dessous.
-    if ($Line.Count -ge 2 -and $Line[1] -match '-->') {
-        if ($Line.Count -gt 2) {
-            return ($Line[2..($Line.Count - 1)] -join "`n")
-        }
-        return ''
+    # Structure minimale exigée : identifiant, ligne avec --> (même corrompue), texte.
+    if ($Line.Count -lt 2 -or $Line[1] -notmatch '-->') {
+        throw 'Un cue SRT de la traduction n''a pas la structure minimale (entête, ligne avec -->, texte).'
     }
 
-    return ($Line -join "`n")
+    if ($Line.Count -gt 2) {
+        return ($Line[2..($Line.Count - 1)] -join "`n")
+    }
+    return ''
 }
 
 function Merge-SrtTranslatedSubtitle {
@@ -246,6 +246,19 @@ function Merge-AssTranslatedSubtitle {
     return ($mergedLine -join $nl)
 }
 
+function Get-SubtitleMergeKind {
+    param([Parameter(Mandatory)][string] $Extension)
+
+    $kind = $Extension.Trim().TrimStart('.').ToLowerInvariant()
+    switch ($kind) {
+        'srt' { 'srt' }
+        { $_ -in @('ass', 'ssa') } { 'ass' }
+        default {
+            throw "Extension de sous-titres non supportée : $Extension"
+        }
+    }
+}
+
 function Merge-TranslatedSubtitle {
     [CmdletBinding()]
     param(
@@ -261,16 +274,12 @@ function Merge-TranslatedSubtitle {
         [string] $Extension
     )
 
-    $kind = $Extension.Trim().TrimStart('.').ToLowerInvariant()
-    switch ($kind) {
+    switch (Get-SubtitleMergeKind -Extension $Extension) {
         'srt' {
             return Merge-SrtTranslatedSubtitle -Source $Source -Translation $Translation
         }
-        { $_ -in @('ass', 'ssa') } {
+        'ass' {
             return Merge-AssTranslatedSubtitle -Source $Source -Translation $Translation
-        }
-        default {
-            throw "Extension de sous-titres non supportée pour la fusion : $Extension"
         }
     }
 }

@@ -101,6 +101,19 @@ Describe 'ConvertTo-FrenchSubtitle' {
             Should -Throw -ExpectedMessage "*existe déjà*"
     }
 
+    It 'refuse .txt avant tout appel Gemini' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $script:SubtitlePath = Join-Path $script:Work 'episode.txt'
+        Set-Content -LiteralPath $script:SubtitlePath -Value 'pas un sous-titre' -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            throw 'Gemini ne devait pas être appelé'
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+            Should -Throw -ExpectedMessage '*Extension*'
+        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
+    }
+
     It 'écrit le résultat UTF-8 sans BOM à côté de la source avec le suffixe .fr' {
         $env:GEMINI_API_KEY = 'test-key'
         $translated = $script:MinimalAssBonjour
