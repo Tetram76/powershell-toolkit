@@ -53,7 +53,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         New-Item -ItemType Directory -Path $script:Work | Out-Null
         $script:SubtitlePath = Join-Path $script:Work 'episode.ass'
         $script:TranscriptPath = Join-Path $script:Work 'episode.whisper.txt'
-        Set-Content -LiteralPath $script:SubtitlePath -Value "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello" -Encoding utf8
+        $script:MinimalAssHello = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello`n"
+        $script:MinimalAssBonjour = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour`n"
+        Set-Content -LiteralPath $script:SubtitlePath -Value $script:MinimalAssHello -Encoding utf8
         Set-Content -LiteralPath $script:TranscriptPath -Value 'こんにちは' -Encoding utf8
     }
 
@@ -101,7 +103,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
     It 'écrit le résultat UTF-8 sans BOM à côté de la source avec le suffixe .fr' {
         $env:GEMINI_API_KEY = 'test-key'
-        $translated = "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour"
+        $translated = $script:MinimalAssBonjour
 
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
             [pscustomobject]@{
@@ -125,7 +127,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         $output = Join-Path $script:Work 'episode.fr.ass'
         Test-Path -LiteralPath $output -PathType Leaf | Should -BeTrue
-        Get-Content -LiteralPath $output -Raw -Encoding utf8 | Should -Be $translated
+        $written = (Get-Content -LiteralPath $output -Raw -Encoding utf8) -replace '\r\n', "`n"
+        $written | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
+        $written | Should -Not -Match 'Hello'
         $bytes = [IO.File]::ReadAllBytes($output)
         ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) | Should -BeFalse
     }
@@ -144,7 +148,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
                             parts = @(
                                 [pscustomobject]@{
                                     thought = $false
-                                    text    = 'ok'
+                                    text    = $script:MinimalAssBonjour
                                 }
                             )
                         }
@@ -219,7 +223,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
                         finishReason = 'STOP'
                         content      = [pscustomobject]@{
                             parts = @(
-                                [pscustomobject]@{ thought = $false; text = 'perso' }
+                                [pscustomobject]@{ thought = $false; text = $script:MinimalAssBonjour }
                             )
                         }
                     }
@@ -229,7 +233,61 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -OutputPath $custom
 
-        Get-Content -LiteralPath $custom -Raw -Encoding utf8 | Should -Be 'perso'
+        $written = (Get-Content -LiteralPath $custom -Raw -Encoding utf8) -replace '\r\n', "`n"
+        $written | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+    }
+
+    It 'restaure le timestamp SRT source quand Gemini le corrompt' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $script:SubtitlePath = Join-Path $script:Work 'episode.srt'
+        Set-Content -LiteralPath $script:SubtitlePath -Value "37`n00:05:59,237 --> 00:06:00,057`nEnglish text`n" -Encoding utf8
+        $translated = "37`n00:09:59,237 --> 00:06:00,057`ntexte français`n"
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            [pscustomobject]@{
+                candidates = @(
+                    [pscustomobject]@{
+                        finishReason = 'STOP'
+                        content      = [pscustomobject]@{
+                            parts = @(
+                                [pscustomobject]@{ thought = $false; text = $translated }
+                            )
+                        }
+                    }
+                )
+            }
+        }
+
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
+
+        $written = (Get-Content -LiteralPath (Join-Path $script:Work 'episode.fr.srt') -Raw -Encoding utf8) -replace '\r\n', "`n"
+        $written | Should -Match '00:05:59,237 --> 00:06:00,057'
+        $written | Should -Match 'texte français'
+        $written | Should -Not -Match '00:09:59,237'
+    }
+
+    It 'n''écrit aucun fichier si le nombre de cues SRT diffère' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $script:SubtitlePath = Join-Path $script:Work 'episode.srt'
+        Set-Content -LiteralPath $script:SubtitlePath -Value "1`n00:00:01,000 --> 00:00:02,000`nA`n`n2`n00:00:03,000 --> 00:00:04,000`nB`n" -Encoding utf8
+        $translated = "1`n00:00:01,000 --> 00:00:02,000`nA`n"
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            [pscustomobject]@{
+                candidates = @(
+                    [pscustomobject]@{
+                        finishReason = 'STOP'
+                        content      = [pscustomobject]@{
+                            parts = @(
+                                [pscustomobject]@{ thought = $false; text = $translated }
+                            )
+                        }
+                    }
+                )
+            }
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+            Should -Throw -ExpectedMessage '*cues*'
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.srt') | Should -BeFalse
     }
 }
