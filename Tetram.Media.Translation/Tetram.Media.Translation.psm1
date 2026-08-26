@@ -7,8 +7,7 @@ function Get-RawSubtitleOutputPath {
 
     $parent = Split-Path -Parent $OutputPath
     $stem = [IO.Path]::GetFileNameWithoutExtension($OutputPath)
-    $extension = [IO.Path]::GetExtension($OutputPath)
-    $rawName = "$stem.raw$extension"
+    $rawName = "$stem.raw.json"
     if ([string]::IsNullOrEmpty($parent)) {
         return $rawName
     }
@@ -75,12 +74,15 @@ function ConvertTo-FrenchSubtitle {
     $subtitle = Get-Content -LiteralPath $SubtitlePath -Raw -Encoding UTF8
     $transcript = Get-Content -LiteralPath $TranscriptPath -Raw -Encoding UTF8
 
+    $canonicalCue = @(Get-CanonicalSubtitleCue -Source $subtitle -Extension $subtitleFile.Extension)
+    $canonicalJson = ConvertTo-CanonicalCueJson -Cue $canonicalCue
+
 
     # --- Prompt ------------------------------------------------------------------
 
     $promptPath = Join-Path `
         $PSScriptRoot `
-        'Resources/ConvertTo-FrenchSubtitle.prompt.md'
+        'Resources/ConvertTo-FrenchSubtitle.generate.prompt.md'
 
     if (-not (Test-Path -LiteralPath $promptPath -PathType Leaf)) {
         throw "Le fichier de prompt est introuvable : $promptPath"
@@ -92,9 +94,9 @@ function ConvertTo-FrenchSubtitle {
         -Encoding UTF8
 
     $subtitlePart = @"
-===== SOUS-TITRES SOURCE =====
-$subtitle
-===== FIN SOUS-TITRES SOURCE =====
+===== SOURCE PRINCIPALE — CUES CANONIQUES =====
+$canonicalJson
+===== FIN SOURCE PRINCIPALE =====
 "@
 
     $transcriptPart = @"
@@ -119,11 +121,27 @@ $transcript
         )
 
         generationConfig = @{
-            thinkingConfig = @{
+            thinkingConfig   = @{
                 thinkingLevel = 'low'
             }
+            responseMimeType = 'application/json'
+            responseSchema   = @{
+                type  = 'ARRAY'
+                items = @{
+                    type       = 'OBJECT'
+                    properties = @{
+                        cueId = @{
+                            type = 'INTEGER'
+                        }
+                        text  = @{
+                            type = 'STRING'
+                        }
+                    }
+                    required   = @('cueId', 'text')
+                }
+            }
         }
-    } | ConvertTo-Json -Depth 10
+    } | ConvertTo-Json -Depth 12
 
     $uri = "https://generativelanguage.googleapis.com/v1beta/models/${Model}:generateContent"
 
@@ -169,9 +187,12 @@ $transcript
     [IO.File]::WriteAllText($rawPath, $result, $utf8)
 
     try {
+        $sourceText = @($canonicalCue | ForEach-Object { $_.text })
+        $translationByCueId = ConvertFrom-GeminiCueTranslationJson -Json $result -CueCount $canonicalCue.Count
+        Assert-CueTranslationNotEmptied -SourceText $sourceText -TranslationByCueId $translationByCueId
         $mergedResult = Merge-TranslatedSubtitle `
             -Source $subtitle `
-            -Translation $result `
+            -TranslationByCueId $translationByCueId `
             -Extension $subtitleFile.Extension
     }
     catch {

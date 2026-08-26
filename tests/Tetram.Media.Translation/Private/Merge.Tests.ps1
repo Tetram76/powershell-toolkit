@@ -1,4 +1,4 @@
-# Étendre la suite autour de Merge-TranslatedSubtitle (fusion source + proposition Gemini).
+# Étendre la suite autour de Merge-TranslatedSubtitle (fusion source + textes par cueId).
 #
 # RepoRoot depuis tests/<Module>/Private : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
 # Import-Module (Join-Path $RepoRoot 'Tetram.Media.Translation') -Force
@@ -21,58 +21,55 @@ AfterAll {
 }
 
 Describe 'Merge-TranslatedSubtitle SRT' {
-    It 'restaure le timestamp source quand Gemini le corrompt' {
+    It 'conserve les identifiants SRT natifs indépendants du cueId' {
+        $got = InModuleScope 'Tetram.Media.Translation' {
+            $source = "10`n00:00:01,000 --> 00:00:02,000`nHello`n`n42`n00:00:03,000 --> 00:00:04,000`nWorld`n"
+            Merge-TranslatedSubtitle -Source $source -TranslationByCueId @{ 1 = 'Bonjour'; 2 = 'Monde' } -Extension '.srt'
+        }
+
+        ConvertTo-Lf $got | Should -Be "10`n00:00:01,000 --> 00:00:02,000`nBonjour`n`n42`n00:00:03,000 --> 00:00:04,000`nMonde"
+    }
+
+    It 'reconstruit correctement si les traductions ne sont pas dans l''ordre des cueId' {
+        $got = InModuleScope 'Tetram.Media.Translation' {
+            $source = "10`n00:00:01,000 --> 00:00:02,000`nHello`n`n42`n00:00:03,000 --> 00:00:04,000`nWorld`n"
+            Merge-TranslatedSubtitle -Source $source -TranslationByCueId @{ 2 = 'Monde'; 1 = 'Bonjour' } -Extension '.srt'
+        }
+
+        ConvertTo-Lf $got | Should -Be "10`n00:00:01,000 --> 00:00:02,000`nBonjour`n`n42`n00:00:03,000 --> 00:00:04,000`nMonde"
+    }
+
+    It 'reprend exactement les timestamps de la source' {
         $got = InModuleScope 'Tetram.Media.Translation' {
             $source = "37`n00:05:59,237 --> 00:06:00,057`nEnglish text`n"
-            $translation = "37`n00:09:59,237 --> 00:06:00,057`ntexte français`n"
-            Merge-TranslatedSubtitle -Source $source -Translation $translation -Extension '.srt'
+            Merge-TranslatedSubtitle -Source $source -TranslationByCueId @{ 1 = 'texte français' } -Extension '.srt'
         }
 
         ConvertTo-Lf $got | Should -Be "37`n00:05:59,237 --> 00:06:00,057`ntexte français"
-    }
-
-    It 'récupère le texte Gemini même si le timestamp traduit est invalide' {
-        $got = InModuleScope 'Tetram.Media.Translation' {
-            $source = "37`n00:05:59,237 --> 00:06:00,057`nEnglish text`n"
-            $translation = "37`n99:99:99,999 --> not-a-time`ntexte français`n"
-            Merge-TranslatedSubtitle -Source $source -Translation $translation -Extension '.srt'
-        }
-
-        ConvertTo-Lf $got | Should -Be "37`n00:05:59,237 --> 00:06:00,057`ntexte français"
-    }
-
-    It 'lève si le nombre de cues diffère' {
-        InModuleScope 'Tetram.Media.Translation' {
-            $source = "1`n00:00:01,000 --> 00:00:02,000`nA`n`n2`n00:00:03,000 --> 00:00:04,000`nB`n"
-            $translation = "1`n00:00:01,000 --> 00:00:02,000`nA`n"
-
-            { Merge-TranslatedSubtitle -Source $source -Translation $translation -Extension '.srt' } |
-                Should -Throw -ExpectedMessage '*cues*'
-        }
-    }
-
-    It 'lève si un bloc Gemini n''a pas de ligne avec -->' {
-        InModuleScope 'Tetram.Media.Translation' {
-            $source = "37`n00:05:59,237 --> 00:06:00,057`nEnglish text`n"
-            $translation = "37`ntexte français`n"
-
-            { Merge-TranslatedSubtitle -Source $source -Translation $translation -Extension '.srt' } |
-                Should -Throw -ExpectedMessage '*-->*'
-        }
+        ConvertTo-Lf $got | Should -Not -Match '00:09:59'
     }
 }
 
 Describe 'Merge-TranslatedSubtitle ASS' {
+    It 'place le texte du bon cueId même si les traductions sont dans l''ordre inverse' {
+        $got = InModuleScope 'Tetram.Media.Translation' {
+            $source = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello`nDialogue: 1,0:00:03.00,0:00:04.00,Default,,0,0,0,,World`n"
+            Merge-TranslatedSubtitle -Source $source -TranslationByCueId @{ 2 = 'Monde'; 1 = 'Bonjour' } -Extension '.ass'
+        }
+
+        $gotLf = ConvertTo-Lf $got
+        $gotLf | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
+        $gotLf | Should -Match 'Dialogue: 1,0:00:03.00,0:00:04.00,Default,,0,0,0,,Monde'
+    }
+
     It 'ne change que le champ Text des lignes Dialogue:' {
         $got = InModuleScope 'Tetram.Media.Translation' {
             $source = "[Script Info]`nTitle: Source`n`n[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello`n"
-            $translation = "[Script Info]`nTitle: Gemini a tout cassé`n`n[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 9,9:99:99.99,9:99:99.99,Other,,1,1,1,,Bonjour`n"
-            Merge-TranslatedSubtitle -Source $source -Translation $translation -Extension '.ass'
+            Merge-TranslatedSubtitle -Source $source -TranslationByCueId @{ 1 = 'Bonjour' } -Extension '.ass'
         }
 
         $gotLf = ConvertTo-Lf $got
         $gotLf | Should -Match 'Title: Source'
-        $gotLf | Should -Not -Match 'Gemini a tout cassé'
         $gotLf | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
         $gotLf | Should -Not -Match 'Hello'
     }
@@ -80,9 +77,8 @@ Describe 'Merge-TranslatedSubtitle ASS' {
     It 'lève si Gemini altère les balises \{\.\.\.\}' {
         InModuleScope 'Tetram.Media.Translation' {
             $source = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\i1}Hello{\i0}`n"
-            $translation = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\b1}Bonjour{\i0}`n"
 
-            { Merge-TranslatedSubtitle -Source $source -Translation $translation -Extension '.ass' } |
+            { Merge-TranslatedSubtitle -Source $source -TranslationByCueId @{ 1 = '{\b1}Bonjour{\i0}' } -Extension '.ass' } |
                 Should -Throw -ExpectedMessage '*balise*'
         }
     }
@@ -90,9 +86,8 @@ Describe 'Merge-TranslatedSubtitle ASS' {
     It 'lève si Gemini altère les retours forcés \N' {
         InModuleScope 'Tetram.Media.Translation' {
             $source = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello\Nworld`n"
-            $translation = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour world`n"
 
-            { Merge-TranslatedSubtitle -Source $source -Translation $translation -Extension '.ass' } |
+            { Merge-TranslatedSubtitle -Source $source -TranslationByCueId @{ 1 = 'Bonjour world' } -Extension '.ass' } |
                 Should -Throw -ExpectedMessage '*retours forcés*'
         }
     }
@@ -113,20 +108,7 @@ Comment: 0,0:00:00.00,0:00:00.01,Default,,0,0,0,,NOTE
 Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello
 "@
         $got = InModuleScope 'Tetram.Media.Translation' -Parameters @{ Source = $source } {
-            $translation = @"
-[Script Info]
-Title: DROPPED
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize
-Style: Other,Comic Sans,99
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Comment: 0,0:00:00.00,0:00:00.01,Default,,0,0,0,,GEMINI NOTE
-Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour
-"@
-            Merge-TranslatedSubtitle -Source $Source -Translation $translation -Extension '.ass'
+            Merge-TranslatedSubtitle -Source $Source -TranslationByCueId @{ 1 = 'Bonjour' } -Extension '.ass'
         }
 
         $gotLines = @((ConvertTo-Lf $got) -split "`n")
