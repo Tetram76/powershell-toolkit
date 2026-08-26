@@ -16,7 +16,7 @@ Le fournisseur se choisit avec `-Provider` (`Gemini` ou `Ollama`). Sans `-Provid
 
 Si la réponse du modèle est acceptée au niveau transport, elle est conservée telle quelle dans un fichier `.raw.json` dérivé de la sortie (`episode.fr.ass` → `episode.fr.raw.json`). Aucun `.raw.json` n'est créé si le transport échoue (Gemini : aucun candidat, `finishReason` autre que STOP, texte vide ; Ollama : réponse absente, génération inachevée, contenu vide). Le fichier final est reconstruit depuis la source principale (identifiants et timestamps natifs, champs techniques ASS) en remplaçant uniquement le texte via `cueId`. Un candidat incomplet ou invalide (cue manquant, dupliqué, hors plage, JSON illisible, texte vidé) est conservé sans produire de final (warning, pas d'exception de reconstruction).
 
-Les principales étapes longues peuvent être journalisées via le mécanisme d'information/verbose du toolkit : téléchargement éventuel du modèle Ollama, invocation du provider et reconstruction du sous-titre.
+Les principales étapes longues sont journalisées : téléchargement éventuel du modèle Ollama, invocation du provider et reconstruction du sous-titre.
 
 Sans `-OutputPath`, le fichier final est écrit à côté de la source, avec le suffixe `.fr` avant l'extension (`episode.ass` → `episode.fr.ass`). Si le fichier final ou le `.raw.json` correspondant existe déjà, la commande échoue sans écraser et sans appeler le modèle.
 
