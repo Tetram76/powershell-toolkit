@@ -151,8 +151,11 @@ $transcript
 
     $result = (
         $candidate.content.parts |
-            Where-Object { -not $_.thought } |
-            ForEach-Object { $_.text }
+            ForEach-Object {
+                if ($_.PSObject.Properties['text']) {
+                    $_.text
+                }
+            }
     ) -join ''
 
     if ([string]::IsNullOrWhiteSpace($result)) {
