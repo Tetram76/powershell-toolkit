@@ -134,4 +134,12 @@ Describe 'Resolve-LlmModelSpec' {
             }
         } | Should -Throw -ExpectedMessage '*invalide*'
     }
+
+    It 'lève si le nom de modèle contient un crochet fermant parasite' {
+        {
+            InModuleScope 'Tetram.Media.Translation' {
+                Resolve-LlmModelSpec -Model 'model][thinking]'
+            }
+        } | Should -Throw -ExpectedMessage '*crochet*'
+    }
 }

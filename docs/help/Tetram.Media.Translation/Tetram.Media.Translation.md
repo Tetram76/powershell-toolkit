@@ -16,7 +16,7 @@ title: Tetram.Media.Translation Module
 
 Traduction française de sous-titres via Gemini ou Ollama, à partir du fichier source et d'une transcription Whisper. Une seule commande exportée. Importer `.\Tetram.Media.Translation`.
 
-Gemini est le fournisseur par défaut (`GEMINI_API_KEY`, modèle `gemini-3.6-flash`). Ollama est un fournisseur local (`http://localhost:11434`) : il doit être installé et démarré, `-Model` est obligatoire, `GEMINI_API_KEY` n'est pas utilisée.
+Gemini est le fournisseur par défaut (`GEMINI_API_KEY`, modèle `gemini-3.6-flash`). Ollama est un fournisseur local (`http://localhost:11434`) : il doit être installé et démarré, modèle par défaut `qwen3.5:9b`, `GEMINI_API_KEY` n'est pas utilisée.
 
 `-Model` accepte un suffixe d'options terminal. Formes : `<model>`, `<model>[thinking]` (Gemini et Ollama), `<model>[thinking=<level>]` (Gemini uniquement). Les options ne sont jamais envoyées dans le nom du modèle au fournisseur.
 
