@@ -27,11 +27,15 @@ L'absence d'une réplique dans Whisper ne signifie donc jamais que le sous-titre
 
 Utilise les deux sources ensemble.
 
-Lorsque la transcription japonaise est cohérente avec le contexte et permet de préciser ou de corriger une approximation du sous-titre anglais, privilégie le sens réellement exprimé en japonais.
+Lorsque Whisper fournit une transcription japonaise claire, linguistiquement plausible et cohérente avec la scène et les répliques voisines, considère le japonais comme la source principale du sens.
 
-Lorsque Whisper est absent, incohérent, manifestement mal transcrit ou incompatible avec la scène, appuie-toi sur le sous-titre source.
+Dans ce cas, si le sous-titre anglais simplifie, adapte ou modifie une nuance présente dans le japonais, traduis le sens japonais plutôt que de reproduire l'approximation anglaise.
 
-Ne corrige jamais le sous-titre anglais uniquement parce que Whisper en diffère : vérifie d'abord que l'interprétation issue de Whisper est linguistiquement et contextuellement plausible.
+Lorsque Whisper est absent, fragmentaire, incohérent, ambigu, manifestement mal transcrit ou incompatible avec la scène, appuie-toi sur le sous-titre source.
+
+Une divergence entre Whisper et le sous-titre anglais ne suffit pas, à elle seule, à déterminer lequel est correct. Utilise la qualité de la transcription, la grammaire japonaise reconnaissable, le contexte et les répliques voisines pour arbitrer.
+
+Si les deux interprétations restent réellement plausibles, privilégie celle qui nécessite le moins d'hypothèses.
 
 Ne combine pas arbitrairement deux interprétations incompatibles.
 
@@ -64,6 +68,8 @@ Maintiens autant que possible sur l'ensemble de l'épisode :
 
 Respecte les relations hiérarchiques, sociales et affectives entre les personnages.
 
+N'invente cependant pas une relation, un niveau de familiarité ou une caractérisation qui ne peut pas être déduit raisonnablement des sources disponibles.
+
 Adapte naturellement en français les suffixes honorifiques et appellations japonaises. Ne conserve pas mécaniquement une structure anglaise telle que « Coach X », « Master X », « Grandma X » ou équivalent lorsqu'elle ne correspond pas réellement à la manière dont le personnage est appelé en japonais.
 
 Ne traduis jamais les noms propres de personnages.
@@ -73,6 +79,16 @@ Conserve les noms de lieux japonais en transcription latine, sauf lorsqu'une for
 Adapte les notions du système éducatif japonais vers une formulation française compréhensible lorsque cela peut être fait sans déformer le sens.
 
 Conserve les références culturelles japonaises lorsqu'elles sont importantes pour la scène. Ne les remplace pas par des références françaises, européennes ou américaines inventées.
+
+## Titres d'épisodes
+
+Lorsqu'une ligne correspond à un titre d'épisode ou à l'annonce du titre d'un épisode suivant, produis un titre français naturel à partir du sens disponible dans les sources.
+
+Le titre français n'a pas besoin d'être une traduction littérale.
+
+Ne cherche pas à deviner ou à reconstituer un éventuel titre français officiel qui n'est pas fourni dans les sources.
+
+Privilégie un titre court, naturel et fidèle à l'idée, au ton ou au jeu de mots du titre japonais lorsque celui-ci peut être déterminé de manière fiable.
 
 ## Langues étrangères dans le dialogue
 
@@ -149,16 +165,19 @@ Corrige notamment :
 
 Vérifie particulièrement qu'aucune faute simple du type mauvais infinitif, mauvaise terminaison verbale ou mauvais accord ne subsiste.
 
+Vérifie également qu'aucune reformulation créative n'a ajouté une information, une plaisanterie ou une expression absente des sources.
+
 Effectue cette relecture sans modifier les données techniques du fichier.
 
 ## Règle de prudence
 
-En cas d'ambiguïté réelle entre plusieurs interprétations :
+En cas d'ambiguïté réelle :
 
 1. utilise le contexte de la scène et des répliques voisines ;
 2. compare le sous-titre source à Whisper ;
-3. privilégie l'interprétation qui nécessite le moins d'hypothèses ;
-4. n'invente jamais une précision qui n'est soutenue par aucune des deux sources.
+3. évalue si la transcription Whisper est elle-même fiable sur ce passage ;
+4. privilégie l'interprétation qui nécessite le moins d'hypothèses ;
+5. n'invente jamais une précision qui n'est soutenue par aucune des sources.
 
 ## Sortie
 
