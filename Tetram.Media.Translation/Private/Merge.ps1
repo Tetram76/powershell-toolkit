@@ -1,8 +1,8 @@
 Set-StrictMode -Version 3.0
 
-# Gemini corrompt régulièrement les timestamps SRT : on les ignore toujours
-# et on reconstruit depuis la source. Un écart du nombre de cues, lui, n'est
-# pas récupérable par position.
+# Gemini ne fournit que du texte indexé par cueId. Toute la structure
+# technique (identifiants SRT natifs, timestamps, champs ASS) reste celle
+# de la source. Une omission de cueId ne doit jamais décaler les suivants.
 
 function Get-SubtitleNewline {
     param([Parameter(Mandatory)][AllowEmptyString()][string] $Text)
@@ -20,10 +20,7 @@ function Split-SubtitleLine {
 }
 
 function ConvertFrom-SrtCueList {
-    param(
-        [Parameter(Mandatory)][AllowEmptyString()][string] $Text,
-        [Parameter(Mandatory)][bool] $Strict
-    )
+    param([Parameter(Mandatory)][AllowEmptyString()][string] $Text)
 
     $normalized = ($Text -replace '\r\n', "`n" -replace '\r', "`n").TrimEnd()
     if ([string]::IsNullOrWhiteSpace($normalized)) {
@@ -33,75 +30,34 @@ function ConvertFrom-SrtCueList {
     $blocks = @([regex]::Split($normalized, '\n[ \t]*\n+') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     $cues = foreach ($block in $blocks) {
         $lines = @($block -split '\n')
-        if ($Strict) {
-            if ($lines.Count -lt 2) {
-                throw 'Un cue SRT source est incomplet (identifiant ou timestamp manquant).'
-            }
-            $textLines = if ($lines.Count -gt 2) { $lines[2..($lines.Count - 1)] } else { @() }
-            [pscustomobject]@{
-                Id        = $lines[0]
-                Timestamp = $lines[1]
-                Text      = $textLines -join "`n"
-            }
+        if ($lines.Count -lt 2) {
+            throw 'Un cue SRT source est incomplet (identifiant ou timestamp manquant).'
         }
-        else {
-            [pscustomobject]@{
-                Text = Get-SrtTranslationText -Line $lines
-            }
+        $textLines = if ($lines.Count -gt 2) { $lines[2..($lines.Count - 1)] } else { @() }
+        [pscustomobject]@{
+            Id        = $lines[0]
+            Timestamp = $lines[1]
+            Text      = $textLines -join "`n"
         }
     }
     return @($cues)
 }
 
-function Get-SrtTranslationText {
-    param([Parameter(Mandatory)][string[]] $Line)
+function Split-SrtTimestampRange {
+    param([Parameter(Mandatory)][AllowEmptyString()][string] $Timestamp)
 
-    # Structure minimale exigée : identifiant, ligne avec --> (même corrompue), texte.
-    if ($Line.Count -lt 2 -or $Line[1] -notmatch '-->') {
-        throw 'Un cue SRT de la traduction n''a pas la structure minimale (entête, ligne avec -->, texte).'
+    $part = @($Timestamp -split '\s*-->\s*', 2)
+    if ($part.Count -ne 2 -or [string]::IsNullOrWhiteSpace($part[0]) -or [string]::IsNullOrWhiteSpace($part[1])) {
+        throw 'Un cue SRT source n''a pas de ligne de timestamp avec -->.'
     }
 
-    if ($Line.Count -gt 2) {
-        return ($Line[2..($Line.Count - 1)] -join "`n")
+    [pscustomobject]@{
+        Start = $part[0].Trim()
+        End   = $part[1].Trim()
     }
-    return ''
 }
 
-function Merge-SrtTranslatedSubtitle {
-    param(
-        [Parameter(Mandatory)][AllowEmptyString()][string] $Source,
-        [Parameter(Mandatory)][AllowEmptyString()][string] $Translation
-    )
-
-    $sourceCues = @(ConvertFrom-SrtCueList -Text $Source -Strict $true)
-    $translationCues = @(ConvertFrom-SrtCueList -Text $Translation -Strict $false)
-
-    if ($sourceCues.Count -ne $translationCues.Count) {
-        throw "Le nombre de cues SRT de la traduction ($($translationCues.Count)) diffère de la source ($($sourceCues.Count))."
-    }
-
-    if ($sourceCues.Count -eq 0) {
-        return $Source
-    }
-
-    $nl = Get-SubtitleNewline -Text $Source
-    $blocks = foreach ($i in 0..($sourceCues.Count - 1)) {
-        $cue = $sourceCues[$i]
-        $parts = @($cue.Id, $cue.Timestamp)
-        if (-not [string]::IsNullOrEmpty($translationCues[$i].Text)) {
-            $parts += $translationCues[$i].Text
-        }
-        $parts -join $nl
-    }
-
-    $merged = $blocks -join "$nl$nl"
-    if ($Source.EndsWith("`n") -or $Source.EndsWith("`r")) {
-        return $merged + $nl
-    }
-    return $merged
-}
-
-function Get-AssEventsTextIndex {
+function Get-AssEventsFormatName {
     param([Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]] $Line)
 
     $inEvents = $false
@@ -115,20 +71,30 @@ function Get-AssEventsTextIndex {
         }
         if ($inEvents -and $entry -match '^Format:') {
             $colon = $entry.IndexOf(':')
-            $names = @(
+            return @(
                 $entry.Substring($colon + 1) -split ',' |
                     ForEach-Object { $_.Trim() }
             )
-            for ($i = 0; $i -lt $names.Count; $i++) {
-                if ($names[$i].Equals('Text', [StringComparison]::OrdinalIgnoreCase)) {
-                    return $i
-                }
-            }
-            throw 'Le champ Text est absent de la ligne Format: de [Events].'
         }
     }
 
     throw 'La ligne Format: de la section [Events] est introuvable.'
+}
+
+function Get-AssEventsFieldIndex {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]] $Line,
+        [Parameter(Mandatory)][string] $FieldName
+    )
+
+    $name = @(Get-AssEventsFormatName -Line $Line)
+    for ($i = 0; $i -lt $name.Count; $i++) {
+        if ($name[$i].Equals($FieldName, [StringComparison]::OrdinalIgnoreCase)) {
+            return $i
+        }
+    }
+
+    throw "Le champ $FieldName est absent de la ligne Format: de [Events]."
 }
 
 function Get-AssDialogueField {
@@ -195,43 +161,253 @@ function Assert-AssTextContract {
     throw 'Les retours forcés \N du champ Text diffèrent de la source.'
 }
 
-function Merge-AssTranslatedSubtitle {
+function Get-CanonicalSrtCue {
+    param([Parameter(Mandatory)][AllowEmptyString()][string] $Source)
+
+    $sourceCue = @(ConvertFrom-SrtCueList -Text $Source)
+    $cueId = 0
+    foreach ($cue in $sourceCue) {
+        $cueId++
+        $range = Split-SrtTimestampRange -Timestamp $cue.Timestamp
+        [pscustomobject][ordered]@{
+            cueId = $cueId
+            start = $range.Start
+            end   = $range.End
+            text  = $cue.Text
+        }
+    }
+}
+
+function Get-CanonicalAssCue {
+    param([Parameter(Mandatory)][AllowEmptyString()][string] $Source)
+
+    $line = @(Split-SubtitleLine -Text $Source)
+    $startIndex = Get-AssEventsFieldIndex -Line $line -FieldName 'Start'
+    $endIndex = Get-AssEventsFieldIndex -Line $line -FieldName 'End'
+    $textIndex = Get-AssEventsFieldIndex -Line $line -FieldName 'Text'
+    if ($startIndex -ge $textIndex -or $endIndex -ge $textIndex) {
+        throw 'Les champs Start et End doivent précéder Text dans Format: de [Events].'
+    }
+
+    $cueId = 0
+    foreach ($entry in $line) {
+        if ($entry -notmatch '^Dialogue:') {
+            continue
+        }
+        $cueId++
+        $field = Get-AssDialogueField -Line $entry -TextIndex $textIndex
+        [pscustomobject][ordered]@{
+            cueId = $cueId
+            start = $field[$startIndex]
+            end   = $field[$endIndex]
+            text  = $field[$textIndex]
+        }
+    }
+}
+
+function ConvertTo-CanonicalCueJson {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][object[]] $Cue)
+
+    if ($Cue.Count -eq 0) {
+        return '[]'
+    }
+
+    # ConvertTo-Json d'un tableau à un seul élément émet un objet, pas un tableau.
+    $itemJson = foreach ($item in $Cue) {
+        ConvertTo-Json -InputObject $item -Depth 5
+    }
+    return '[' + ($itemJson -join ',') + ']'
+}
+
+function Get-CanonicalSubtitleCue {
     param(
         [Parameter(Mandatory)][AllowEmptyString()][string] $Source,
-        [Parameter(Mandatory)][AllowEmptyString()][string] $Translation
+        [Parameter(Mandatory)][string] $Extension
     )
 
-    $sourceLine = @(Split-SubtitleLine -Text $Source)
-    $translationLine = @(Split-SubtitleLine -Text $Translation)
+    $cue = switch (Get-SubtitleMergeKind -Extension $Extension) {
+        'srt' { @(Get-CanonicalSrtCue -Source $Source) }
+        'ass' { @(Get-CanonicalAssCue -Source $Source) }
+    }
+    return @($cue)
+}
 
-    $sourceTextIndex = Get-AssEventsTextIndex -Line $sourceLine
-    $translationTextIndex = Get-AssEventsTextIndex -Line $translationLine
+function Test-GeminiIntegerCueId {
+    param($Value)
 
-    $translationText = [System.Collections.Generic.List[string]]::new()
-    foreach ($entry in $translationLine) {
-        if ($entry -match '^Dialogue:') {
-            $field = Get-AssDialogueField -Line $entry -TextIndex $translationTextIndex
-            [void]$translationText.Add($field[$translationTextIndex])
+    if ($null -eq $Value) {
+        return $false
+    }
+    if ($Value -is [bool] -or $Value -is [string] -or $Value -is [char]) {
+        return $false
+    }
+    if ($Value -is [double] -or $Value -is [decimal] -or $Value -is [float] -or $Value -is [single]) {
+        return $false
+    }
+
+    try {
+        $asInt = [int]$Value
+        return ([long]$Value -eq [long]$asInt)
+    }
+    catch {
+        return $false
+    }
+}
+
+function ConvertFrom-GeminiCueTranslationJson {
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string] $Json,
+        [Parameter(Mandatory)][int] $CueCount
+    )
+
+    try {
+        $parsed = ConvertFrom-Json -InputObject $Json -NoEnumerate -ErrorAction Stop
+    }
+    catch {
+        throw 'la réponse Gemini n''est pas un JSON exploitable.'
+    }
+
+    if ($null -eq $parsed -or $parsed -is [string] -or $parsed -isnot [System.Collections.IList]) {
+        throw 'la racine de la réponse Gemini doit être un tableau JSON.'
+    }
+
+    $map = [System.Collections.Generic.Dictionary[int, string]]::new()
+    foreach ($item in $parsed) {
+        if ($null -eq $item) {
+            throw 'un élément de la réponse Gemini n''est pas un objet JSON.'
+        }
+
+        if ($item -is [System.Collections.IDictionary]) {
+            $cueIdProp = $item['cueId']
+            $textProp = $item['text']
+            $hasCueId = $item.Contains('cueId')
+            $hasText = $item.Contains('text')
+        }
+        else {
+            $cueIdMember = $item.PSObject.Properties['cueId']
+            $textMember = $item.PSObject.Properties['text']
+            $hasCueId = $null -ne $cueIdMember
+            $hasText = $null -ne $textMember
+            $cueIdProp = if ($hasCueId) { $cueIdMember.Value } else { $null }
+            $textProp = if ($hasText) { $textMember.Value } else { $null }
+        }
+
+        if (-not $hasCueId -or -not $hasText) {
+            throw 'un objet de la réponse Gemini n''a pas les propriétés cueId et text.'
+        }
+
+        if (-not (Test-GeminiIntegerCueId -Value $cueIdProp)) {
+            throw 'un cueId de la réponse Gemini n''est pas un entier valide.'
+        }
+
+        $cueId = [int]$cueIdProp
+        if ($cueId -lt 1 -or $cueId -gt $CueCount) {
+            throw "cueId $cueId hors plage (1..$CueCount)."
+        }
+        if ($map.ContainsKey($cueId)) {
+            throw "cueId $cueId dupliqué."
+        }
+        if ($textProp -isnot [string]) {
+            throw "la propriété text du cueId $cueId n'est pas une chaîne."
+        }
+        $map[$cueId] = $textProp
+    }
+
+    for ($id = 1; $id -le $CueCount; $id++) {
+        if (-not $map.ContainsKey($id)) {
+            throw "cueId $id manquant"
         }
     }
 
-    $sourceDialogueCount = @($sourceLine | Where-Object { $_ -match '^Dialogue:' }).Count
-    if ($sourceDialogueCount -ne $translationText.Count) {
-        throw "Le nombre de lignes Dialogue: de la traduction ($($translationText.Count)) diffère de la source ($sourceDialogueCount)."
+    return $map
+}
+
+function Assert-CueTranslationNotEmptied {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]] $SourceText,
+        [Parameter(Mandatory)][System.Collections.IDictionary] $TranslationByCueId
+    )
+
+    for ($i = 0; $i -lt $SourceText.Count; $i++) {
+        $cueId = $i + 1
+        $translated = Get-CueTranslationText -TranslationByCueId $TranslationByCueId -CueId $cueId
+        if (-not [string]::IsNullOrEmpty($SourceText[$i]) -and [string]::IsNullOrEmpty($translated)) {
+            throw "le texte du cueId $cueId est vide alors que la source ne l'est pas."
+        }
+    }
+}
+
+function Get-CueTranslationText {
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary] $TranslationByCueId,
+        [Parameter(Mandatory)][int] $CueId
+    )
+
+    # Dictionary<TKey,TValue>.Contains entre en conflit avec Enumerable.Contains
+    # (1 argument). On compare les clés plutôt que d'appeler Contains/ContainsKey.
+    foreach ($key in @($TranslationByCueId.Keys)) {
+        $asInt = 0
+        if (-not [int]::TryParse([string]$key, [ref]$asInt)) {
+            continue
+        }
+        if ($asInt -eq $CueId) {
+            return [string]$TranslationByCueId[$key]
+        }
     }
 
-    $geminiIndex = 0
+    throw "cueId $CueId manquant"
+}
+
+function Merge-SrtTranslatedSubtitle {
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string] $Source,
+        [Parameter(Mandatory)][System.Collections.IDictionary] $TranslationByCueId
+    )
+
+    $sourceCue = @(ConvertFrom-SrtCueList -Text $Source)
+    if ($sourceCue.Count -eq 0) {
+        return $Source
+    }
+
+    $nl = Get-SubtitleNewline -Text $Source
+    $block = for ($i = 0; $i -lt $sourceCue.Count; $i++) {
+        $cue = $sourceCue[$i]
+        $text = Get-CueTranslationText -TranslationByCueId $TranslationByCueId -CueId ($i + 1)
+        $part = @($cue.Id, $cue.Timestamp)
+        if (-not [string]::IsNullOrEmpty($text)) {
+            $part += $text
+        }
+        $part -join $nl
+    }
+
+    $merged = $block -join "$nl$nl"
+    if ($Source.EndsWith("`n") -or $Source.EndsWith("`r")) {
+        return $merged + $nl
+    }
+    return $merged
+}
+
+function Merge-AssTranslatedSubtitle {
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string] $Source,
+        [Parameter(Mandatory)][System.Collections.IDictionary] $TranslationByCueId
+    )
+
+    $sourceLine = @(Split-SubtitleLine -Text $Source)
+    $sourceTextIndex = Get-AssEventsFieldIndex -Line $sourceLine -FieldName 'Text'
+
+    $cueId = 0
     $mergedLine = foreach ($entry in $sourceLine) {
         if ($entry -notmatch '^(Dialogue:)(\s*)') {
             $entry
             continue
         }
 
+        $cueId++
         $prefix = $Matches[1] + $Matches[2]
         $field = Get-AssDialogueField -Line $entry -TextIndex $sourceTextIndex
-        $geminiText = $translationText[$geminiIndex]
+        $geminiText = Get-CueTranslationText -TranslationByCueId $TranslationByCueId -CueId $cueId
         Assert-AssTextContract -SourceText $field[$sourceTextIndex] -TranslationText $geminiText
-        $geminiIndex++
 
         if ($sourceTextIndex -eq 0) {
             $prefix + $geminiText
@@ -267,8 +443,7 @@ function Merge-TranslatedSubtitle {
         [string] $Source,
 
         [Parameter(Mandatory)]
-        [AllowEmptyString()]
-        [string] $Translation,
+        [System.Collections.IDictionary] $TranslationByCueId,
 
         [Parameter(Mandatory)]
         [string] $Extension
@@ -276,10 +451,10 @@ function Merge-TranslatedSubtitle {
 
     switch (Get-SubtitleMergeKind -Extension $Extension) {
         'srt' {
-            return Merge-SrtTranslatedSubtitle -Source $Source -Translation $Translation
+            return Merge-SrtTranslatedSubtitle -Source $Source -TranslationByCueId $TranslationByCueId
         }
         'ass' {
-            return Merge-AssTranslatedSubtitle -Source $Source -Translation $Translation
+            return Merge-AssTranslatedSubtitle -Source $Source -TranslationByCueId $TranslationByCueId
         }
     }
 }
