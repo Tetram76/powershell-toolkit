@@ -491,8 +491,11 @@ Describe 'Llm.Gemini' {
             $generateBody = ConvertFrom-GeminiRequestBody (Get-RestCall 'generateContent')[0].Body
             $counted = $countBody.generateContentRequest
             $counted | Should -Not -BeNullOrEmpty
-            ($counted | ConvertTo-Json -Depth 12 -Compress) |
-                Should -Be ($generateBody | ConvertTo-Json -Depth 12 -Compress)
+            $counted.model | Should -Be 'models/gemini-3.6-flash'
+            ($counted.contents | ConvertTo-Json -Depth 12 -Compress) |
+                Should -Be ($generateBody.contents | ConvertTo-Json -Depth 12 -Compress)
+            ($counted.generationConfig | ConvertTo-Json -Depth 12 -Compress) |
+                Should -Be ($generateBody.generationConfig | ConvertTo-Json -Depth 12 -Compress)
         }
 
         It 'refuse generateContent si la requête seule atteint la limite TPM' {
