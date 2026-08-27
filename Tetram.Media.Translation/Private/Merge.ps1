@@ -220,6 +220,21 @@ function ConvertTo-SecondarySubtitleCueJson {
     return ConvertTo-CanonicalCueJson -Cue $stripped
 }
 
+function ConvertTo-TechnicalTemplateCueJson {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][object[]] $Cue)
+
+    $stripped = @(
+        foreach ($item in $Cue) {
+            [pscustomobject][ordered]@{
+                cueId = $item.cueId
+                start = $item.start
+                end   = $item.end
+            }
+        }
+    )
+    return ConvertTo-CanonicalCueJson -Cue $stripped
+}
+
 function ConvertTo-CanonicalCueJson {
     param([Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][object[]] $Cue)
 

@@ -64,7 +64,11 @@ BeforeAll {
     }
 
     function script:Get-CanonicalCuePart($Request) {
-        return Get-PromptPartByMarker $Request '===== SOURCE PRINCIPALE — STRUCTURE TECHNIQUE FINALE ====='
+        return Get-PromptPartByMarker $Request '===== GABARIT TECHNIQUE FINAL ====='
+    }
+
+    function script:Get-StructuringSourcePart($Request) {
+        return Get-PromptPartByMarker $Request '===== SOURCE LINGUISTIQUE 1 — SOUS-TITRE STRUCTURANT ====='
     }
 
     function script:Get-PromptPartByMarker($Request, [string] $Marker) {
@@ -82,7 +86,7 @@ BeforeAll {
 
     function script:Get-SecondaryWhisperJsonFromPrompt($Request) {
         $part = Get-PromptPartByMarker $Request 'TRANSCRIPTION WHISPER JSON'
-        if ($part -notmatch '(?s)===== SOURCE SECONDAIRE \d+ — TRANSCRIPTION WHISPER JSON =====\r?\n(.+)\r?\n===== FIN SOURCE SECONDAIRE \d+ =====') {
+        if ($part -notmatch '(?s)===== SOURCE LINGUISTIQUE \d+ — TRANSCRIPTION WHISPER JSON =====\r?\n(.+)\r?\n===== FIN SOURCE LINGUISTIQUE \d+ =====') {
             throw 'JSON Whisper compact introuvable dans le prompt'
         }
         return $Matches[1].Trim()
@@ -115,15 +119,17 @@ Describe 'Tetram.Media.Translation manifest' {
         $promptPath = Join-Path $script:ModuleRootTranslation 'Resources' 'ConvertTo-FrenchSubtitle.generate.prompt.md'
         $prompt = Get-Content -LiteralPath $promptPath -Raw -Encoding utf8
 
+        $prompt | Should -Match 'gabarit technique'
+        $prompt | Should -Match 'SOURCE LINGUISTIQUE 1 — SOUS-TITRE STRUCTURANT'
+        $prompt | Should -Match 'Déterminer le sens avant de traduire'
+        $prompt | Should -Match 'Convergence et divergence entre plusieurs Whisper'
+        $prompt | Should -Match 'pondération locale'
         $prompt | Should -Match "Aucune source n'est autoritaire linguistiquement"
-        $prompt | Should -Match 'autoritaire uniquement pour la structure finale'
-        $prompt | Should -Match 'Ne préfère jamais son interprétation uniquement parce'
         $prompt | Should -Match 'par son numéro ou sa position'
-        $prompt | Should -Match 'éléments diagnostiques'
-        $prompt | Should -Match "ordre d'apparition dans le prompt ne représente aucune priorité"
         $prompt | Should -Match 'JSON compact par segments'
         $prompt | Should -Match 'avg_logprob'
         $prompt | Should -Match 'no_speech_prob'
+        $prompt | Should -Not -Match 'SOURCE PRINCIPALE'
         $prompt | Should -Not -Match 'JSON brut'
         $prompt | Should -Not -Match 'niveau mot'
         $prompt | Should -Not -Match 'Lorsque la transcription japonaise est claire'
@@ -255,7 +261,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         }
     }
 
-    It 'envoie la source principale SRT en cues canoniques distincts des identifiants natifs' {
+    It 'envoie un gabarit SRT cueId/start/end sans text, distinct des identifiants natifs' {
         $env:GEMINI_API_KEY = 'test-key'
         $script:SubtitlePath = Join-Path $script:Work 'episode.srt'
         Set-Content -LiteralPath $script:SubtitlePath -Value "10`n00:00:01,000 --> 00:00:02,000`nHello`n`n42`n00:00:03,000 --> 00:00:04,000`nWorld`n" -Encoding utf8
@@ -268,21 +274,29 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $part = Get-CanonicalCuePart $script:LastGeminiBody
+        $part | Should -Match '===== GABARIT TECHNIQUE FINAL ====='
+        $part | Should -Match '===== FIN GABARIT TECHNIQUE FINAL ====='
         ([regex]::Matches($part, '"cueId"')).Count | Should -Be 2
         $part | Should -Match '"cueId":\s*1'
         $part | Should -Match '"start":\s*"00:00:01,000"'
         $part | Should -Match '"end":\s*"00:00:02,000"'
-        $part | Should -Match '"text":\s*"Hello"'
         $part | Should -Match '"cueId":\s*2'
         $part | Should -Match '"start":\s*"00:00:03,000"'
         $part | Should -Match '"end":\s*"00:00:04,000"'
-        $part | Should -Match '"text":\s*"World"'
+        $part | Should -Not -Match '"text"'
         $part | Should -Not -Match '"cueId":\s*10'
         $part | Should -Not -Match '"cueId":\s*42'
         $part | Should -Not -Match '(?m)^10$'
+
+        $structuring = Get-StructuringSourcePart $script:LastGeminiBody
+        $structuring | Should -Match '"start":\s*"00:00:01,000"'
+        $structuring | Should -Match '"end":\s*"00:00:02,000"'
+        $structuring | Should -Match '"text":\s*"Hello"'
+        $structuring | Should -Match '"text":\s*"World"'
+        $structuring | Should -Not -Match '"cueId"'
     }
 
-    It 'envoie la source principale ASS en cues canoniques sans champs techniques' {
+    It 'envoie un gabarit ASS cueId/start/end sans text ni champs techniques' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
             Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
@@ -293,15 +307,42 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $part = Get-CanonicalCuePart $script:LastGeminiBody
+        $part | Should -Match '===== GABARIT TECHNIQUE FINAL ====='
         ([regex]::Matches($part, '"cueId"')).Count | Should -Be 1
         $part | Should -Match '"cueId":\s*1'
         $part | Should -Match '"start":\s*"0:00:01.00"'
         $part | Should -Match '"end":\s*"0:00:02.00"'
-        $part | Should -Match '"text":\s*"Hello"'
+        $part | Should -Not -Match '"text"'
         $part | Should -Not -Match 'Layer'
         $part | Should -Not -Match 'Default'
         $part | Should -Not -Match 'Margin'
         $part | Should -Not -Match 'Style'
+
+        $structuring = Get-StructuringSourcePart $script:LastGeminiBody
+        $structuring | Should -Match '"start":\s*"0:00:01.00"'
+        $structuring | Should -Match '"end":\s*"0:00:02.00"'
+        $structuring | Should -Match '"text":\s*"Hello"'
+        $structuring | Should -Not -Match '"cueId"'
+    }
+
+    It 'conserve les markers du text structurant sans les parser' {
+        $env:GEMINI_API_KEY = 'test-key'
+        Set-Content -LiteralPath $script:SubtitlePath -Value "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\i1}Hello{\i0}`n" -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse '[{"cueId":1,"text":"{\\i1}Bonjour{\\i0}"}]'
+            }
+        }
+
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
+        $structuring = Get-StructuringSourcePart $script:LastGeminiBody
+        if ($structuring -notmatch '(?s)===== SOURCE LINGUISTIQUE 1 — SOUS-TITRE STRUCTURANT =====\r?\n(.+)\r?\n===== FIN SOURCE LINGUISTIQUE 1 =====') {
+            throw 'JSON structurant introuvable'
+        }
+        $got = ConvertFrom-Json -InputObject $Matches[1].Trim()
+        $got.text | Should -Be '{\i1}Hello{\i0}'
+        $structuring | Should -Not -Match 'requiredMarkers'
     }
 
     It 'envoie un JSON Whisper secondaire compacté avant le prompt' {
@@ -349,9 +390,10 @@ Describe 'ConvertTo-FrenchSubtitle' {
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $whisperPath
 
         $part = Get-PromptPartByMarker $script:LastGeminiBody 'TRANSCRIPTION WHISPER JSON'
-        $part | Should -Match '===== SOURCE SECONDAIRE 1 — TRANSCRIPTION WHISPER JSON ====='
-        $part | Should -Match '===== FIN SOURCE SECONDAIRE 1 ====='
+        $part | Should -Match '===== SOURCE LINGUISTIQUE 2 — TRANSCRIPTION WHISPER JSON ====='
+        $part | Should -Match '===== FIN SOURCE LINGUISTIQUE 2 ====='
         $part | Should -Not -Match '"cueId"'
+        Get-StructuringSourcePart $script:LastGeminiBody | Should -Match '===== SOURCE LINGUISTIQUE 1 — SOUS-TITRE STRUCTURANT ====='
         $part.Contains($whisperJson) | Should -BeFalse
 
         $compact = Get-SecondaryWhisperJsonFromPrompt $script:LastGeminiBody
@@ -396,13 +438,13 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath @($altSrt, $altAss)
 
-        $srtPart = Get-PromptPartByMarker $script:LastGeminiBody 'SOURCE SECONDAIRE 1 — SOUS-TITRE'
+        $srtPart = Get-PromptPartByMarker $script:LastGeminiBody 'SOURCE LINGUISTIQUE 2 — SOUS-TITRE'
         $srtPart | Should -Match '"start":\s*"00:00:10,000"'
         $srtPart | Should -Match '"end":\s*"00:00:11,000"'
         $srtPart | Should -Match '"text":\s*"Texte alternatif"'
         $srtPart | Should -Not -Match '"cueId"'
 
-        $assPart = Get-PromptPartByMarker $script:LastGeminiBody 'SOURCE SECONDAIRE 2 — SOUS-TITRE'
+        $assPart = Get-PromptPartByMarker $script:LastGeminiBody 'SOURCE LINGUISTIQUE 3 — SOUS-TITRE'
         $assPart | Should -Match '"start":\s*"0:00:20.00"'
         $assPart | Should -Match '"end":\s*"0:00:21.00"'
         $assPart | Should -Match '"text":\s*"Autre version"'
@@ -433,12 +475,19 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         $texts = Get-GeminiPromptText $script:LastGeminiBody
         $joined = $texts -join "`n"
-        $joined | Should -Match '===== SOURCE PRINCIPALE — STRUCTURE TECHNIQUE FINALE ====='
-        $joined | Should -Match '===== SOURCE SECONDAIRE 1 — SOUS-TITRE ====='
-        $joined | Should -Match '===== SOURCE SECONDAIRE 2 — TRANSCRIPTION WHISPER JSON ====='
-        $joined | Should -Match '===== SOURCE SECONDAIRE 3 — SOUS-TITRE ====='
-        $joined.IndexOf('SOURCE SECONDAIRE 1') | Should -BeLessThan $joined.IndexOf('SOURCE SECONDAIRE 2')
-        $joined.IndexOf('SOURCE SECONDAIRE 2') | Should -BeLessThan $joined.IndexOf('SOURCE SECONDAIRE 3')
+        $joined | Should -Match '===== GABARIT TECHNIQUE FINAL ====='
+        $joined | Should -Match '===== SOURCE LINGUISTIQUE 1 — SOUS-TITRE STRUCTURANT ====='
+        $joined | Should -Match '===== SOURCE LINGUISTIQUE 2 — SOUS-TITRE ====='
+        $joined | Should -Match '===== SOURCE LINGUISTIQUE 3 — TRANSCRIPTION WHISPER JSON ====='
+        $joined | Should -Match '===== SOURCE LINGUISTIQUE 4 — SOUS-TITRE ====='
+        $joined | Should -Not -Match 'SOURCE PRINCIPALE'
+        $joined | Should -Not -Match '===== SOURCE SECONDAIRE'
+        $joined.IndexOf('SOURCE LINGUISTIQUE 1') | Should -BeLessThan $joined.IndexOf('SOURCE LINGUISTIQUE 2')
+        $joined.IndexOf('SOURCE LINGUISTIQUE 2') | Should -BeLessThan $joined.IndexOf('SOURCE LINGUISTIQUE 3')
+        $joined.IndexOf('SOURCE LINGUISTIQUE 3') | Should -BeLessThan $joined.IndexOf('SOURCE LINGUISTIQUE 4')
+        Get-GeminiPromptText $script:LastGeminiBody |
+            Where-Object { $_ -match '(?m)^===== SOURCE LINGUISTIQUE' } |
+            ForEach-Object { $_ | Should -Not -Match '"cueId"' }
         $joined | Should -Match 'Alt SRT'
         $joined | Should -Not -Match 'whisper-turbo'
         $whisperCompact = Get-SecondaryWhisperJsonFromPrompt $script:LastGeminiBody

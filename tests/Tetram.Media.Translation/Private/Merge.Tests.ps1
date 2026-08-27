@@ -20,6 +20,29 @@ AfterAll {
     Remove-Module -Name 'Tetram.Media.Translation' -Force -ErrorAction SilentlyContinue
 }
 
+Describe 'ConvertTo-TechnicalTemplateCueJson' {
+    It 'émet cueId/start/end sans text' {
+        $json = InModuleScope 'Tetram.Media.Translation' {
+            ConvertTo-TechnicalTemplateCueJson -Cue @(
+                [pscustomobject][ordered]@{
+                    cueId = 1
+                    start = '00:00:01,000'
+                    end   = '00:00:02,000'
+                    text  = 'Hello'
+                }
+            )
+        }
+
+        $got = ConvertFrom-Json -InputObject $json
+        @($got).Count | Should -Be 1
+        $got.cueId | Should -Be 1
+        $got.start | Should -Be '00:00:01,000'
+        $got.end | Should -Be '00:00:02,000'
+        $got.PSObject.Properties['text'] | Should -BeNullOrEmpty
+        $json | Should -Not -Match '"text"'
+    }
+}
+
 Describe 'Merge-TranslatedSubtitle SRT' {
     It 'conserve les identifiants SRT natifs indépendants du cueId' {
         $got = InModuleScope 'Tetram.Media.Translation' {
