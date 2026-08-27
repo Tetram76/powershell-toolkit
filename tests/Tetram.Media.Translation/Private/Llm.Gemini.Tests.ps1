@@ -484,13 +484,15 @@ Describe 'Llm.Gemini' {
             $script:RestCalls[1].Uri | Should -BeLike '*:generateContent'
         }
 
-        It 'envoie à countTokens le même contents que generateContent' {
+        It 'envoie à countTokens le generateContentRequest complet' {
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
 
             $countBody = ConvertFrom-GeminiRequestBody (Get-RestCall 'countTokens')[0].Body
             $generateBody = ConvertFrom-GeminiRequestBody (Get-RestCall 'generateContent')[0].Body
-            ($countBody.contents | ConvertTo-Json -Depth 12 -Compress) |
-                Should -Be ($generateBody.contents | ConvertTo-Json -Depth 12 -Compress)
+            $counted = $countBody.generateContentRequest
+            $counted | Should -Not -BeNullOrEmpty
+            ($counted | ConvertTo-Json -Depth 12 -Compress) |
+                Should -Be ($generateBody | ConvertTo-Json -Depth 12 -Compress)
         }
 
         It 'refuse generateContent si la requête seule atteint la limite TPM' {
