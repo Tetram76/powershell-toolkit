@@ -34,6 +34,29 @@ BeforeAll {
         ConvertFrom-Json -InputObject $Body -Depth 20
     }
 
+    function script:New-GeminiCountTokensResponse([int] $TotalTokens = 100) {
+        [pscustomobject]@{ totalTokens = $TotalTokens }
+    }
+
+    function script:Get-GeminiMockResponse {
+        param(
+            $Uri,
+            [scriptblock] $OnGenerateContent
+        )
+        if ([string]$Uri -like '*:countTokens') {
+            return New-GeminiCountTokensResponse 100
+        }
+        & $OnGenerateContent
+    }
+
+    function script:Reset-GeminiRateHistory {
+        InModuleScope 'Tetram.Media.Translation' {
+            if (Get-Variable -Name GeminiRateHistory -Scope Script -ErrorAction SilentlyContinue) {
+                $script:GeminiRateHistory.Clear()
+            }
+        }
+    }
+
     function script:Get-GeminiPromptText($Request) {
         return @(
             $Request.contents[0].parts | ForEach-Object { $_.text }
@@ -136,6 +159,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $script:LastGeminiBody = $null
         $script:RestCalls = [System.Collections.Generic.List[object]]::new()
         $script:InfoLogs = [System.Collections.Generic.List[string]]::new()
+        Reset-GeminiRateHistory
     }
 
     AfterEach {
@@ -198,7 +222,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
     It 'écrit le résultat UTF-8 sans BOM à côté de la source avec le suffixe .fr' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
@@ -221,8 +247,10 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $script:SubtitlePath = Join-Path $script:Work 'episode.srt'
         Set-Content -LiteralPath $script:SubtitlePath -Value "10`n00:00:01,000 --> 00:00:02,000`nHello`n`n42`n00:00:03,000 --> 00:00:04,000`nWorld`n" -Encoding utf8
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse '[{"cueId":1,"text":"Bonjour"},{"cueId":2,"text":"Monde"}]'
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse '[{"cueId":1,"text":"Bonjour"},{"cueId":2,"text":"Monde"}]'
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
@@ -244,8 +272,10 @@ Describe 'ConvertTo-FrenchSubtitle' {
     It 'envoie la source principale ASS en cues canoniques sans champs techniques' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
@@ -267,8 +297,10 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $whisperPath = Join-Path $script:Work 'episode.whisper-large-v3.json'
         Set-Content -LiteralPath $whisperPath -Value $whisperJson -Encoding utf8NoBOM -NoNewline
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $whisperPath
@@ -287,8 +319,10 @@ Describe 'ConvertTo-FrenchSubtitle' {
         Set-Content -LiteralPath $altSrt -Value "99`n00:00:10,000 --> 00:00:11,000`nTexte alternatif`n" -Encoding utf8
         Set-Content -LiteralPath $altAss -Value "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 5,0:00:20.00,0:00:21.00,Default,,10,20,30,,Autre version`n" -Encoding utf8
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath @($altSrt, $altAss)
@@ -320,8 +354,10 @@ Describe 'ConvertTo-FrenchSubtitle' {
         Set-Content -LiteralPath $whisperPath -Value $whisperJson -Encoding utf8NoBOM -NoNewline
         Set-Content -LiteralPath $altAss -Value "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:20.00,0:00:21.00,Default,,0,0,0,,Alt ASS`n" -Encoding utf8
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath @($altSrt, $whisperPath, $altAss)
@@ -370,7 +406,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $altSrt = Join-Path $script:Work 'episode.alt.srt'
         Set-Content -LiteralPath $altSrt -Value "1`n00:05:00,000 --> 00:05:01,000`nAutre cue`n`n2`n00:05:02,000 --> 00:05:03,000`nEncore`n" -Encoding utf8
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $altSrt
@@ -387,7 +425,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $env:GEMINI_API_KEY = 'test-key'
         $custom = Join-Path $script:Work 'custom.fr.ass'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -OutputPath $custom
@@ -406,7 +446,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         Set-Content -LiteralPath $script:SubtitlePath -Value "37`n00:05:59,237 --> 00:06:00,057`nEnglish text`n" -Encoding utf8
         $json = '[{"cueId":1,"text":"texte français"}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $json
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $json
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
@@ -424,7 +466,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         Set-Content -LiteralPath $script:SubtitlePath -Value "1`n00:00:01,000 --> 00:00:02,000`nA`n`n2`n00:00:03,000 --> 00:00:04,000`nB`n`n3`n00:00:05,000 --> 00:00:06,000`nC`n`n4`n00:00:07,000 --> 00:00:08,000`nD`n" -Encoding utf8
         $json = '[{"cueId":1,"text":"A"},{"cueId":2,"text":"B"},{"cueId":4,"text":"D"}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $json
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $json
+            }
         }
 
         $warn = $null
@@ -441,7 +485,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $script:SubtitlePath = Join-Path $script:Work 'episode.srt'
         Set-Content -LiteralPath $script:SubtitlePath -Value "10`n00:00:01,000 --> 00:00:02,000`nA`n`n20`n00:00:03,000 --> 00:00:04,000`nB`n`n30`n00:00:05,000 --> 00:00:06,000`nC`n" -Encoding utf8
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse '[{"cueId":3,"text":"Troisième"},{"cueId":1,"text":"Premier"},{"cueId":2,"text":"Deuxième"}]'
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse '[{"cueId":3,"text":"Troisième"},{"cueId":1,"text":"Premier"},{"cueId":2,"text":"Deuxième"}]'
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
@@ -455,7 +501,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":"Bonjour"},{"cueId":1,"text":"Salut"}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $json
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $json
+            }
         }
 
         $warn = $null
@@ -471,7 +519,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":"Bonjour"},{"cueId":9,"text":"Trop loin"}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $json
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $json
+            }
         }
 
         $warn = $null
@@ -487,7 +537,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = 'ceci n''est pas du JSON {'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $json
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $json
+            }
         }
 
         $warn = $null
@@ -503,7 +555,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":""}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $json
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $json
+            }
         }
 
         $warn = $null
@@ -519,7 +573,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":" "}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $json
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $json
+            }
         }
 
         $warn = $null
@@ -536,7 +592,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $json = '[{"cueId":1,"text":"{\\b1}Bonjour{\\i0}"}]'
         Set-Content -LiteralPath $script:SubtitlePath -Value "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\i1}Hello{\i0}`n" -Encoding utf8
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            New-GeminiStopResponse $json
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $json
+            }
         }
 
         $warn = $null
@@ -578,7 +636,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
             $env:GEMINI_API_KEY = 'test-key'
             $json = 'ceci n''est pas du JSON {'
             Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-                New-GeminiStopResponse $json
+                Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                    New-GeminiStopResponse $json
+                }
             }
 
             $warn = $null

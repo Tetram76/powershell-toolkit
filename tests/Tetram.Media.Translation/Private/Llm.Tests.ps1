@@ -235,6 +235,9 @@ Describe 'chargement paresseux des providers LLM' {
 
             $env:GEMINI_API_KEY = 'test-key'
             Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                if ($Uri -like '*:countTokens') {
+                    return [pscustomobject]@{ totalTokens = 100 }
+                }
                 New-GeminiStopResponse $script:HelloJson
             }
 
