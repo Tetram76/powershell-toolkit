@@ -80,6 +80,14 @@ BeforeAll {
         return $part[0]
     }
 
+    function script:Get-SecondaryWhisperJsonFromPrompt($Request) {
+        $part = Get-PromptPartByMarker $Request 'TRANSCRIPTION WHISPER JSON'
+        if ($part -notmatch '(?s)===== SOURCE SECONDAIRE \d+ — TRANSCRIPTION WHISPER JSON =====\r?\n(.+)\r?\n===== FIN SOURCE SECONDAIRE \d+ =====') {
+            throw 'JSON Whisper compact introuvable dans le prompt'
+        }
+        return $Matches[1].Trim()
+    }
+
     function script:Find-InfoLogIndex([string] $Like) {
         for ($i = 0; $i -lt $script:InfoLogs.Count; $i++) {
             if ($script:InfoLogs[$i] -like $Like) {
@@ -113,6 +121,11 @@ Describe 'Tetram.Media.Translation manifest' {
         $prompt | Should -Match 'par son numéro ou sa position'
         $prompt | Should -Match 'éléments diagnostiques'
         $prompt | Should -Match "ordre d'apparition dans le prompt ne représente aucune priorité"
+        $prompt | Should -Match 'JSON compact par segments'
+        $prompt | Should -Match 'avg_logprob'
+        $prompt | Should -Match 'no_speech_prob'
+        $prompt | Should -Not -Match 'JSON brut'
+        $prompt | Should -Not -Match 'niveau mot'
         $prompt | Should -Not -Match 'Lorsque la transcription japonaise est claire'
     }
 }
@@ -291,9 +304,39 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $part | Should -Not -Match 'Style'
     }
 
-    It 'envoie un JSON Whisper secondaire brut après validation syntaxique' {
+    It 'envoie un JSON Whisper secondaire compacté avant le prompt' {
         $env:GEMINI_API_KEY = 'test-key'
-        $whisperJson = '{  "text": "こんにちは", "unexpected_field": 99, "segments": [{"start": 1.0, "end": 2.0, "text": "こんにちは", "no_speech_prob": 0.01, "avg_logprob": -0.2}] }'
+        $whisperJson = @'
+{
+  "text": "texte global dupliqué",
+  "language": "ja",
+  "duration": 1400.0,
+  "unexpected_root": 123,
+  "segments": [
+    {
+      "id": 7,
+      "seek": 1000,
+      "start": 12.34,
+      "end": 15.67,
+      "text": "recognized text",
+      "tokens": [50364, 1234, 5678, 50420],
+      "temperature": 0.0,
+      "avg_logprob": -0.42,
+      "compression_ratio": 1.31,
+      "no_speech_prob": 0.02,
+      "words": [
+        {
+          "start": 12.34,
+          "end": 12.80,
+          "word": "recognized",
+          "probability": 0.93
+        }
+      ],
+      "unexpected_segment": "drop me"
+    }
+  ]
+}
+'@
         $whisperPath = Join-Path $script:Work 'episode.whisper-large-v3.json'
         Set-Content -LiteralPath $whisperPath -Value $whisperJson -Encoding utf8NoBOM -NoNewline
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
@@ -306,10 +349,36 @@ Describe 'ConvertTo-FrenchSubtitle' {
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $whisperPath
 
         $part = Get-PromptPartByMarker $script:LastGeminiBody 'TRANSCRIPTION WHISPER JSON'
-        $part.Contains($whisperJson) | Should -BeTrue
         $part | Should -Match '===== SOURCE SECONDAIRE 1 — TRANSCRIPTION WHISPER JSON ====='
         $part | Should -Match '===== FIN SOURCE SECONDAIRE 1 ====='
         $part | Should -Not -Match '"cueId"'
+        $part.Contains($whisperJson) | Should -BeFalse
+
+        $compact = Get-SecondaryWhisperJsonFromPrompt $script:LastGeminiBody
+        { ConvertFrom-Json -InputObject $compact -ErrorAction Stop } | Should -Not -Throw
+        $compact | Should -Not -Match '[\r\n]'
+        $got = ConvertFrom-Json -InputObject $compact
+        $got.language | Should -Be 'ja'
+        @($got.segments).Count | Should -Be 1
+        $segment = @($got.segments)[0]
+        $segment.start | Should -Be 12.34
+        $segment.end | Should -Be 15.67
+        $segment.text | Should -Be 'recognized text'
+        $segment.temperature | Should -Be 0
+        $segment.avg_logprob | Should -Be -0.42
+        $segment.compression_ratio | Should -Be 1.31
+        $segment.no_speech_prob | Should -Be 0.02
+        $got.PSObject.Properties['text'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['id'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['seek'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['tokens'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['words'] | Should -BeNullOrEmpty
+        $part | Should -Not -Match 'texte global dupliqué'
+        $part | Should -Not -Match '"tokens"'
+        $part | Should -Not -Match '"words"'
+        $part | Should -Not -Match 'drop me'
+        $part | Should -Not -Match '"unexpected_root"'
+        $part | Should -Not -Match '"unexpected_segment"'
     }
 
     It 'envoie un sous-titre secondaire en start/end/text sans cueId ni métadonnées techniques' {
@@ -371,7 +440,11 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $joined.IndexOf('SOURCE SECONDAIRE 1') | Should -BeLessThan $joined.IndexOf('SOURCE SECONDAIRE 2')
         $joined.IndexOf('SOURCE SECONDAIRE 2') | Should -BeLessThan $joined.IndexOf('SOURCE SECONDAIRE 3')
         $joined | Should -Match 'Alt SRT'
-        $joined.Contains($whisperJson) | Should -BeTrue
+        $joined | Should -Not -Match 'whisper-turbo'
+        $whisperCompact = Get-SecondaryWhisperJsonFromPrompt $script:LastGeminiBody
+        $whisperGot = ConvertFrom-Json -InputObject $whisperCompact
+        @($whisperGot.segments).Count | Should -Be 0
+        $whisperGot.PSObject.Properties['text'] | Should -BeNullOrEmpty
         $joined | Should -Match 'Alt ASS'
     }
 
@@ -385,6 +458,32 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $badJson } |
             Should -Throw -ExpectedMessage '*JSON*'
+        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
+    }
+
+    It 'refuse un JSON Whisper sans segments avant tout appel réseau' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $badJson = Join-Path $script:Work 'no-segments.json'
+        Set-Content -LiteralPath $badJson -Value '{"text":"x"}' -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            throw 'Gemini ne devait pas être appelé'
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $badJson } |
+            Should -Throw -ExpectedMessage '*structure Whisper*'
+        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
+    }
+
+    It 'refuse un segment Whisper sans start, end ou text avant tout appel réseau' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $badJson = Join-Path $script:Work 'incomplete-segment.json'
+        Set-Content -LiteralPath $badJson -Value '{"segments":[{"start":1.0,"end":2.0}]}' -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            throw 'Gemini ne devait pas être appelé'
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $badJson } |
+            Should -Throw -ExpectedMessage '*structure Whisper*'
         Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
     }
 
