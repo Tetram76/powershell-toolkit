@@ -187,10 +187,11 @@ Describe 'Resolve-LlmModelSpec' {
 }
 
 Describe 'chargement paresseux des providers LLM' {
-    It 'charge la couche LLM commune sans définir les fonctions Gemini ni Ollama' {
+    It 'charge la couche LLM commune sans définir Invoke-ProviderTranslationLlm' {
         $names = InModuleScope 'Tetram.Media.Translation' {
             @(
                 Get-Command -Name Invoke-TranslationLlm -ErrorAction SilentlyContinue
+                Get-Command -Name Invoke-ProviderTranslationLlm -ErrorAction SilentlyContinue
                 Get-Command -Name Invoke-GeminiTranslationLlm -ErrorAction SilentlyContinue
                 Get-Command -Name Invoke-OllamaTranslationLlm -ErrorAction SilentlyContinue
             ) | ForEach-Object { $_.Name } | Sort-Object

@@ -27,7 +27,7 @@ Niveaux reconnus : minimal, low, medium, high.
     return $level
 }
 
-function Invoke-GeminiTranslationLlm {
+function Invoke-ProviderTranslationLlm {
     param(
         [AllowNull()]
         [AllowEmptyString()]

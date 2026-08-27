@@ -147,20 +147,15 @@ function Invoke-TranslationLlm {
     switch ($Provider) {
         'Gemini' {
             . (Join-Path $script:LlmPrivateRoot 'Llm.Gemini.ps1')
-
-            return Invoke-GeminiTranslationLlm `
-                -Model $Model `
-                -PromptPart $PromptPart `
-                -AllowModelDownload:$AllowModelDownload
         }
 
         'Ollama' {
             . (Join-Path $script:LlmPrivateRoot 'Llm.Ollama.ps1')
-
-            return Invoke-OllamaTranslationLlm `
-                -Model $Model `
-                -PromptPart $PromptPart `
-                -AllowModelDownload:$AllowModelDownload
         }
     }
+
+    return Invoke-ProviderTranslationLlm `
+        -Model $Model `
+        -PromptPart $PromptPart `
+        -AllowModelDownload:$AllowModelDownload
 }
