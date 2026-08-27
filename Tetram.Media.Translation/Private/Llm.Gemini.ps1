@@ -40,13 +40,14 @@ Niveaux reconnus : minimal, low, medium, high.
 function Get-GeminiInputTokenCount {
     param(
         [Parameter(Mandatory)][string] $ModelName,
-        [Parameter(Mandatory)] $Contents,
+        [Parameter(Mandatory)] $GenerateRequest,
         [Parameter(Mandatory)][string] $ApiKey
     )
 
     $uri = "https://generativelanguage.googleapis.com/v1beta/models/${ModelName}:countTokens"
+    # contents seul omet thinkingConfig et responseSchema, pourtant comptés dans l'entrée globale du modèle.
     $body = @{
-        contents = $Contents
+        generateContentRequest = $GenerateRequest
     } | ConvertTo-Json -Depth 12
 
     $response = Invoke-RestMethod `
@@ -180,7 +181,7 @@ function Invoke-ProviderTranslationLlm {
 
     $inputTokens = Get-GeminiInputTokenCount `
         -ModelName $modelName `
-        -Contents $generateRequest.contents `
+        -GenerateRequest $generateRequest `
         -ApiKey $apiKey
 
     Assert-GeminiFreeTierWindow -ModelName $modelName -InputTokens $inputTokens
