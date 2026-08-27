@@ -28,7 +28,7 @@ ConvertTo-FrenchSubtitle -SubtitlePath <string> [-SecondarySourcePath <string[]>
 
 ## DESCRIPTION
 
-Importer `.\Tetram.Media.Translation` (PowerShell 7+). `-SubtitlePath` est la source principale obligatoire : elle définit la structure finale (cues, `cueId`, timestamps). La commande parse cette source en cues canoniques (`cueId`, `start`, `end`, `text`) et envoie ce JSON au modèle. `-SecondarySourcePath` accepte 0..N fichiers complémentaires : sous-titres SRT/ASS/SSA (JSON `start`/`end`/`text`, sans `cueId`) ou transcriptions Whisper JSON (JSON compact par segments après validation de structure minimale). Aucune source n'est une référence linguistique absolue. Le modèle retourne une proposition JSON `{ cueId, text }`.
+Importer `.\Tetram.Media.Translation` (PowerShell 7+). `-SubtitlePath` définit toujours la structure finale (cues, `cueId`, timestamps, reconstruction). Le modèle reçoit un gabarit technique `cueId`/`start`/`end` sans texte ; le texte de `-SubtitlePath` est envoyé séparément comme source linguistique structurante (`start`/`end`/`text`, sans `cueId`). `-SecondarySourcePath` accepte 0..N sources linguistiques facultatives : sous-titres SRT/ASS/SSA (JSON `start`/`end`/`text`, sans `cueId`) ou transcriptions Whisper JSON (JSON compact par segments après validation de structure minimale). Aucune source linguistique n'a de priorité fixe. Le modèle retourne une proposition JSON `{ cueId, text }`.
 
 Le fournisseur se choisit avec `-Provider` (`Gemini` ou `Ollama`). Sans `-Provider`, Gemini est utilisé.
 
@@ -307,7 +307,7 @@ HelpMessage: ''
 
 ### -SubtitlePath
 
-Source principale obligatoire. Définit la structure finale (ordre des cues, `cueId`, timestamps, reconstruction). Doit exister et être un fichier.
+Source obligatoire. Définit la structure finale (ordre des cues, `cueId`, timestamps, reconstruction). Le texte est envoyé au modèle comme source linguistique structurante, séparément du gabarit technique. Doit exister et être un fichier.
 
 ```yaml
 Type: System.String
@@ -328,7 +328,7 @@ HelpMessage: ''
 
 ### -SecondarySourcePath
 
-0..N sources complémentaires : sous-titres SRT/ASS/SSA ou transcriptions Whisper JSON. Facultatif. L'ordre fourni ne représente aucune priorité linguistique.
+0..N sources linguistiques facultatives : sous-titres SRT/ASS/SSA ou transcriptions Whisper JSON. L'ordre fourni ne représente aucune priorité linguistique.
 
 ```yaml
 Type: System.String[]

@@ -34,9 +34,9 @@ function ConvertTo-SecondarySourcePromptPart {
         }
 
         return @"
-===== SOURCE SECONDAIRE $Index — TRANSCRIPTION WHISPER JSON =====
+===== SOURCE LINGUISTIQUE $Index — TRANSCRIPTION WHISPER JSON =====
 $compactJson
-===== FIN SOURCE SECONDAIRE $Index =====
+===== FIN SOURCE LINGUISTIQUE $Index =====
 "@
     }
 
@@ -46,9 +46,9 @@ $compactJson
     $json = ConvertTo-SecondarySubtitleCueJson -Cue $cue
 
     return @"
-===== SOURCE SECONDAIRE $Index — SOUS-TITRE =====
+===== SOURCE LINGUISTIQUE $Index — SOUS-TITRE =====
 $json
-===== FIN SOURCE SECONDAIRE $Index =====
+===== FIN SOURCE LINGUISTIQUE $Index =====
 "@
 }
 
@@ -120,7 +120,8 @@ function ConvertTo-FrenchSubtitle {
     $subtitle = Get-Content -LiteralPath $SubtitlePath -Raw -Encoding UTF8
 
     $canonicalCue = @(Get-CanonicalSubtitleCue -Source $subtitle -Extension $subtitleFile.Extension)
-    $canonicalJson = ConvertTo-CanonicalCueJson -Cue $canonicalCue
+    $templateJson = ConvertTo-TechnicalTemplateCueJson -Cue $canonicalCue
+    $structuringJson = ConvertTo-SecondarySubtitleCueJson -Cue $canonicalCue
 
 
     # --- Prompt ------------------------------------------------------------------
@@ -138,10 +139,16 @@ function ConvertTo-FrenchSubtitle {
         -Raw `
         -Encoding UTF8
 
-    $subtitlePart = @"
-===== SOURCE PRINCIPALE — STRUCTURE TECHNIQUE FINALE =====
-$canonicalJson
-===== FIN SOURCE PRINCIPALE =====
+    $templatePart = @"
+===== GABARIT TECHNIQUE FINAL =====
+$templateJson
+===== FIN GABARIT TECHNIQUE FINAL =====
+"@
+
+    $structuringPart = @"
+===== SOURCE LINGUISTIQUE 1 — SOUS-TITRE STRUCTURANT =====
+$structuringJson
+===== FIN SOURCE LINGUISTIQUE 1 =====
 "@
 
 
@@ -149,11 +156,13 @@ $canonicalJson
 
     $promptPart = @(
         $instructions
-        $subtitlePart
+        $templatePart
+        $structuringPart
     )
 
     # foreach sur $null n'itère pas ; @($null) produirait une itération vide.
-    $secondaryIndex = 0
+    # La source structurante occupe l'index 1 ; les SecondarySourcePath commencent à 2.
+    $secondaryIndex = 1
     foreach ($path in $SecondarySourcePath) {
         $secondaryIndex++
         $promptPart += ConvertTo-SecondarySourcePromptPart -Path $path -Index $secondaryIndex
