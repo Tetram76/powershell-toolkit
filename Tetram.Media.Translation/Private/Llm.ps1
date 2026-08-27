@@ -144,6 +144,8 @@ function Invoke-TranslationLlm {
         [switch] $AllowModelDownload
     )
 
+    $script:LastLlmResponseTokenCount = $null
+
     switch ($Provider) {
         'Gemini' {
             . (Join-Path $script:LlmPrivateRoot 'Llm.Gemini.ps1')
