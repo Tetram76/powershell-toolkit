@@ -46,8 +46,14 @@ function Get-GeminiInputTokenCount {
 
     $uri = "https://generativelanguage.googleapis.com/v1beta/models/${ModelName}:countTokens"
     # contents seul omet thinkingConfig et responseSchema, pourtant comptés dans l'entrée globale du modèle.
+    # Le proto CountTokensRequest exige generateContentRequest.model même si l'URI le contient déjà.
+    $countGenerateRequest = @{}
+    foreach ($key in $GenerateRequest.Keys) {
+        $countGenerateRequest[$key] = $GenerateRequest[$key]
+    }
+    $countGenerateRequest['model'] = "models/$ModelName"
     $body = @{
-        generateContentRequest = $GenerateRequest
+        generateContentRequest = $countGenerateRequest
     } | ConvertTo-Json -Depth 12
 
     $response = Invoke-RestMethod `
