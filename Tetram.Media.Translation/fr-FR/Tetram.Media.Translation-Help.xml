@@ -10,7 +10,7 @@
       <command:noun>FrenchSubtitle</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Importer `.\Tetram.Media.Translation` (PowerShell 7+). `-SubtitlePath` est la source principale obligatoire : elle définit la structure finale (cues, `cueId`, timestamps). La commande parse cette source en cues canoniques (`cueId`, `start`, `end`, `text`) et envoie ce JSON au modèle. `-SecondarySourcePath` accepte 0..N fichiers complémentaires : sous-titres SRT/ASS/SSA (JSON `start`/`end`/`text`, sans `cueId`) ou transcriptions Whisper JSON (contenu brut après validation syntaxique). Aucune source n'est une référence linguistique absolue. Le modèle retourne une proposition JSON `{ cueId, text }`.
+      <maml:para>Importer `.\Tetram.Media.Translation` (PowerShell 7+). `-SubtitlePath` est la source principale obligatoire : elle définit la structure finale (cues, `cueId`, timestamps). La commande parse cette source en cues canoniques (`cueId`, `start`, `end`, `text`) et envoie ce JSON au modèle. `-SecondarySourcePath` accepte 0..N fichiers complémentaires : sous-titres SRT/ASS/SSA (JSON `start`/`end`/`text`, sans `cueId`) ou transcriptions Whisper JSON (JSON compact par segments après validation de structure minimale). Aucune source n'est une référence linguistique absolue. Le modèle retourne une proposition JSON `{ cueId, text }`.
 
 Le fournisseur se choisit avec `-Provider` (`Gemini` ou `Ollama`). Sans `-Provider`, Gemini est utilisé.
 

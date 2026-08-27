@@ -113,20 +113,36 @@ N'accorde aucune priorité fixe à un sous-titre secondaire.
 
 Une transcription Whisper est issue d'une reconnaissance automatique de la parole.
 
-Elle est fournie sous forme de JSON brut.
+Elle est fournie sous forme de JSON compact par segments :
 
-Selon le format produit, ce JSON peut contenir :
+```json
+{
+  "language": "ja",
+  "segments": [
+    {
+      "start": 12.34,
+      "end": 15.67,
+      "text": "...",
+      "temperature": 0,
+      "avg_logprob": -0.42,
+      "compression_ratio": 1.31,
+      "no_speech_prob": 0.02
+    }
+  ]
+}
+```
 
-- le texte reconnu ;
-- les timestamps ;
-- les segments ;
-- des informations au niveau mot ;
-- des probabilités ;
-- des scores ;
-- des log-probabilités ;
-- une probabilité d'absence de parole ;
-- des indicateurs de compression ou de répétition ;
-- d'autres métriques ou informations de décodage.
+Les informations réellement disponibles sont :
+
+- le texte reconnu de chaque segment ;
+- les timestamps segmentaires (`start`, `end`) ;
+- `temperature` lorsqu'elle existe ;
+- `avg_logprob` lorsqu'elle existe ;
+- `compression_ratio` lorsqu'elle existe ;
+- `no_speech_prob` lorsqu'elle existe ;
+- la langue détectée (`language`) si elle est disponible.
+
+`language` et les métriques diagnostiques sont optionnels : leur absence n'est pas une information en soi.
 
 Utilise ces informations comme des éléments diagnostiques supplémentaires pour apprécier localement la transcription.
 
