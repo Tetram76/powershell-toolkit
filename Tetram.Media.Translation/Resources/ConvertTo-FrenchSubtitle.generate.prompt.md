@@ -408,7 +408,7 @@ En cas de divergence, évalue notamment :
 - les relations entre les personnages ;
 - le sens global de la scène.
 
-Une source secondaire n'est pas seulement destinée à confirmer la source structurante.
+Une autre source linguistique n'est pas seulement destinée à confirmer la source structurante.
 
 Elle doit pouvoir la contredire et conduire à retenir un sens différent.
 
