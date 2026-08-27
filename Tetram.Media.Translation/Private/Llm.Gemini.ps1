@@ -200,7 +200,7 @@ function Invoke-ProviderTranslationLlm {
     $body = $generateRequest | ConvertTo-Json -Depth 12
     $uri = "https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent"
 
-    Write-InfoLog -Text "Invocation de Gemini avec '$modelName' (thinking=$thinkingLevel)..." -Force
+    Write-InfoLog -Text "Invocation de Gemini avec '$modelName' (thinking=$thinkingLevel, $inputTokens tokens estimés)..." -Force
 
     $response = Invoke-RestMethod `
         -Method Post `
@@ -234,5 +234,34 @@ function Invoke-ProviderTranslationLlm {
         throw 'Gemini a retourné un résultat vide.'
     }
 
+    $script:LastLlmResponseTokenCount = Get-GeminiResponseTokenCount -Response $response
     return $result
+}
+
+function Get-GeminiResponseTokenCount {
+    param($Response)
+
+    # totalTokenCount (prompt + sortie + thinking) n'est pas toujours présent ; un champ
+    # absent ou non entier ne doit pas faire échouer une génération déjà réussie.
+
+    if ($null -eq $Response) {
+        return $null
+    }
+
+    $usageProp = $Response.PSObject.Properties['usageMetadata']
+    if ($null -eq $usageProp -or $null -eq $usageProp.Value) {
+        return $null
+    }
+
+    $totalProp = $usageProp.Value.PSObject.Properties['totalTokenCount']
+    if ($null -eq $totalProp -or $null -eq $totalProp.Value) {
+        return $null
+    }
+
+    try {
+        return [int]$totalProp.Value
+    }
+    catch {
+        return $null
+    }
 }

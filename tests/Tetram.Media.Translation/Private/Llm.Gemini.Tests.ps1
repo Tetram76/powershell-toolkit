@@ -10,8 +10,13 @@ BeforeAll {
     $script:RepoRootTranslation = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
     $script:ModuleRootTranslation = Join-Path $script:RepoRootTranslation 'Tetram.Media.Translation'
 
-    function script:New-GeminiStopResponse([string] $Text) {
-        [pscustomobject]@{
+    function script:New-GeminiStopResponse {
+        param(
+            [Parameter(Mandatory)][string] $Text,
+            [int] $TotalTokenCount
+        )
+
+        $response = [pscustomobject]@{
             candidates = @(
                 [pscustomobject]@{
                     finishReason = 'STOP'
@@ -26,6 +31,14 @@ BeforeAll {
                 }
             )
         }
+
+        if ($PSBoundParameters.ContainsKey('TotalTokenCount')) {
+            $response | Add-Member -NotePropertyName usageMetadata -NotePropertyValue ([pscustomobject]@{
+                    totalTokenCount = $TotalTokenCount
+                })
+        }
+
+        return $response
     }
 
     function script:ConvertFrom-GeminiRequestBody([string] $Body) {
@@ -389,10 +402,23 @@ Describe 'Llm.Gemini' {
             }
 
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
-            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
+            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low, 100 tokens estimés)..."
             Should -Invoke -ModuleName Tetram.Media.Translation Write-InfoLog -Times 1 -ParameterFilter {
-                [bool]$Force -and $Text -eq "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
+                [bool]$Force -and $Text -eq "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low, 100 tokens estimés)..."
             }
+        }
+
+        It 'reprend le totalTokens de countTokens dans le jalon d''invocation' {
+            $env:GEMINI_API_KEY = 'test-key'
+            $script:CountTokensTotal = 2500
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                    New-GeminiStopResponse $script:HelloJson
+                }
+            }
+
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
+            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low, 2500 tokens estimés)..."
         }
 
         It 'journalise l''invocation Gemini [thinking] avec thinking=medium' {
@@ -405,7 +431,7 @@ Describe 'Llm.Gemini' {
 
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking]'
 
-            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=medium)..."
+            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=medium, 100 tokens estimés)..."
             @($script:InfoLogs | Where-Object { $_ -like '*gemini-3.6-flash[thinking]*' }) | Should -HaveCount 0
         }
 
@@ -421,7 +447,7 @@ Describe 'Llm.Gemini' {
                 ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
             } | Should -Throw -ExpectedMessage '*aucun candidat*'
 
-            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
+            $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low, 100 tokens estimés)..."
             @($script:InfoLogs | Where-Object { $_ -like '*Réponse brute*' }) | Should -HaveCount 0
             @($script:InfoLogs | Where-Object { $_ -like '*Reconstruction*' }) | Should -HaveCount 0
         }
@@ -436,12 +462,26 @@ Describe 'Llm.Gemini' {
 
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
             $raw = Join-Path $script:Work 'episode.fr.raw.json'
-            $invoke = Find-InfoLogIndex "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
+            $invoke = Find-InfoLogIndex "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low, 100 tokens estimés)..."
             $rawLog = Find-InfoLogIndex "Réponse brute du modèle enregistrée : $raw"
             $rebuild = Find-InfoLogIndex 'Reconstruction du sous-titre final...'
             $invoke | Should -BeGreaterOrEqual 0
             $rawLog | Should -BeGreaterThan $invoke
             $rebuild | Should -BeGreaterThan $rawLog
+            $script:InfoLogs[$rawLog] | Should -Not -Match 'tokens réels'
+        }
+
+        It 'ajoute totalTokenCount au jalon raw quand usageMetadata est présent' {
+            $env:GEMINI_API_KEY = 'test-key'
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                    New-GeminiStopResponse $script:HelloJson -TotalTokenCount 42
+                }
+            }
+
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
+            $raw = Join-Path $script:Work 'episode.fr.raw.json'
+            $script:InfoLogs | Should -Contain "Réponse brute du modèle enregistrée : $raw (42 tokens réels)"
         }
 
     }
