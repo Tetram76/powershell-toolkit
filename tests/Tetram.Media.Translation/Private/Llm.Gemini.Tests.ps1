@@ -32,6 +32,71 @@ BeforeAll {
         ConvertFrom-Json -InputObject $Body -Depth 20
     }
 
+    function script:New-GeminiCountTokensResponse([int] $TotalTokens = 100) {
+        [pscustomobject]@{ totalTokens = $TotalTokens }
+    }
+
+    function script:Get-RestCall([string] $Suffix) {
+        return @($script:RestCalls | Where-Object { $_.Uri -like "*$Suffix" })
+    }
+
+    function script:Add-CurrentRestCall {
+        param($Uri, $Body)
+        $script:RestCalls.Add([pscustomobject]@{
+            Uri  = [string]$Uri
+            Body = $Body
+        })
+    }
+
+    function script:Reset-GeminiRateHistory {
+        InModuleScope 'Tetram.Media.Translation' {
+            if (Get-Variable -Name GeminiRateHistory -Scope Script -ErrorAction SilentlyContinue) {
+                $script:GeminiRateHistory.Clear()
+            }
+        }
+    }
+
+    function script:Initialize-GeminiProvider {
+        InModuleScope 'Tetram.Media.Translation' {
+            . (Join-Path $script:LlmPrivateRoot 'Llm.Gemini.ps1')
+        }
+    }
+
+    function script:Get-GeminiRateHistory {
+        InModuleScope 'Tetram.Media.Translation' {
+            if (-not (Get-Variable -Name GeminiRateHistory -Scope Script -ErrorAction SilentlyContinue)) {
+                return ,[object[]]@()
+            }
+            return ,[object[]]@($script:GeminiRateHistory)
+        }
+    }
+
+    function script:Set-GeminiRateHistory {
+        param([Parameter(Mandatory)][object[]] $Entry)
+        InModuleScope 'Tetram.Media.Translation' -Parameters @{ Entry = $Entry } {
+            param($Entry)
+            . (Join-Path $script:LlmPrivateRoot 'Llm.Gemini.ps1')
+            if (-not (Get-Variable -Name GeminiRateHistory -Scope Script -ErrorAction SilentlyContinue)) {
+                $script:GeminiRateHistory = [System.Collections.Generic.List[object]]::new()
+            }
+            $script:GeminiRateHistory.Clear()
+            foreach ($item in @($Entry)) {
+                $script:GeminiRateHistory.Add($item)
+            }
+        }
+    }
+
+    function script:Get-GeminiMockResponse {
+        param(
+            $Uri,
+            [scriptblock] $OnGenerateContent
+        )
+        if ([string]$Uri -like '*:countTokens') {
+            return New-GeminiCountTokensResponse $script:CountTokensTotal
+        }
+        & $OnGenerateContent
+    }
+
     function script:Find-InfoLogIndex([string] $Like) {
         for ($i = 0; $i -lt $script:InfoLogs.Count; $i++) {
             if ($script:InfoLogs[$i] -like $Like) {
@@ -64,6 +129,8 @@ Describe 'Llm.Gemini' {
         $script:LastGeminiBody = $null
         $script:RestCalls = [System.Collections.Generic.List[object]]::new()
         $script:InfoLogs = [System.Collections.Generic.List[string]]::new()
+        $script:CountTokensTotal = 100
+        Reset-GeminiRateHistory
     }
 
     AfterEach {
@@ -84,10 +151,12 @@ Describe 'Llm.Gemini' {
     It 'appelle le modèle par défaut gemini-3.6-flash' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            if ($Uri -notlike '*gemini-3.6-flash:generateContent') {
-                throw "URI inattendue : $Uri"
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                if ($Uri -notlike '*gemini-3.6-flash:generateContent') {
+                    throw "URI inattendue : $Uri"
+                }
+                New-GeminiStopResponse $script:HelloJson
             }
-            New-GeminiStopResponse $script:HelloJson
         }
 
         { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
@@ -97,8 +166,10 @@ Describe 'Llm.Gemini' {
     It 'conserve thinkingLevel low dans generationConfig' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
@@ -108,11 +179,13 @@ Describe 'Llm.Gemini' {
     It 'utilise thinkingLevel low pour un modèle Gemini explicite sans option' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            if ($Uri -notlike '*gemini-3.6-flash:generateContent*') {
-                throw "URI inattendue : $Uri"
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                if ($Uri -notlike '*gemini-3.6-flash:generateContent*') {
+                    throw "URI inattendue : $Uri"
+                }
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
             }
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash'
@@ -123,14 +196,16 @@ Describe 'Llm.Gemini' {
     It 'utilise thinkingLevel medium pour Gemini [thinking] sans envoyer le suffixe dans l''URI' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            if ($Uri -like '*thinking*') {
-                throw "URI inattendue : $Uri"
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                if ($Uri -like '*thinking*') {
+                    throw "URI inattendue : $Uri"
+                }
+                if ($Uri -notlike '*gemini-3.6-flash:generateContent*') {
+                    throw "URI inattendue : $Uri"
+                }
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
             }
-            if ($Uri -notlike '*gemini-3.6-flash:generateContent*') {
-                throw "URI inattendue : $Uri"
-            }
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking]'
@@ -141,11 +216,13 @@ Describe 'Llm.Gemini' {
     It 'utilise thinkingLevel high pour Gemini [thinking=high]' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            if ($Uri -like '*thinking*') {
-                throw "URI inattendue : $Uri"
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                if ($Uri -like '*thinking*') {
+                    throw "URI inattendue : $Uri"
+                }
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
             }
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking=high]'
@@ -156,8 +233,10 @@ Describe 'Llm.Gemini' {
     It 'utilise thinkingLevel minimal pour Gemini [thinking=minimal]' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking=minimal]'
@@ -190,8 +269,10 @@ Describe 'Llm.Gemini' {
     It 'demande une sortie JSON structurée cueId/text' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
-            New-GeminiStopResponse $script:HelloJson
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
@@ -204,7 +285,9 @@ Describe 'Llm.Gemini' {
     It 'lève si Gemini ne retourne aucun candidat' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            [pscustomobject]@{ candidates = @() }
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                [pscustomobject]@{ candidates = @() }
+            }
         }
 
         { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
@@ -215,17 +298,19 @@ Describe 'Llm.Gemini' {
     It 'lève si finishReason n''est pas STOP' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            [pscustomobject]@{
-                candidates = @(
-                    [pscustomobject]@{
-                        finishReason = 'MAX_TOKENS'
-                        content      = [pscustomobject]@{
-                            parts = @(
-                                [pscustomobject]@{ thought = $false; text = 'tronqué' }
-                            )
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                [pscustomobject]@{
+                    candidates = @(
+                        [pscustomobject]@{
+                            finishReason = 'MAX_TOKENS'
+                            content      = [pscustomobject]@{
+                                parts = @(
+                                    [pscustomobject]@{ thought = $false; text = 'tronqué' }
+                                )
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
 
@@ -237,17 +322,19 @@ Describe 'Llm.Gemini' {
     It 'lève si le texte utile est vide' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            [pscustomobject]@{
-                candidates = @(
-                    [pscustomobject]@{
-                        finishReason = 'STOP'
-                        content      = [pscustomobject]@{
-                            parts = @(
-                                [pscustomobject]@{ thought = $true }
-                            )
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                [pscustomobject]@{
+                    candidates = @(
+                        [pscustomobject]@{
+                            finishReason = 'STOP'
+                            content      = [pscustomobject]@{
+                                parts = @(
+                                    [pscustomobject]@{ thought = $true }
+                                )
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
 
@@ -259,10 +346,12 @@ Describe 'Llm.Gemini' {
     It 'utilise le modèle Gemini fourni' {
         $env:GEMINI_API_KEY = 'test-key'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            if ($Uri -notlike '*gemini-custom:generateContent') {
-                throw "URI inattendue : $Uri"
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                if ($Uri -notlike '*gemini-custom:generateContent') {
+                    throw "URI inattendue : $Uri"
+                }
+                New-GeminiStopResponse $script:HelloJson
             }
-            New-GeminiStopResponse $script:HelloJson
         }
 
         { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-custom' } |
@@ -294,7 +383,9 @@ Describe 'Llm.Gemini' {
         It 'journalise l''invocation Gemini par défaut avec thinking=low' {
             $env:GEMINI_API_KEY = 'test-key'
             Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-                New-GeminiStopResponse $script:HelloJson
+                Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                    New-GeminiStopResponse $script:HelloJson
+                }
             }
 
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
@@ -307,7 +398,9 @@ Describe 'Llm.Gemini' {
         It 'journalise l''invocation Gemini [thinking] avec thinking=medium' {
             $env:GEMINI_API_KEY = 'test-key'
             Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-                New-GeminiStopResponse $script:HelloJson
+                Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                    New-GeminiStopResponse $script:HelloJson
+                }
             }
 
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking]'
@@ -319,7 +412,9 @@ Describe 'Llm.Gemini' {
         It 'n''annonce ni raw ni reconstruction si le transport Gemini échoue' {
             $env:GEMINI_API_KEY = 'test-key'
             Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-                [pscustomobject]@{ candidates = @() }
+                Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                    [pscustomobject]@{ candidates = @() }
+                }
             }
 
             {
@@ -334,7 +429,9 @@ Describe 'Llm.Gemini' {
         It 'annonce raw puis reconstruction après une réponse Gemini valide' {
             $env:GEMINI_API_KEY = 'test-key'
             Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-                New-GeminiStopResponse $script:HelloJson
+                Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                    New-GeminiStopResponse $script:HelloJson
+                }
             }
 
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
@@ -347,5 +444,138 @@ Describe 'Llm.Gemini' {
             $rebuild | Should -BeGreaterThan $rawLog
         }
 
+    }
+
+    Context 'guards Free Tier RPM/TPM' {
+        BeforeEach {
+            $env:GEMINI_API_KEY = 'test-key'
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                Add-CurrentRestCall -Uri $Uri -Body $Body
+                if ($Uri -like '*:countTokens') {
+                    return New-GeminiCountTokensResponse $script:CountTokensTotal
+                }
+                if ($Uri -like '*:generateContent') {
+                    return New-GeminiStopResponse $script:HelloJson
+                }
+                throw "URI inattendue : $Uri"
+            }
+        }
+
+        It 'définit les constantes Free Tier RPM=5 TPM=250000 RPD=20' {
+            Initialize-GeminiProvider
+            $limits = InModuleScope 'Tetram.Media.Translation' {
+                [pscustomobject]@{
+                    Rpm = $script:GeminiFreeTierRpm
+                    Tpm = $script:GeminiFreeTierTpm
+                    Rpd = $script:GeminiFreeTierRpd
+                }
+            }
+
+            $limits.Rpm | Should -Be 5
+            $limits.Tpm | Should -Be 250000
+            $limits.Rpd | Should -Be 20
+        }
+
+        It 'appelle countTokens avant generateContent' {
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
+
+            $script:RestCalls.Count | Should -Be 2
+            $script:RestCalls[0].Uri | Should -BeLike '*:countTokens'
+            $script:RestCalls[1].Uri | Should -BeLike '*:generateContent'
+        }
+
+        It 'envoie à countTokens le même contents que generateContent' {
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
+
+            $countBody = ConvertFrom-GeminiRequestBody (Get-RestCall 'countTokens')[0].Body
+            $generateBody = ConvertFrom-GeminiRequestBody (Get-RestCall 'generateContent')[0].Body
+            ($countBody.contents | ConvertTo-Json -Depth 12 -Compress) |
+                Should -Be ($generateBody.contents | ConvertTo-Json -Depth 12 -Compress)
+        }
+
+        It 'refuse generateContent si la requête seule atteint la limite TPM' {
+            $script:CountTokensTotal = 250000
+
+            { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
+                Should -Throw -ExpectedMessage "*gemini-3.6-flash*250000*"
+
+            Get-RestCall 'countTokens' | Should -HaveCount 1
+            Get-RestCall 'generateContent' | Should -HaveCount 0
+        }
+
+        It 'refuse une sixième requête dans une fenêtre de moins de 60 secondes' {
+            $now = [DateTimeOffset]::UtcNow
+            Set-GeminiRateHistory -Entry @(
+                @{ Timestamp = $now.AddSeconds(-10); InputTokens = 10 }
+                @{ Timestamp = $now.AddSeconds(-8); InputTokens = 10 }
+                @{ Timestamp = $now.AddSeconds(-6); InputTokens = 10 }
+                @{ Timestamp = $now.AddSeconds(-4); InputTokens = 10 }
+                @{ Timestamp = $now.AddSeconds(-2); InputTokens = 10 }
+            )
+
+            { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
+                Should -Throw -ExpectedMessage '*requêtes/minute*'
+
+            Get-RestCall 'generateContent' | Should -HaveCount 0
+        }
+
+        It 'refuse generateContent si le cumul TPM projeté atteint la limite' {
+            $script:CountTokensTotal = 136000
+            Set-GeminiRateHistory -Entry @(
+                @{ Timestamp = [DateTimeOffset]::UtcNow.AddSeconds(-5); InputTokens = 132000 }
+            )
+
+            { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
+                Should -Throw -ExpectedMessage '*268000*132000*136000*250000*'
+
+            Get-RestCall 'generateContent' | Should -HaveCount 0
+        }
+
+        It 'purge les entrées âgées d''au moins 60 secondes et ne les compte plus' {
+            $script:CountTokensTotal = 100
+            Set-GeminiRateHistory -Entry @(
+                @{ Timestamp = [DateTimeOffset]::UtcNow.AddSeconds(-61); InputTokens = 249000 }
+            )
+
+            { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } | Should -Not -Throw
+
+            Get-RestCall 'generateContent' | Should -HaveCount 1
+            $history = Get-GeminiRateHistory
+            $history.Count | Should -Be 1
+            $history[0].InputTokens | Should -Be 100
+        }
+
+        It 'enregistre la requête autorisée juste avant generateContent même si Gemini échoue ensuite' {
+            $script:CountTokensTotal = 1234
+            Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+                Add-CurrentRestCall -Uri $Uri -Body $Body
+                if ($Uri -like '*:countTokens') {
+                    return New-GeminiCountTokensResponse $script:CountTokensTotal
+                }
+                if ($Uri -like '*:generateContent') {
+                    throw 'réseau Gemini simulé'
+                }
+                throw "URI inattendue : $Uri"
+            }
+
+            { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
+                Should -Throw -ExpectedMessage '*réseau Gemini simulé*'
+
+            Get-RestCall 'generateContent' | Should -HaveCount 1
+            $history = Get-GeminiRateHistory
+            $history.Count | Should -Be 1
+            $history[0].InputTokens | Should -Be 1234
+        }
+
+        It 'ne remet pas l''historique à zéro lors du rechargement paresseux de Llm.Gemini.ps1' {
+            Set-GeminiRateHistory -Entry @(
+                @{ Timestamp = [DateTimeOffset]::UtcNow; InputTokens = 42 }
+            )
+            Initialize-GeminiProvider
+
+            $history = Get-GeminiRateHistory
+            $history.Count | Should -Be 1
+            $history[0].InputTokens | Should -Be 42
+        }
     }
 }
