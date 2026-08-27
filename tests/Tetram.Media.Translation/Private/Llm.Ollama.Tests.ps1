@@ -77,11 +77,9 @@ Describe 'Llm.Ollama' {
         $script:Work = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:Work | Out-Null
         $script:SubtitlePath = Join-Path $script:Work 'episode.ass'
-        $script:TranscriptPath = Join-Path $script:Work 'episode.whisper.txt'
         $script:MinimalAssHello = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello`n"
         $script:HelloJson = '[{"cueId":1,"text":"Bonjour"}]'
         Set-Content -LiteralPath $script:SubtitlePath -Value $script:MinimalAssHello -Encoding utf8
-        Set-Content -LiteralPath $script:TranscriptPath -Value 'こんにちは' -Encoding utf8
         $script:LastGeminiBody = $null
         $script:RestCalls = [System.Collections.Generic.List[object]]::new()
         $script:InfoLogs = [System.Collections.Generic.List[string]]::new()
@@ -106,7 +104,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 } |
             Should -Not -Throw
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') -PathType Leaf | Should -BeTrue
     }
@@ -126,7 +124,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama
 
         $chat = @(Get-RestCall '/api/chat')
         $chat.Count | Should -Be 1
@@ -149,7 +147,7 @@ Describe 'Llm.Ollama' {
 
         $err = $null
         try {
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2
         }
         catch {
             $err = $_
@@ -178,7 +176,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2
 
         @(Get-RestCall '/api/pull').Count | Should -Be 0
         $chat = @(Get-RestCall '/api/chat')
@@ -210,7 +208,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model exemple
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model exemple
 
         @(Get-RestCall '/api/pull').Count | Should -Be 0
         @(Get-RestCall '/api/chat').Count | Should -Be 1
@@ -231,7 +229,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 -AllowModelDownload
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 -AllowModelDownload
 
         @(Get-RestCall '/api/pull').Count | Should -Be 0
         @(Get-RestCall '/api/chat').Count | Should -Be 1
@@ -251,7 +249,7 @@ Describe 'Llm.Ollama' {
 
         $err = $null
         try {
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2
         }
         catch {
             $err = $_
@@ -282,7 +280,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 -AllowModelDownload
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 -AllowModelDownload
 
         $script:RestCalls.Count | Should -Be 3
         $script:RestCalls[0].Uri | Should -Match '/api/tags'
@@ -308,7 +306,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b'
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b'
 
         $chat = @(Get-RestCall '/api/chat')
         $parsed = ConvertFrom-OllamaRequestBody $chat[0].Body
@@ -332,7 +330,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b[thinking]'
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b[thinking]'
 
         $chat = @(Get-RestCall '/api/chat')
         $chat.Count | Should -Be 1
@@ -356,9 +354,9 @@ Describe 'Llm.Ollama' {
             throw 'Ollama ne devait pas être appelé'
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b[thinking=high]' } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b[thinking=high]' } |
             Should -Throw -ExpectedMessage '*réservée à Gemini*'
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b[thinking=high]' } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b[thinking=high]' } |
             Should -Throw -ExpectedMessage '*Avec Ollama, utilisez soit*'
         @(Get-RestCall '/api/tags').Count | Should -Be 0
         Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
@@ -378,7 +376,7 @@ Describe 'Llm.Ollama' {
 
         $err = $null
         try {
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b[thinking]'
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b[thinking]'
         }
         catch {
             $err = $_
@@ -409,7 +407,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b[thinking]' -AllowModelDownload
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b[thinking]' -AllowModelDownload
 
         $pull = ConvertFrom-OllamaRequestBody (Get-RestCall '/api/pull')[0].Body
         $pull.model | Should -Be 'qwen3.5:9b'
@@ -441,7 +439,7 @@ Describe 'Llm.Ollama' {
 
         $err = $null
         try {
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 -AllowModelDownload
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 -AllowModelDownload
         }
         catch {
             $err = $_
@@ -470,7 +468,7 @@ Describe 'Llm.Ollama' {
 
         $err = $null
         try {
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 -AllowModelDownload
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 -AllowModelDownload
         }
         catch {
             $err = $_
@@ -499,7 +497,7 @@ Describe 'Llm.Ollama' {
 
         $err = $null
         try {
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 -AllowModelDownload
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 -AllowModelDownload
         }
         catch {
             $err = $_
@@ -524,7 +522,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2
 
         $output = Join-Path $script:Work 'episode.fr.ass'
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
@@ -550,7 +548,7 @@ Describe 'Llm.Ollama' {
         }
 
         $warn = $null
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 -WarningVariable warn -WarningAction Continue
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 -WarningVariable warn -WarningAction Continue
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
@@ -571,7 +569,7 @@ Describe 'Llm.Ollama' {
             throw "URI inattendue : $u"
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 } |
             Should -Throw -ExpectedMessage '*vide*'
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
@@ -601,7 +599,7 @@ Describe 'Llm.Ollama' {
                 throw "URI inattendue : $u"
             }
 
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b'
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b'
 
             $script:InfoLogs | Should -Contain "Invocation d'Ollama avec 'qwen3.5:9b' (thinking=false)..."
         }
@@ -619,7 +617,7 @@ Describe 'Llm.Ollama' {
                 throw "URI inattendue : $u"
             }
 
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b[thinking]'
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b[thinking]'
 
             $script:InfoLogs | Should -Contain "Invocation d'Ollama avec 'qwen3.5:9b' (thinking=true)..."
             @($script:InfoLogs | Where-Object { $_ -like '*qwen3.5:9b[thinking]*' }) | Should -HaveCount 0
@@ -641,7 +639,7 @@ Describe 'Llm.Ollama' {
                 throw "URI inattendue : $u"
             }
 
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b' -AllowModelDownload
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b' -AllowModelDownload
 
             $download = Find-InfoLogIndex "Téléchargement du modèle Ollama 'qwen3.5:9b'..."
             $done = Find-InfoLogIndex "Modèle Ollama 'qwen3.5:9b' téléchargé."
@@ -664,7 +662,7 @@ Describe 'Llm.Ollama' {
                 throw "URI inattendue : $u"
             }
 
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model 'qwen3.5:9b'
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model 'qwen3.5:9b'
 
             @($script:InfoLogs | Where-Object { $_ -like '*Téléchargement du modèle*' }) | Should -HaveCount 0
             $script:InfoLogs | Should -Contain "Invocation d'Ollama avec 'qwen3.5:9b' (thinking=false)..."
@@ -684,7 +682,7 @@ Describe 'Llm.Ollama' {
             }
 
             {
-                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2 -AllowModelDownload
+                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 -AllowModelDownload
             } | Should -Throw
 
             $script:InfoLogs | Should -Contain "Téléchargement du modèle Ollama 'llama3.2'..."
@@ -703,7 +701,7 @@ Describe 'Llm.Ollama' {
             }
 
             {
-                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2
+                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2
             } | Should -Throw -ExpectedMessage '*AllowModelDownload*'
 
             @($script:InfoLogs | Where-Object { $_ -like '*Téléchargement du modèle*' }) | Should -HaveCount 0
@@ -721,7 +719,7 @@ Describe 'Llm.Ollama' {
             }
 
             {
-                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama -Model llama3.2
+                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2
             } | Should -Throw -ExpectedMessage '*localhost:11434*'
 
             @($script:InfoLogs | Where-Object { $_ -like '*Invocation d''Ollama*' }) | Should -HaveCount 0

@@ -206,10 +206,8 @@ Describe 'chargement paresseux des providers LLM' {
             $script:Work = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
             New-Item -ItemType Directory -Path $script:Work | Out-Null
             $script:SubtitlePath = Join-Path $script:Work 'episode.ass'
-            $script:TranscriptPath = Join-Path $script:Work 'episode.whisper.txt'
             $script:HelloJson = '[{"cueId":1,"text":"Bonjour"}]'
             Set-Content -LiteralPath $script:SubtitlePath -Value "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello`n" -Encoding utf8
-            Set-Content -LiteralPath $script:TranscriptPath -Value 'こんにちは' -Encoding utf8
             $script:SavedLlmPrivateRoot = InModuleScope 'Tetram.Media.Translation' {
                 $script:LlmPrivateRoot
             }
@@ -240,7 +238,7 @@ Describe 'chargement paresseux des providers LLM' {
                 New-GeminiStopResponse $script:HelloJson
             }
 
-            { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Gemini } |
+            { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Gemini } |
                 Should -Not -Throw
         }
 
@@ -267,7 +265,7 @@ Describe 'chargement paresseux des providers LLM' {
                 throw "URI inattendue : $u"
             }
 
-            { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Ollama } |
+            { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama } |
                 Should -Not -Throw
         }
     }
