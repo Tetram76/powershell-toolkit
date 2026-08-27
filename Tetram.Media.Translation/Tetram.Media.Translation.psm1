@@ -49,26 +49,6 @@ function ConvertTo-FrenchSubtitle {
     $ErrorActionPreference = 'Stop'
 
 
-    # --- Configuration -----------------------------------------------------------
-
-    if ([string]::IsNullOrWhiteSpace($Model)) {
-        if ($Provider -eq 'Ollama') {
-            $Model = 'qwen3.5:9b'
-        }
-        else {
-            $Model = 'gemini-3.6-flash'
-        }
-    }
-
-    if ($AllowModelDownload -and $Provider -ne 'Ollama') {
-        throw '-AllowModelDownload est applicable uniquement avec -Provider Ollama.'
-    }
-
-    if ($Provider -eq 'Gemini' -and [string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
-        throw 'La variable d''environnement GEMINI_API_KEY n''est pas définie.'
-    }
-
-
     # --- Chemin de sortie --------------------------------------------------------
 
     $subtitleFile = Get-Item -LiteralPath $SubtitlePath
