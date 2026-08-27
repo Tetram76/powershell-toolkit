@@ -6,6 +6,7 @@ Set-StrictMode -Version 3.0
     Import-Module -Name (Join-Path $PSScriptRoot '..' $_) -Force
 }
 
+. (Join-Path $PSScriptRoot 'Private' 'CompactWhisper.ps1')
 . (Join-Path $PSScriptRoot 'Private' 'Merge.ps1')
 . (Join-Path $PSScriptRoot 'Private' 'Llm.ps1')
 
@@ -19,16 +20,22 @@ function ConvertTo-SecondarySourcePromptPart {
     if ($extension.Equals('.json', [StringComparison]::OrdinalIgnoreCase)) {
         $rawJson = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
         try {
-            # Garde syntaxique uniquement : le prompt doit recevoir le JSON Whisper d'origine, pas une version réémise.
-            $null = ConvertFrom-Json -InputObject $rawJson -ErrorAction Stop
+            $whisper = ConvertFrom-Json -InputObject $rawJson -ErrorAction Stop
         }
         catch {
             throw "La source secondaire n'est pas un JSON valide : $Path"
         }
 
+        try {
+            $compactJson = ConvertTo-CompactWhisperJson -InputObject $whisper
+        }
+        catch {
+            throw "La source secondaire n'a pas la structure Whisper attendue : $Path"
+        }
+
         return @"
 ===== SOURCE SECONDAIRE $Index — TRANSCRIPTION WHISPER JSON =====
-$rawJson
+$compactJson
 ===== FIN SOURCE SECONDAIRE $Index =====
 "@
     }
