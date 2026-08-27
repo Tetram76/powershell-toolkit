@@ -45,9 +45,11 @@ BeforeAll {
     }
 
     function script:Get-PromptPartByMarker($Request, [string] $Marker) {
+        # Les instructions nomment les mêmes types : seuls les blocs délimités par ===== sont des sources.
+        $escaped = [regex]::Escape($Marker)
         $part = @(
             Get-GeminiPromptText $Request |
-                Where-Object { $_ -match [regex]::Escape($Marker) }
+                Where-Object { $_ -match $escaped -and $_ -match '(?m)^=====' }
         )
         if ($part.Count -ne 1) {
             throw "part '$Marker' introuvable (count=$($part.Count))"
@@ -83,12 +85,11 @@ Describe 'Tetram.Media.Translation manifest' {
         $prompt = Get-Content -LiteralPath $promptPath -Raw -Encoding utf8
 
         $prompt | Should -Match "Aucune source n'est autoritaire linguistiquement"
-        $prompt | Should -Match 'structure technique finale'
-        $prompt | Should -Match 'Ne jamais préférer son sens uniquement parce'
-        $prompt | Should -Match 'ne correspond pas nécessairement'
-        $prompt | Should -Match 'comme des indices, jamais comme une vérité absolue'
-        $prompt | Should -Match "L'ordre des sources secondaires"
-        $prompt | Should -Match 'ne représente aucune priorité'
+        $prompt | Should -Match 'autoritaire uniquement pour la structure finale'
+        $prompt | Should -Match 'Ne préfère jamais son interprétation uniquement parce'
+        $prompt | Should -Match 'par son numéro ou sa position'
+        $prompt | Should -Match 'éléments diagnostiques'
+        $prompt | Should -Match "ordre d'apparition dans le prompt ne représente aucune priorité"
         $prompt | Should -Not -Match 'Lorsque la transcription japonaise est claire'
     }
 }
