@@ -4,13 +4,13 @@
     <command:details>
       <command:name>ConvertTo-FrenchSubtitle</command:name>
       <maml:description>
-        <maml:para>Produit un fichier de sous-titres français à partir d'un sous-titre source et d'une transcription Whisper, via Gemini ou Ollama.</maml:para>
+        <maml:para>Produit un fichier de sous-titres français à partir d'une source principale et de sources secondaires facultatives, via Gemini ou Ollama.</maml:para>
       </maml:description>
       <command:verb>ConvertTo</command:verb>
       <command:noun>FrenchSubtitle</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Importer `.\Tetram.Media.Translation` (PowerShell 7+). La commande parse la source principale en cues canoniques (`cueId`, `start`, `end`, `text`) et envoie ce JSON au modèle, avec la transcription Whisper telle quelle. Le modèle retourne une proposition JSON `{ cueId, text }`.
+      <maml:para>Importer `.\Tetram.Media.Translation` (PowerShell 7+). `-SubtitlePath` est la source principale obligatoire : elle définit la structure finale (cues, `cueId`, timestamps). La commande parse cette source en cues canoniques (`cueId`, `start`, `end`, `text`) et envoie ce JSON au modèle. `-SecondarySourcePath` accepte 0..N fichiers complémentaires : sous-titres SRT/ASS/SSA (JSON `start`/`end`/`text`, sans `cueId`) ou transcriptions Whisper JSON (contenu brut après validation syntaxique). Aucune source n'est une référence linguistique absolue. Le modèle retourne une proposition JSON `{ cueId, text }`.
 
 Le fournisseur se choisit avec `-Provider` (`Gemini` ou `Ollama`). Sans `-Provider`, Gemini est utilisé.
 
@@ -158,12 +158,12 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
             <maml:name>System.String</maml:name>
           </dev:type>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>TranscriptPath</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>SecondarySourcePath</maml:name>
           <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
           <dev:type>
-            <maml:name>System.String</maml:name>
+            <maml:name>System.String[]</maml:name>
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
@@ -235,20 +235,20 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
           <maml:name>System.String</maml:name>
         </dev:type>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
-        <maml:name>SubtitlePath</maml:name>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>SecondarySourcePath</maml:name>
         <maml:description>
-          <maml:para>Fichier de sous-titres source. Doit exister et être un fichier.</maml:para>
+          <maml:para>0..N sources complémentaires : sous-titres SRT/ASS/SSA ou transcriptions Whisper JSON. Facultatif. L'ordre fourni ne représente aucune priorité linguistique.</maml:para>
         </maml:description>
-        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
         <dev:type>
-          <maml:name>System.String</maml:name>
+          <maml:name>System.String[]</maml:name>
         </dev:type>
       </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
-        <maml:name>TranscriptPath</maml:name>
+        <maml:name>SubtitlePath</maml:name>
         <maml:description>
-          <maml:para>Fichier de transcription Whisper. Doit exister et être un fichier.</maml:para>
+          <maml:para>Source principale obligatoire. Définit la structure finale (ordre des cues, `cueId`, timestamps, reconstruction). Doit exister et être un fichier.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -260,7 +260,7 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Prérequis : PowerShell 7+. Les chemins `-SubtitlePath` et `-TranscriptPath` sont littéraux (pas de jokers). La commande lève une exception si la sortie ou le `.raw.json` existe déjà, ou si la réponse du modèle est inutilisable au niveau transport : dans ces cas aucun `.raw.json` n'est écrit. Un échec de reconstruction (JSON incomplet ou invalide, contrat ASS `{...}` / `\N`) conserve le `.raw.json` et émet un warning.
+        <maml:para>Prérequis : PowerShell 7+. Les chemins `-SubtitlePath` et `-SecondarySourcePath` sont littéraux (pas de jokers). `-SubtitlePath` est obligatoire. `-SecondarySourcePath` accepte 0..N fichiers. La commande lève une exception si la sortie ou le `.raw.json` existe déjà, ou si la réponse du modèle est inutilisable au niveau transport : dans ces cas aucun `.raw.json` n'est écrit. Un échec de reconstruction (JSON incomplet ou invalide, contrat ASS `{...}` / `\N`) conserve le `.raw.json` et émet un warning.
 
 Gemini : `GEMINI_API_KEY` obligatoire ; modèle par défaut `gemini-3.6-flash` ; thinking projet `low` sans option, `medium` avec `[thinking]`, niveau explicite avec `[thinking=&lt;level&gt;]` (`minimal`, `low`, `medium`, `high`).
 
@@ -269,17 +269,23 @@ Ollama : doit être installé et démarré (`winget install --id Ollama.Ollama -
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>--------- Example 1: Traduire un couple sous-titre + transcription ---------</maml:title>
+        <maml:title>--------- Example 1: Traduire une source principale avec des sources secondaires ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt'</dev:code>
+        <dev:code>ConvertTo-FrenchSubtitle `
+    -SubtitlePath 'D:\Media\episode.en.ass' `
+    -SecondarySourcePath @(
+        'D:\Media\episode.alt.srt',
+        'D:\Media\episode.whisper-large-v3.json',
+        'D:\Media\episode.other.ass'
+    )</dev:code>
         <dev:remarks>
-          <maml:para>Le fichier traduit est écrit à côté de la source, avec le suffixe `.fr`. Gemini est utilisé.</maml:para>
+          <maml:para>Le fichier traduit est écrit à côté de la source, avec le suffixe `.fr`. Gemini est utilisé. `-SecondarySourcePath` est facultatif.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 2: Choisir le fichier de sortie ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -OutputPath 'D:\Media\episode.fr.ass'</dev:code>
+        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -OutputPath 'D:\Media\episode.fr.ass'</dev:code>
         <dev:remarks>
           <maml:para>Échoue si `D:\Media\episode.fr.ass` existe déjà.</maml:para>
         </dev:remarks>
@@ -287,19 +293,19 @@ Ollama : doit être installé et démarré (`winget install --id Ollama.Ollama -
       <command:example>
         <maml:title>--------- Example 3: Choisir le modèle Gemini ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Model 'gemini-3.6-flash'</dev:code>
+        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -Model 'gemini-3.6-flash'</dev:code>
         <dev:remarks />
       </command:example>
       <command:example>
         <maml:title>--------- Example 3b: Activer le thinking Gemini ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Model 'gemini-3.6-flash[thinking=high]'</dev:code>
+        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -Model 'gemini-3.6-flash[thinking=high]'</dev:code>
         <dev:remarks />
       </command:example>
       <command:example>
         <maml:title>--------- Example 4: Traduire via Ollama ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama</dev:code>
+        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -Provider Ollama</dev:code>
         <dev:remarks>
           <maml:para>Ollama doit déjà tourner sur `http://localhost:11434`. Sans `-Model`, `qwen3.5:9b` est utilisé.</maml:para>
         </dev:remarks>
@@ -307,7 +313,7 @@ Ollama : doit être installé et démarré (`winget install --id Ollama.Ollama -
       <command:example>
         <maml:title>--------- Example 5: Autoriser le téléchargement d'un modèle Ollama absent ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama -Model llama3.2 -AllowModelDownload</dev:code>
+        <dev:code>ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -Provider Ollama -Model llama3.2 -AllowModelDownload</dev:code>
         <dev:remarks>
           <maml:para>Si le modèle n'est pas installé localement, la commande appelle l'API Ollama pour le télécharger, puis lance la génération.</maml:para>
         </dev:remarks>

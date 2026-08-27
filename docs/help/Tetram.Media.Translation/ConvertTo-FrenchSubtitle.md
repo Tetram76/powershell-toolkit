@@ -13,14 +13,14 @@ title: ConvertTo-FrenchSubtitle
 
 ## SYNOPSIS
 
-Produit un fichier de sous-titres français à partir d'un sous-titre source et d'une transcription Whisper, via Gemini ou Ollama.
+Produit un fichier de sous-titres français à partir d'une source principale et de sources secondaires facultatives, via Gemini ou Ollama.
 
 ## SYNTAX
 
 ### __AllParameterSets
 
 ```
-ConvertTo-FrenchSubtitle -SubtitlePath <string> -TranscriptPath <string> [-OutputPath <string>]
+ConvertTo-FrenchSubtitle -SubtitlePath <string> [-SecondarySourcePath <string[]>] [-OutputPath <string>]
  [-Provider {Gemini | Ollama}] [-Model <string>] [-AllowModelDownload] [<CommonParameters>]
 ```
 
@@ -28,7 +28,7 @@ ConvertTo-FrenchSubtitle -SubtitlePath <string> -TranscriptPath <string> [-Outpu
 
 ## DESCRIPTION
 
-Importer `.\Tetram.Media.Translation` (PowerShell 7+). La commande parse la source principale en cues canoniques (`cueId`, `start`, `end`, `text`) et envoie ce JSON au modèle, avec la transcription Whisper telle quelle. Le modèle retourne une proposition JSON `{ cueId, text }`.
+Importer `.\Tetram.Media.Translation` (PowerShell 7+). `-SubtitlePath` est la source principale obligatoire : elle définit la structure finale (cues, `cueId`, timestamps). La commande parse cette source en cues canoniques (`cueId`, `start`, `end`, `text`) et envoie ce JSON au modèle. `-SecondarySourcePath` accepte 0..N fichiers complémentaires : sous-titres SRT/ASS/SSA (JSON `start`/`end`/`text`, sans `cueId`) ou transcriptions Whisper JSON (contenu brut après validation syntaxique). Aucune source n'est une référence linguistique absolue. Le modèle retourne une proposition JSON `{ cueId, text }`.
 
 Le fournisseur se choisit avec `-Provider` (`Gemini` ou `Ollama`). Sans `-Provider`, Gemini est utilisé.
 
@@ -167,12 +167,18 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
 
 ## EXAMPLES
 
-### Example 1: Traduire un couple sous-titre + transcription
+### Example 1: Traduire une source principale avec des sources secondaires
 
-Le fichier traduit est écrit à côté de la source, avec le suffixe `.fr`. Gemini est utilisé.
+Le fichier traduit est écrit à côté de la source, avec le suffixe `.fr`. Gemini est utilisé. `-SecondarySourcePath` est facultatif.
 
 ```powershell
-ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt'
+ConvertTo-FrenchSubtitle `
+    -SubtitlePath 'D:\Media\episode.en.ass' `
+    -SecondarySourcePath @(
+        'D:\Media\episode.alt.srt',
+        'D:\Media\episode.whisper-large-v3.json',
+        'D:\Media\episode.other.ass'
+    )
 ```
 
 ### Example 2: Choisir le fichier de sortie
@@ -180,19 +186,19 @@ ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D
 Échoue si `D:\Media\episode.fr.ass` existe déjà.
 
 ```powershell
-ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -OutputPath 'D:\Media\episode.fr.ass'
+ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -OutputPath 'D:\Media\episode.fr.ass'
 ```
 
 ### Example 3: Choisir le modèle Gemini
 
 ```powershell
-ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Model 'gemini-3.6-flash'
+ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -Model 'gemini-3.6-flash'
 ```
 
 ### Example 3b: Activer le thinking Gemini
 
 ```powershell
-ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Model 'gemini-3.6-flash[thinking=high]'
+ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -Model 'gemini-3.6-flash[thinking=high]'
 ```
 
 ### Example 4: Traduire via Ollama
@@ -200,7 +206,7 @@ ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D
 Ollama doit déjà tourner sur `http://localhost:11434`. Sans `-Model`, `qwen3.5:9b` est utilisé.
 
 ```powershell
-ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama
+ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -Provider Ollama
 ```
 
 ### Example 5: Autoriser le téléchargement d'un modèle Ollama absent
@@ -208,7 +214,7 @@ ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D
 Si le modèle n'est pas installé localement, la commande appelle l'API Ollama pour le télécharger, puis lance la génération.
 
 ```powershell
-ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -TranscriptPath 'D:\Media\episode.ja.txt' -Provider Ollama -Model llama3.2 -AllowModelDownload
+ConvertTo-FrenchSubtitle -SubtitlePath 'D:\Media\episode.ass' -Provider Ollama -Model llama3.2 -AllowModelDownload
 ```
 
 ## PARAMETERS
@@ -301,7 +307,7 @@ HelpMessage: ''
 
 ### -SubtitlePath
 
-Fichier de sous-titres source. Doit exister et être un fichier.
+Source principale obligatoire. Définit la structure finale (ordre des cues, `cueId`, timestamps, reconstruction). Doit exister et être un fichier.
 
 ```yaml
 Type: System.String
@@ -320,19 +326,19 @@ AcceptedValues: []
 HelpMessage: ''
 ```
 
-### -TranscriptPath
+### -SecondarySourcePath
 
-Fichier de transcription Whisper. Doit exister et être un fichier.
+0..N sources complémentaires : sous-titres SRT/ASS/SSA ou transcriptions Whisper JSON. Facultatif. L'ordre fourni ne représente aucune priorité linguistique.
 
 ```yaml
-Type: System.String
+Type: System.String[]
 DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
 - Name: (All)
   Position: Named
-  IsRequired: true
+  IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
@@ -354,7 +360,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Prérequis : PowerShell 7+. Les chemins `-SubtitlePath` et `-TranscriptPath` sont littéraux (pas de jokers). La commande lève une exception si la sortie ou le `.raw.json` existe déjà, ou si la réponse du modèle est inutilisable au niveau transport : dans ces cas aucun `.raw.json` n'est écrit. Un échec de reconstruction (JSON incomplet ou invalide, contrat ASS `{...}` / `\N`) conserve le `.raw.json` et émet un warning.
+Prérequis : PowerShell 7+. Les chemins `-SubtitlePath` et `-SecondarySourcePath` sont littéraux (pas de jokers). `-SubtitlePath` est obligatoire. `-SecondarySourcePath` accepte 0..N fichiers. La commande lève une exception si la sortie ou le `.raw.json` existe déjà, ou si la réponse du modèle est inutilisable au niveau transport : dans ces cas aucun `.raw.json` n'est écrit. Un échec de reconstruction (JSON incomplet ou invalide, contrat ASS `{...}` / `\N`) conserve le `.raw.json` et émet un warning.
 
 Gemini : `GEMINI_API_KEY` obligatoire ; modèle par défaut `gemini-3.6-flash` ; thinking projet `low` sans option, `medium` avec `[thinking]`, niveau explicite avec `[thinking=<level>]` (`minimal`, `low`, `medium`, `high`).
 

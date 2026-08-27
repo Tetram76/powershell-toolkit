@@ -205,6 +205,21 @@ function Get-CanonicalAssCue {
     }
 }
 
+function ConvertTo-SecondarySubtitleCueJson {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][object[]] $Cue)
+
+    $stripped = @(
+        foreach ($item in $Cue) {
+            [pscustomobject][ordered]@{
+                start = $item.start
+                end   = $item.end
+                text  = $item.text
+            }
+        }
+    )
+    return ConvertTo-CanonicalCueJson -Cue $stripped
+}
+
 function ConvertTo-CanonicalCueJson {
     param([Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][object[]] $Cue)
 
