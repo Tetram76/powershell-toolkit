@@ -171,7 +171,11 @@ $canonicalJson
     $utf8 = [Text.UTF8Encoding]::new($false)
     [IO.File]::WriteAllText($rawPath, $result, $utf8)
 
-    Write-InfoLog -Text "Réponse brute du modèle enregistrée : $rawPath" -Force
+    $rawLog = "Réponse brute du modèle enregistrée : $rawPath"
+    if ($null -ne $script:LastLlmResponseTokenCount) {
+        $rawLog = "$rawLog ($($script:LastLlmResponseTokenCount) tokens réels)"
+    }
+    Write-InfoLog -Text $rawLog -Force
 
     try {
         Write-InfoLog -Text 'Reconstruction du sous-titre final...' -Force
