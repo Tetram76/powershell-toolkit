@@ -1,4 +1,4 @@
-# Étendre la suite autour de Llm.Gemini.ps1 (Invoke-GeminiTranslationLlm).
+# Étendre la suite autour de Llm.Gemini.ps1 (Invoke-ProviderTranslationLlm).
 #
 # RepoRoot depuis tests/<Module>/Private : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
 # Import-Module (Join-Path $RepoRoot 'Tetram.Media.Translation') -Force
