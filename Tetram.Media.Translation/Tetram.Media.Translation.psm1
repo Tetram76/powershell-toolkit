@@ -9,6 +9,42 @@ Set-StrictMode -Version 3.0
 . (Join-Path $PSScriptRoot 'Private' 'Merge.ps1')
 . (Join-Path $PSScriptRoot 'Private' 'Llm.ps1')
 
+function ConvertTo-SecondarySourcePromptPart {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][int] $Index
+    )
+
+    $extension = [IO.Path]::GetExtension($Path)
+    if ($extension.Equals('.json', [StringComparison]::OrdinalIgnoreCase)) {
+        $rawJson = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+        try {
+            # Garde syntaxique uniquement : le prompt doit recevoir le JSON Whisper d'origine, pas une version réémise.
+            $null = ConvertFrom-Json -InputObject $rawJson -ErrorAction Stop
+        }
+        catch {
+            throw "La source secondaire n'est pas un JSON valide : $Path"
+        }
+
+        return @"
+===== SOURCE SECONDAIRE $Index — TRANSCRIPTION WHISPER JSON =====
+$rawJson
+===== FIN SOURCE SECONDAIRE $Index =====
+"@
+    }
+
+    $file = Get-Item -LiteralPath $Path
+    $source = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    $cue = @(Get-CanonicalSubtitleCue -Source $source -Extension $file.Extension)
+    $json = ConvertTo-SecondarySubtitleCueJson -Cue $cue
+
+    return @"
+===== SOURCE SECONDAIRE $Index — SOUS-TITRE =====
+$json
+===== FIN SOURCE SECONDAIRE $Index =====
+"@
+}
+
 function Get-RawSubtitleOutputPath {
     param([Parameter(Mandatory)][string] $OutputPath)
 
@@ -31,9 +67,9 @@ function ConvertTo-FrenchSubtitle {
         [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
         [string] $SubtitlePath,
 
-        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
         [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
-        [string] $TranscriptPath,
+        [string[]] $SecondarySourcePath,
 
         [string] $OutputPath,
 
@@ -75,7 +111,6 @@ function ConvertTo-FrenchSubtitle {
     # --- Lecture des sources -----------------------------------------------------
 
     $subtitle = Get-Content -LiteralPath $SubtitlePath -Raw -Encoding UTF8
-    $transcript = Get-Content -LiteralPath $TranscriptPath -Raw -Encoding UTF8
 
     $canonicalCue = @(Get-CanonicalSubtitleCue -Source $subtitle -Extension $subtitleFile.Extension)
     $canonicalJson = ConvertTo-CanonicalCueJson -Cue $canonicalCue
@@ -97,15 +132,9 @@ function ConvertTo-FrenchSubtitle {
         -Encoding UTF8
 
     $subtitlePart = @"
-===== SOURCE PRINCIPALE — CUES CANONIQUES =====
+===== SOURCE PRINCIPALE — STRUCTURE TECHNIQUE FINALE =====
 $canonicalJson
 ===== FIN SOURCE PRINCIPALE =====
-"@
-
-    $transcriptPart = @"
-===== TRANSCRIPTION WHISPER =====
-$transcript
-===== FIN TRANSCRIPTION WHISPER =====
 "@
 
 
@@ -114,8 +143,14 @@ $transcript
     $promptPart = @(
         $instructions
         $subtitlePart
-        $transcriptPart
     )
+
+    # foreach sur $null n'itère pas ; @($null) produirait une itération vide.
+    $secondaryIndex = 0
+    foreach ($path in $SecondarySourcePath) {
+        $secondaryIndex++
+        $promptPart += ConvertTo-SecondarySourcePromptPart -Path $path -Index $secondaryIndex
+    }
 
     $result = Invoke-TranslationLlm `
         -Provider $Provider `

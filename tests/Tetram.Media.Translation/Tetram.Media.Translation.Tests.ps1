@@ -34,14 +34,23 @@ BeforeAll {
         ConvertFrom-Json -InputObject $Body -Depth 20
     }
 
+    function script:Get-GeminiPromptText($Request) {
+        return @(
+            $Request.contents[0].parts | ForEach-Object { $_.text }
+        )
+    }
+
     function script:Get-CanonicalCuePart($Request) {
+        return Get-PromptPartByMarker $Request '===== SOURCE PRINCIPALE — STRUCTURE TECHNIQUE FINALE ====='
+    }
+
+    function script:Get-PromptPartByMarker($Request, [string] $Marker) {
         $part = @(
-            $Request.contents[0].parts |
-                ForEach-Object { $_.text } |
-                Where-Object { $_ -match 'CUES CANONIQUES' }
+            Get-GeminiPromptText $Request |
+                Where-Object { $_ -match [regex]::Escape($Marker) }
         )
         if ($part.Count -ne 1) {
-            throw "part de source principale introuvable (count=$($part.Count))"
+            throw "part '$Marker' introuvable (count=$($part.Count))"
         }
         return $part[0]
     }
@@ -67,6 +76,20 @@ Describe 'Tetram.Media.Translation manifest' {
         Test-Path -LiteralPath $promptPath -PathType Leaf | Should -BeTrue
         Test-Path -LiteralPath (Join-Path $script:ModuleRootTranslation 'Resources' 'ConvertTo-FrenchSubtitle.prompt.md') |
             Should -BeFalse
+    }
+
+    It 'établit les rôles des sources dans le prompt métier' {
+        $promptPath = Join-Path $script:ModuleRootTranslation 'Resources' 'ConvertTo-FrenchSubtitle.generate.prompt.md'
+        $prompt = Get-Content -LiteralPath $promptPath -Raw -Encoding utf8
+
+        $prompt | Should -Match "Aucune source n'est autoritaire linguistiquement"
+        $prompt | Should -Match 'structure technique finale'
+        $prompt | Should -Match 'Ne jamais préférer son sens uniquement parce'
+        $prompt | Should -Match 'ne correspond pas nécessairement'
+        $prompt | Should -Match 'comme des indices, jamais comme une vérité absolue'
+        $prompt | Should -Match "L'ordre des sources secondaires"
+        $prompt | Should -Match 'ne représente aucune priorité'
+        $prompt | Should -Not -Match 'Lorsque la transcription japonaise est claire'
     }
 }
 
@@ -106,11 +129,9 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $script:Work = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:Work | Out-Null
         $script:SubtitlePath = Join-Path $script:Work 'episode.ass'
-        $script:TranscriptPath = Join-Path $script:Work 'episode.whisper.txt'
         $script:MinimalAssHello = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello`n"
         $script:HelloJson = '[{"cueId":1,"text":"Bonjour"}]'
         Set-Content -LiteralPath $script:SubtitlePath -Value $script:MinimalAssHello -Encoding utf8
-        Set-Content -LiteralPath $script:TranscriptPath -Value 'こんにちは' -Encoding utf8
         $script:LastGeminiBody = $null
         $script:RestCalls = [System.Collections.Generic.List[object]]::new()
         $script:InfoLogs = [System.Collections.Generic.List[string]]::new()
@@ -121,12 +142,20 @@ Describe 'ConvertTo-FrenchSubtitle' {
     }
 
     It 'refuse un sous-titre introuvable au binding' {
-        { ConvertTo-FrenchSubtitle -SubtitlePath (Join-Path $script:Work 'absent.ass') -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath (Join-Path $script:Work 'absent.ass') } |
             Should -Throw
     }
 
-    It 'refuse une transcription introuvable au binding' {
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath (Join-Path $script:Work 'absent.txt') } |
+    It 'expose SubtitlePath obligatoire et SecondarySourcePath optionnel multi-fichiers' {
+        $cmd = Get-Command -Name ConvertTo-FrenchSubtitle
+        $cmd.Parameters.ContainsKey('TranscriptPath') | Should -BeFalse
+        @($cmd.Parameters['SubtitlePath'].Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] }).Mandatory | Should -BeTrue
+        $cmd.Parameters['SecondarySourcePath'].ParameterType | Should -Be ([string[]])
+        @($cmd.Parameters['SecondarySourcePath'].Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] }).Mandatory | Should -BeFalse
+    }
+
+    It 'refuse une source secondaire introuvable au binding' {
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath (Join-Path $script:Work 'absent.json') } |
             Should -Throw
     }
 
@@ -140,7 +169,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             return Microsoft.PowerShell.Management\Test-Path @PSBoundParameters
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
             Should -Throw -ExpectedMessage "*prompt*"
     }
 
@@ -148,7 +177,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $env:GEMINI_API_KEY = 'test-key'
         $existing = Join-Path $script:Work 'episode.fr.ass'
         Set-Content -LiteralPath $existing -Value 'deja la' -Encoding utf8
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
             Should -Throw -ExpectedMessage "*existe déjà*"
     }
 
@@ -160,7 +189,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             throw 'Gemini ne devait pas être appelé'
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
             Should -Throw -ExpectedMessage '*Extension*'
         Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
     }
@@ -171,8 +200,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
-
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $output = Join-Path $script:Work 'episode.fr.ass'
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $output -PathType Leaf | Should -BeTrue
@@ -196,8 +224,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             New-GeminiStopResponse '[{"cueId":1,"text":"Bonjour"},{"cueId":2,"text":"Monde"}]'
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
-
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $part = Get-CanonicalCuePart $script:LastGeminiBody
         ([regex]::Matches($part, '"cueId"')).Count | Should -Be 2
         $part | Should -Match '"cueId":\s*1'
@@ -220,8 +247,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
-
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $part = Get-CanonicalCuePart $script:LastGeminiBody
         ([regex]::Matches($part, '"cueId"')).Count | Should -Be 1
         $part | Should -Match '"cueId":\s*1'
@@ -234,21 +260,126 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $part | Should -Not -Match 'Style'
     }
 
-    It 'envoie la transcription telle quelle même avec un découpage différent' {
+    It 'envoie un JSON Whisper secondaire brut après validation syntaxique' {
         $env:GEMINI_API_KEY = 'test-key'
-        $transcript = "0:00:00.000 --> 0:00:02.500 Hello there friend`n0:00:02.400 --> 0:00:05.000 How are you today extra segment"
-        Set-Content -LiteralPath $script:TranscriptPath -Value $transcript -Encoding utf8NoBOM -NoNewline
+        $whisperJson = '{  "text": "こんにちは", "unexpected_field": 99, "segments": [{"start": 1.0, "end": 2.0, "text": "こんにちは", "no_speech_prob": 0.01, "avg_logprob": -0.2}] }'
+        $whisperPath = Join-Path $script:Work 'episode.whisper-large-v3.json'
+        Set-Content -LiteralPath $whisperPath -Value $whisperJson -Encoding utf8NoBOM -NoNewline
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
             $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $whisperPath
 
-        $part = $script:LastGeminiBody.contents[0].parts[2].text
-        $part.Contains($transcript) | Should -BeTrue
-        $part | Should -Match '===== TRANSCRIPTION WHISPER ====='
-        $part | Should -Match '===== FIN TRANSCRIPTION WHISPER ====='
+        $part = Get-PromptPartByMarker $script:LastGeminiBody 'TRANSCRIPTION WHISPER JSON'
+        $part.Contains($whisperJson) | Should -BeTrue
+        $part | Should -Match '===== SOURCE SECONDAIRE 1 — TRANSCRIPTION WHISPER JSON ====='
+        $part | Should -Match '===== FIN SOURCE SECONDAIRE 1 ====='
+        $part | Should -Not -Match '"cueId"'
+    }
+
+    It 'envoie un sous-titre secondaire en start/end/text sans cueId ni métadonnées techniques' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $altSrt = Join-Path $script:Work 'episode.alt.srt'
+        $altAss = Join-Path $script:Work 'episode.other.ass'
+        Set-Content -LiteralPath $altSrt -Value "99`n00:00:10,000 --> 00:00:11,000`nTexte alternatif`n" -Encoding utf8
+        Set-Content -LiteralPath $altAss -Value "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 5,0:00:20.00,0:00:21.00,Default,,10,20,30,,Autre version`n" -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+            New-GeminiStopResponse $script:HelloJson
+        }
+
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath @($altSrt, $altAss)
+
+        $srtPart = Get-PromptPartByMarker $script:LastGeminiBody 'SOURCE SECONDAIRE 1 — SOUS-TITRE'
+        $srtPart | Should -Match '"start":\s*"00:00:10,000"'
+        $srtPart | Should -Match '"end":\s*"00:00:11,000"'
+        $srtPart | Should -Match '"text":\s*"Texte alternatif"'
+        $srtPart | Should -Not -Match '"cueId"'
+
+        $assPart = Get-PromptPartByMarker $script:LastGeminiBody 'SOURCE SECONDAIRE 2 — SOUS-TITRE'
+        $assPart | Should -Match '"start":\s*"0:00:20.00"'
+        $assPart | Should -Match '"end":\s*"0:00:21.00"'
+        $assPart | Should -Match '"text":\s*"Autre version"'
+        $assPart | Should -Not -Match '"cueId"'
+        $assPart | Should -Not -Match 'Layer'
+        $assPart | Should -Not -Match 'Style'
+        $assPart | Should -Not -Match 'Margin'
+        $assPart | Should -Not -Match 'Default'
+    }
+
+    It 'envoie toutes les sources mixtes dans le prompt, dans l''ordre fourni' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $altSrt = Join-Path $script:Work 'episode.alt.srt'
+        $whisperPath = Join-Path $script:Work 'episode.whisper-turbo.json'
+        $altAss = Join-Path $script:Work 'episode.other.ass'
+        $whisperJson = '{"text":"whisper-turbo","segments":[]}'
+        Set-Content -LiteralPath $altSrt -Value "1`n00:00:10,000 --> 00:00:11,000`nAlt SRT`n" -Encoding utf8
+        Set-Content -LiteralPath $whisperPath -Value $whisperJson -Encoding utf8NoBOM -NoNewline
+        Set-Content -LiteralPath $altAss -Value "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:20.00,0:00:21.00,Default,,0,0,0,,Alt ASS`n" -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+            New-GeminiStopResponse $script:HelloJson
+        }
+
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath @($altSrt, $whisperPath, $altAss)
+
+        $texts = Get-GeminiPromptText $script:LastGeminiBody
+        $joined = $texts -join "`n"
+        $joined | Should -Match '===== SOURCE PRINCIPALE — STRUCTURE TECHNIQUE FINALE ====='
+        $joined | Should -Match '===== SOURCE SECONDAIRE 1 — SOUS-TITRE ====='
+        $joined | Should -Match '===== SOURCE SECONDAIRE 2 — TRANSCRIPTION WHISPER JSON ====='
+        $joined | Should -Match '===== SOURCE SECONDAIRE 3 — SOUS-TITRE ====='
+        $joined.IndexOf('SOURCE SECONDAIRE 1') | Should -BeLessThan $joined.IndexOf('SOURCE SECONDAIRE 2')
+        $joined.IndexOf('SOURCE SECONDAIRE 2') | Should -BeLessThan $joined.IndexOf('SOURCE SECONDAIRE 3')
+        $joined | Should -Match 'Alt SRT'
+        $joined.Contains($whisperJson) | Should -BeTrue
+        $joined | Should -Match 'Alt ASS'
+    }
+
+    It 'refuse un JSON secondaire invalide avant tout appel réseau' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $badJson = Join-Path $script:Work 'broken.json'
+        Set-Content -LiteralPath $badJson -Value '{ ceci n''est pas du JSON' -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            throw 'Gemini ne devait pas être appelé'
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $badJson } |
+            Should -Throw -ExpectedMessage '*JSON*'
+        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
+    }
+
+    It 'refuse une extension secondaire non supportée avant tout appel réseau' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $badTxt = Join-Path $script:Work 'notes.txt'
+        Set-Content -LiteralPath $badTxt -Value 'pas une source' -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            throw 'Gemini ne devait pas être appelé'
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $badTxt } |
+            Should -Throw -ExpectedMessage '*Extension*'
+        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
+    }
+
+    It 'reconstruit exclusivement depuis la source principale malgré des secondaires divergents' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $altSrt = Join-Path $script:Work 'episode.alt.srt'
+        Set-Content -LiteralPath $altSrt -Value "1`n00:05:00,000 --> 00:05:01,000`nAutre cue`n`n2`n00:05:02,000 --> 00:05:03,000`nEncore`n" -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            New-GeminiStopResponse $script:HelloJson
+        }
+
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $altSrt
+
+        $written = (Get-Content -LiteralPath (Join-Path $script:Work 'episode.fr.ass') -Raw -Encoding utf8) -replace '\r\n', "`n"
+        $written | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
+        $written | Should -Not -Match 'Autre cue'
+        $written | Should -Not -Match 'Encore'
+        $written | Should -Not -Match '00:05:00'
+        @($written -split "`n" | Where-Object { $_ -like 'Dialogue:*' }).Count | Should -Be 1
     }
 
     It 'écrit sur OutputPath quand il est fourni' {
@@ -258,7 +389,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -OutputPath $custom
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -OutputPath $custom
 
         $written = (Get-Content -LiteralPath $custom -Raw -Encoding utf8) -replace '\r\n', "`n"
         $written | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
@@ -277,8 +408,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             New-GeminiStopResponse $json
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
-
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $output = Join-Path $script:Work 'episode.fr.srt'
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         $written = (Get-Content -LiteralPath $output -Raw -Encoding utf8) -replace '\r\n', "`n"
@@ -297,7 +427,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         }
 
         $warn = $null
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
@@ -313,8 +443,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             New-GeminiStopResponse '[{"cueId":3,"text":"Troisième"},{"cueId":1,"text":"Premier"},{"cueId":2,"text":"Deuxième"}]'
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
-
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $written = (Get-Content -LiteralPath (Join-Path $script:Work 'episode.fr.srt') -Raw -Encoding utf8) -replace '\r\n', "`n"
         $written | Should -Match '(?s)10\n00:00:01,000 --> 00:00:02,000\nPremier'
         $written | Should -Match '(?s)20\n00:00:03,000 --> 00:00:04,000\nDeuxième'
@@ -329,7 +458,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         }
 
         $warn = $null
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
@@ -345,7 +474,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         }
 
         $warn = $null
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
@@ -361,7 +490,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         }
 
         $warn = $null
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
@@ -377,7 +506,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         }
 
         $warn = $null
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
@@ -393,7 +522,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         }
 
         $warn = $null
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
@@ -410,7 +539,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         }
 
         $warn = $null
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
@@ -426,7 +555,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             throw 'Gemini ne devait pas être appelé'
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
             Should -Throw -ExpectedMessage '*existe déjà*'
         Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)).Trim() | Should -Be 'ne-pas-ecraser'
@@ -452,7 +581,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
 
             $warn = $null
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -WarningVariable warn -WarningAction Continue
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
 
             $raw = Join-Path $script:Work 'episode.fr.raw.json'
             $script:InfoLogs | Should -Contain "Réponse brute du modèle enregistrée : $raw"

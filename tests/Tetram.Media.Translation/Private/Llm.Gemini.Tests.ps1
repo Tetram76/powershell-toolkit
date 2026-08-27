@@ -58,11 +58,9 @@ Describe 'Llm.Gemini' {
         $script:Work = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:Work | Out-Null
         $script:SubtitlePath = Join-Path $script:Work 'episode.ass'
-        $script:TranscriptPath = Join-Path $script:Work 'episode.whisper.txt'
         $script:MinimalAssHello = "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello`n"
         $script:HelloJson = '[{"cueId":1,"text":"Bonjour"}]'
         Set-Content -LiteralPath $script:SubtitlePath -Value $script:MinimalAssHello -Encoding utf8
-        Set-Content -LiteralPath $script:TranscriptPath -Value 'こんにちは' -Encoding utf8
         $script:LastGeminiBody = $null
         $script:RestCalls = [System.Collections.Generic.List[object]]::new()
         $script:InfoLogs = [System.Collections.Generic.List[string]]::new()
@@ -78,7 +76,7 @@ Describe 'Llm.Gemini' {
             throw 'Gemini ne devait pas être appelé'
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
             Should -Throw -ExpectedMessage "*GEMINI_API_KEY*"
         Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
     }
@@ -92,7 +90,7 @@ Describe 'Llm.Gemini' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
             Should -Not -Throw
     }
 
@@ -103,8 +101,7 @@ Describe 'Llm.Gemini' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
-
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $script:LastGeminiBody.generationConfig.thinkingConfig.thinkingLevel | Should -Be 'low'
     }
 
@@ -118,7 +115,7 @@ Describe 'Llm.Gemini' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Model 'gemini-3.6-flash'
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash'
 
         $script:LastGeminiBody.generationConfig.thinkingConfig.thinkingLevel | Should -Be 'low'
     }
@@ -136,7 +133,7 @@ Describe 'Llm.Gemini' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Model 'gemini-3.6-flash[thinking]'
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking]'
 
         $script:LastGeminiBody.generationConfig.thinkingConfig.thinkingLevel | Should -Be 'medium'
     }
@@ -151,7 +148,7 @@ Describe 'Llm.Gemini' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Model 'gemini-3.6-flash[thinking=high]'
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking=high]'
 
         $script:LastGeminiBody.generationConfig.thinkingConfig.thinkingLevel | Should -Be 'high'
     }
@@ -163,7 +160,7 @@ Describe 'Llm.Gemini' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Model 'gemini-3.6-flash[thinking=minimal]'
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking=minimal]'
 
         $script:LastGeminiBody.generationConfig.thinkingConfig.thinkingLevel | Should -Be 'minimal'
     }
@@ -174,7 +171,7 @@ Describe 'Llm.Gemini' {
             throw 'Gemini ne devait pas être appelé'
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Model 'gemini-3.6-flash[thinking=turbo]' } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking=turbo]' } |
             Should -Throw -ExpectedMessage '*Niveau de thinking Gemini inconnu : turbo*'
         Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
     }
@@ -185,7 +182,7 @@ Describe 'Llm.Gemini' {
             throw 'Gemini ne devait pas être appelé'
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Model 'gemini-3.6-flash[fast]' } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[fast]' } |
             Should -Throw -ExpectedMessage '*Option de modèle inconnue : fast*'
         Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
     }
@@ -197,8 +194,7 @@ Describe 'Llm.Gemini' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
-
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $config = $script:LastGeminiBody.generationConfig
         $config.responseMimeType | Should -Be 'application/json'
         $names = @($config.responseSchema.items.properties.PSObject.Properties.Name | Sort-Object)
@@ -211,7 +207,7 @@ Describe 'Llm.Gemini' {
             [pscustomobject]@{ candidates = @() }
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
             Should -Throw -ExpectedMessage "*aucun candidat*"
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
     }
@@ -233,7 +229,7 @@ Describe 'Llm.Gemini' {
             }
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
             Should -Throw -ExpectedMessage "*MAX_TOKENS*"
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
     }
@@ -255,7 +251,7 @@ Describe 'Llm.Gemini' {
             }
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
             Should -Throw -ExpectedMessage "*résultat vide*"
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
     }
@@ -269,7 +265,7 @@ Describe 'Llm.Gemini' {
             New-GeminiStopResponse $script:HelloJson
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Model 'gemini-custom' } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-custom' } |
             Should -Not -Throw
     }
 
@@ -279,7 +275,7 @@ Describe 'Llm.Gemini' {
             throw 'Gemini ne devait pas être appelé'
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Provider Gemini -AllowModelDownload } |
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Gemini -AllowModelDownload } |
             Should -Throw -ExpectedMessage '*AllowModelDownload*Gemini*'
         Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
     }
@@ -301,8 +297,7 @@ Describe 'Llm.Gemini' {
                 New-GeminiStopResponse $script:HelloJson
             }
 
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
-
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
             $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
             Should -Invoke -ModuleName Tetram.Media.Translation Write-InfoLog -Times 1 -ParameterFilter {
                 [bool]$Force -and $Text -eq "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
@@ -315,7 +310,7 @@ Describe 'Llm.Gemini' {
                 New-GeminiStopResponse $script:HelloJson
             }
 
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath -Model 'gemini-3.6-flash[thinking]'
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Model 'gemini-3.6-flash[thinking]'
 
             $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=medium)..."
             @($script:InfoLogs | Where-Object { $_ -like '*gemini-3.6-flash[thinking]*' }) | Should -HaveCount 0
@@ -328,7 +323,7 @@ Describe 'Llm.Gemini' {
             }
 
             {
-                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
+                ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
             } | Should -Throw -ExpectedMessage '*aucun candidat*'
 
             $script:InfoLogs | Should -Contain "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
@@ -342,8 +337,7 @@ Describe 'Llm.Gemini' {
                 New-GeminiStopResponse $script:HelloJson
             }
 
-            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -TranscriptPath $script:TranscriptPath
-
+            ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
             $raw = Join-Path $script:Work 'episode.fr.raw.json'
             $invoke = Find-InfoLogIndex "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low)..."
             $rawLog = Find-InfoLogIndex "Réponse brute du modèle enregistrée : $raw"
