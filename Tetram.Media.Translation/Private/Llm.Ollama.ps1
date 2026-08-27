@@ -139,7 +139,7 @@ Avec Ollama, utilisez soit '<model>', soit '<model>[thinking]'.
     return $true
 }
 
-function Invoke-OllamaTranslationLlm {
+function Invoke-ProviderTranslationLlm {
     param(
         [AllowNull()]
         [AllowEmptyString()]
