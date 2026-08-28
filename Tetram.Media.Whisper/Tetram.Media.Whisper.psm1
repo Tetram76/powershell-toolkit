@@ -23,7 +23,7 @@ function Get-MediaTranscript {
         [int] $AudioTrack = 1,
 
         [ValidateSet('large-v2', 'large-v3-turbo', 'large-v3', 'kotoba-v2')]
-        [string] $Model = 'large-v2',
+        [string[]] $Model = 'large-v2',
 
         [ValidateSet(
                 'af', 'am', 'ar', 'as', 'az', 'ba', 'be', 'bg', 'bn', 'bo', 'br', 'bs', 'ca', 'cs', 'cy', 'da',
@@ -43,46 +43,51 @@ function Get-MediaTranscript {
     try {
         $exe = Get-WhisperPath -OverridePath $WhisperPath
 
-        # WhatIf : montrer l'intention sans créer l'espace temporaire d'exécution.
-        if ($WhatIfPreference) {
-            $outputDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
-        }
-        else {
-            $outputDir = New-WhisperTempDirectory
-        }
-
-        $whisperArgs = Get-WhisperArguments -Source $LiteralPath -Model $Model -UseLanguage $UseLanguage -OutputDir $outputDir -AudioTrack $AudioTrack
-        Write-DebugLog -Text ($whisperArgs -join ' ')
-
-        try {
-            $state = @{ ExitCode = $null }
-            Invoke-Whisper -Exe $exe -Arguments $whisperArgs -Cmdlet $PSCmdlet -State $state
-
-            # ExitCode nul = ShouldProcess a refusé (WhatIf), ce n'est pas un échec. Un code non nul en est un ;
-            # l'inverse n'est pas vrai, le binaire sortant en 0 même sans média trouvé.
-            if ($null -ne $state['ExitCode'] -and $state['ExitCode'] -ne 0) {
-                Write-ErrorLog -Text "faster-whisper-xxl a échoué (code $( $state['ExitCode'] )) sur '$LiteralPath'."
-                return
+        foreach ($currentModel in @($Model)) {
+            # WhatIf : montrer l'intention sans créer l'espace temporaire d'exécution.
+            if ($WhatIfPreference) {
+                $outputDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
+            }
+            else {
+                $outputDir = New-WhisperTempDirectory
             }
 
-            if ($null -eq $state['ExitCode']) {
-                return
-            }
+            $whisperArgs = Get-WhisperArguments -Source $LiteralPath -Model $currentModel -UseLanguage $UseLanguage -OutputDir $outputDir -AudioTrack $AudioTrack
+            Write-DebugLog -Text ($whisperArgs -join ' ')
 
-            $nativeJsons = @(Get-WhisperNativeJsonFromOutputDir -OutputDir $outputDir)
-            if ($nativeJsons.Count -eq 0) {
-                Write-ErrorLog -Text "Aucun JSON natif produit par faster-whisper-xxl pour '$LiteralPath'."
-                return
-            }
-            if ($nativeJsons.Count -gt 1) {
-                Write-ErrorLog -Text "Résultat natif ambigu pour '$LiteralPath' : $($nativeJsons.Count) JSON dans le dossier de sortie."
-                return
-            }
+            try {
+                $state = @{ ExitCode = $null }
+                Invoke-Whisper -Exe $exe -Arguments $whisperArgs -Cmdlet $PSCmdlet -State $state
 
-            Convert-WhisperNativeToTetram -NativeJsonPath $nativeJsons[0] -MediaPath $LiteralPath -Model $Model -UseLanguage $UseLanguage -AudioTrack $AudioTrack
-        }
-        finally {
-            Remove-WhisperTempDirectory -Path $outputDir
+                # ExitCode nul = ShouldProcess a refusé (WhatIf), ce n'est pas un échec. Un code non nul en est un ;
+                # l'inverse n'est pas vrai, le binaire sortant en 0 même sans média trouvé.
+                if ($null -ne $state['ExitCode'] -and $state['ExitCode'] -ne 0) {
+                    Write-ErrorLog -Text "faster-whisper-xxl a échoué (code $( $state['ExitCode'] )) sur '$LiteralPath' (modèle $currentModel)."
+                    continue
+                }
+
+                if ($null -eq $state['ExitCode']) {
+                    continue
+                }
+
+                $nativeJsons = @(Get-WhisperNativeJsonFromOutputDir -OutputDir $outputDir)
+                if ($nativeJsons.Count -eq 0) {
+                    Write-ErrorLog -Text "Aucun JSON natif produit par faster-whisper-xxl pour '$LiteralPath' (modèle $currentModel)."
+                    continue
+                }
+                if ($nativeJsons.Count -gt 1) {
+                    Write-ErrorLog -Text "Résultat natif ambigu pour '$LiteralPath' (modèle $currentModel) : $($nativeJsons.Count) JSON dans le dossier de sortie."
+                    continue
+                }
+
+                Convert-WhisperNativeToTetram -NativeJsonPath $nativeJsons[0] -MediaPath $LiteralPath -Model $currentModel -UseLanguage $UseLanguage -AudioTrack $AudioTrack
+            }
+            catch {
+                Write-ErrorLog -Text $_.Exception.Message
+            }
+            finally {
+                Remove-WhisperTempDirectory -Path $outputDir
+            }
         }
     }
     catch {
