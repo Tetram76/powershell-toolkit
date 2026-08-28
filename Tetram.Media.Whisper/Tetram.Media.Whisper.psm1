@@ -41,6 +41,7 @@ function Get-MediaTranscript {
 
     # Contrat public : aucune exception vers l'appelant.
     try {
+        $mediaPath = Resolve-WhisperMediaFile -LiteralPath $LiteralPath
         $exe = Get-WhisperPath -OverridePath $WhisperPath
 
         foreach ($currentModel in @($Model)) {
@@ -52,7 +53,7 @@ function Get-MediaTranscript {
                 $outputDir = New-WhisperTempDirectory
             }
 
-            $whisperArgs = Get-WhisperArguments -Source $LiteralPath -Model $currentModel -UseLanguage $UseLanguage -OutputDir $outputDir -AudioTrack $AudioTrack
+            $whisperArgs = Get-WhisperArguments -Source $mediaPath -Model $currentModel -UseLanguage $UseLanguage -OutputDir $outputDir -AudioTrack $AudioTrack
             Write-DebugLog -Text ($whisperArgs -join ' ')
 
             try {
@@ -62,7 +63,7 @@ function Get-MediaTranscript {
                 # ExitCode nul = ShouldProcess a refusé (WhatIf), ce n'est pas un échec. Un code non nul en est un ;
                 # l'inverse n'est pas vrai, le binaire sortant en 0 même sans média trouvé.
                 if ($null -ne $state['ExitCode'] -and $state['ExitCode'] -ne 0) {
-                    Write-ErrorLog -Text "faster-whisper-xxl a échoué (code $( $state['ExitCode'] )) sur '$LiteralPath' (modèle $currentModel)."
+                    Write-ErrorLog -Text "faster-whisper-xxl a échoué (code $( $state['ExitCode'] )) sur '$mediaPath' (modèle $currentModel)."
                     continue
                 }
 
@@ -72,15 +73,15 @@ function Get-MediaTranscript {
 
                 $nativeJsons = @(Get-WhisperNativeJsonFromOutputDir -OutputDir $outputDir)
                 if ($nativeJsons.Count -eq 0) {
-                    Write-ErrorLog -Text "Aucun JSON natif produit par faster-whisper-xxl pour '$LiteralPath' (modèle $currentModel)."
+                    Write-ErrorLog -Text "Aucun JSON natif produit par faster-whisper-xxl pour '$mediaPath' (modèle $currentModel)."
                     continue
                 }
                 if ($nativeJsons.Count -gt 1) {
-                    Write-ErrorLog -Text "Résultat natif ambigu pour '$LiteralPath' (modèle $currentModel) : $($nativeJsons.Count) JSON dans le dossier de sortie."
+                    Write-ErrorLog -Text "Résultat natif ambigu pour '$mediaPath' (modèle $currentModel) : $($nativeJsons.Count) JSON dans le dossier de sortie."
                     continue
                 }
 
-                Convert-WhisperNativeToTetram -NativeJsonPath $nativeJsons[0] -MediaPath $LiteralPath -Model $currentModel -UseLanguage $UseLanguage -AudioTrack $AudioTrack
+                Convert-WhisperNativeToTetram -NativeJsonPath $nativeJsons[0] -MediaPath $mediaPath -Model $currentModel -UseLanguage $UseLanguage -AudioTrack $AudioTrack
             }
             catch {
                 Write-ErrorLog -Text $_.Exception.Message
