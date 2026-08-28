@@ -21,11 +21,12 @@ AfterAll {
 Describe 'Get-WhisperArguments' {
     It 'produit la séquence par défaut, dans l''ordre, et sans --language' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\Films\a.mkv') -Model 'large-v2'
+            $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
+            $got = Get-WhisperArguments -Source @('D:\Films\a.mkv') -Model 'large-v2' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\Films\a.mkv'
                 '--batch_recursive'
-                '--output_dir', 'source'
+                '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v2'
@@ -46,13 +47,14 @@ Describe 'Get-WhisperArguments' {
 
     It 'passe chaque source comme argument nu, sans préfixe file_list=' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv', 'D:\b.mkv', 'D:\c.mkv') -Model 'large-v2'
+            $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv', 'D:\b.mkv', 'D:\c.mkv') -Model 'large-v2' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\a.mkv'
                 'D:\b.mkv'
                 'D:\c.mkv'
                 '--batch_recursive'
-                '--output_dir', 'source'
+                '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v2'
@@ -67,11 +69,12 @@ Describe 'Get-WhisperArguments' {
 
     It 'reprend le modèle demandé' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v3-turbo'
+            $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v3-turbo' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\a.mkv'
                 '--batch_recursive'
-                '--output_dir', 'source'
+                '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v3-turbo'
@@ -86,11 +89,12 @@ Describe 'Get-WhisperArguments' {
 
     It 'insère --language entre --ff_track et --postfix quand UseLanguage est fourni' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v2' -UseLanguage 'fr'
+            $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v2' -UseLanguage 'fr' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\a.mkv'
                 '--batch_recursive'
-                '--output_dir', 'source'
+                '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v2'
@@ -106,11 +110,12 @@ Describe 'Get-WhisperArguments' {
 
     It 'ajoute les options Kotoba après la séquence générique pour kotoba-v2' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'kotoba-v2' -UseLanguage 'ja'
+            $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'kotoba-v2' -UseLanguage 'ja' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\a.mkv'
                 '--batch_recursive'
-                '--output_dir', 'source'
+                '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
                 '--model', 'kotoba-v2'
@@ -131,11 +136,12 @@ Describe 'Get-WhisperArguments' {
 
     It 'n''ajoute aucune option Kotoba pour large-v3' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v3'
+            $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v3' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\a.mkv'
                 '--batch_recursive'
-                '--output_dir', 'source'
+                '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v3'
@@ -416,6 +422,33 @@ Describe 'Invoke-Whisper' {
             $state = @{}
             Invoke-Whisper -Exe (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $helper, $out, 'ok') -Cmdlet $cmdlet -State $state
             Get-Content -LiteralPath $out | Should -Be 'ok'
+        }
+    }
+}
+
+Describe 'New-WhisperTempDirectory' {
+    It 'crée un dossier GUID sous TEMP, sans stem média' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            $dir = New-WhisperTempDirectory
+            try {
+                $gotDir = [IO.Path]::GetFullPath((Split-Path -Parent $dir)).TrimEnd('\', '/')
+                $wantDir = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+                $gotDir | Should -Be $wantDir
+                [IO.Path]::GetFileName($dir) | Should -Match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                [IO.Path]::GetFileName($dir) | Should -Not -Match 'Episode'
+                Test-Path -LiteralPath $dir -PathType Container | Should -BeTrue
+            }
+            finally {
+                Remove-WhisperTempDirectory -Path $dir
+            }
+            Test-Path -LiteralPath $dir | Should -BeFalse
+        }
+    }
+
+    It 'ne retourne pas un chemin si New-Item échoue' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            Mock New-Item { throw 'TEMP inaccessible' }
+            { New-WhisperTempDirectory } | Should -Throw '*TEMP inaccessible*'
         }
     }
 }
