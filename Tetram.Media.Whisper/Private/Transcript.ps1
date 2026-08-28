@@ -60,10 +60,78 @@ function Test-WhisperNativeJsonName {
     return $FileName.Equals("$Stem.json", [StringComparison]::OrdinalIgnoreCase)
 }
 
-function Get-WhisperNativeJsonCandidate {
+function New-WhisperTempDirectory {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    $dir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
+    # Stop : un échec New-Item est non terminant par défaut ; renvoyer le GUID sans dossier
+    # ferait passer un --output_dir inexistant à whisper.
+    $created = New-Item -ItemType Directory -Path $dir -Force -Confirm:$false -WhatIf:$false -ErrorAction Stop
+    return $created.FullName
+}
+
+function Remove-WhisperTempDirectory {
+    [CmdletBinding()]
+    param(
+        [string] $Path
+    )
+
+    # GUID interne TEMP : pas un ShouldProcess utilisateur.
+    if (-not $Path) { return }
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    Remove-Item -LiteralPath $Path -Recurse -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue
+}
+
+function Get-WhisperNativeJsonFromOutputDir {
     [CmdletBinding()]
     [OutputType([string[]])]
     param(
+        [Parameter(Mandatory)] [string] $OutputDir
+    )
+
+    if ([string]::IsNullOrWhiteSpace($OutputDir) -or -not (Test-Path -LiteralPath $OutputDir -PathType Container)) {
+        return @()
+    }
+
+    $results = [System.Collections.Generic.List[string]]::new()
+    foreach ($file in @(Get-ChildItem -LiteralPath $OutputDir -Filter '*.json' -File -ErrorAction SilentlyContinue)) {
+        if ((Test-WhisperNativeJsonName -FileName $file.Name) -and -not $results.Contains($file.FullName)) {
+            $results.Add($file.FullName)
+        }
+    }
+    return @($results)
+}
+
+function Add-WhisperTranscriptDirectoryMatch {
+    param(
+        [string] $FilePath,
+        [string] $MediaBase,
+        [System.Collections.Generic.List[string]] $Results
+    )
+
+    if ([string]::IsNullOrWhiteSpace($FilePath)) { return }
+    if ([IO.Path]::GetExtension($FilePath).Equals('.json', [StringComparison]::OrdinalIgnoreCase)) { return }
+    $stem = [IO.Path]::GetFileNameWithoutExtension($FilePath)
+    if (-not $stem.Equals($MediaBase, [StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+
+    $dir = [IO.Path]::GetDirectoryName($FilePath)
+    if ([string]::IsNullOrWhiteSpace($dir)) {
+        $dir = (Get-Location).Path
+    }
+    if (-not $Results.Contains($dir)) {
+        $Results.Add($dir)
+    }
+}
+
+function Resolve-WhisperTranscriptDirectory {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [string] $MediaBase,
         [string[]] $Source
     )
 
@@ -76,10 +144,9 @@ function Get-WhisperNativeJsonCandidate {
         if ($ext -in @('.lst', '.m3u', '.m3u8', '.txt') -and (Test-Path -LiteralPath $entry -PathType Leaf)) {
             foreach ($line in @(Get-Content -LiteralPath $entry)) {
                 if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                foreach ($found in @(Get-WhisperNativeJsonCandidate -Source @($line.Trim()))) {
-                    if (-not $results.Contains($found)) {
-                        $results.Add($found)
-                    }
+                $found = Resolve-WhisperTranscriptDirectory -MediaBase $MediaBase -Source @($line.Trim())
+                if (-not [string]::IsNullOrWhiteSpace($found) -and -not $results.Contains($found)) {
+                    $results.Add($found)
                 }
             }
             continue
@@ -91,92 +158,31 @@ function Get-WhisperNativeJsonCandidate {
             if ([string]::IsNullOrWhiteSpace($dir)) {
                 $dir = (Get-Location).Path
             }
-            Add-WhisperNativeJsonFromDirectory -Directory $dir -Recurse $true -Results $results
+            if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
+                continue
+            }
+            $filter = [IO.Path]::GetFileName($entry)
+            foreach ($file in @(Get-ChildItem -LiteralPath $dir -Filter $filter -File -Recurse -ErrorAction SilentlyContinue)) {
+                Add-WhisperTranscriptDirectoryMatch -FilePath $file.FullName -MediaBase $MediaBase -Results $results
+            }
             continue
         }
 
         if (Test-Path -LiteralPath $entry -PathType Container -ErrorAction SilentlyContinue) {
-            Add-WhisperNativeJsonFromDirectory -Directory $entry -Recurse $true -Results $results
+            foreach ($file in @(Get-ChildItem -LiteralPath $entry -File -Recurse -ErrorAction SilentlyContinue)) {
+                Add-WhisperTranscriptDirectoryMatch -FilePath $file.FullName -MediaBase $MediaBase -Results $results
+            }
             continue
         }
 
-        $dir = [IO.Path]::GetDirectoryName($entry)
-        if ([string]::IsNullOrWhiteSpace($dir)) {
-            $dir = (Get-Location).Path
-        }
-        $stem = [IO.Path]::GetFileNameWithoutExtension($entry)
-        Add-WhisperNativeJsonFromDirectory -Directory $dir -Recurse $false -Stem $stem -Results $results
+        # Fichier explicite : parse du chemin, sans exiger l'existence.
+        Add-WhisperTranscriptDirectoryMatch -FilePath $entry -MediaBase $MediaBase -Results $results
     }
 
-    return @($results)
-}
-
-function Add-WhisperNativeJsonFromDirectory {
-    param(
-        [string] $Directory,
-        [bool] $Recurse,
-        [string] $Stem,
-        [AllowEmptyCollection()]
-        [Parameter(Mandatory)] [System.Collections.Generic.List[string]] $Results
-    )
-
-    if ([string]::IsNullOrWhiteSpace($Directory) -or -not (Test-Path -LiteralPath $Directory -PathType Container)) {
-        return
+    if ($results.Count -eq 0) {
+        return [string]::Empty
     }
-
-    $childArgs = @{
-        LiteralPath = $Directory
-        Filter      = '*.json'
-        File        = $true
-        ErrorAction = 'SilentlyContinue'
-    }
-    if ($Recurse) {
-        $childArgs['Recurse'] = $true
-    }
-
-    foreach ($file in @(Get-ChildItem @childArgs)) {
-        $ok = if ([string]::IsNullOrWhiteSpace($Stem)) {
-            Test-WhisperNativeJsonName -FileName $file.Name
-        }
-        else {
-            Test-WhisperNativeJsonName -FileName $file.Name -Stem $Stem
-        }
-        if ($ok -and -not $Results.Contains($file.FullName)) {
-            $Results.Add($file.FullName)
-        }
-    }
-}
-
-function Get-WhisperJsonSnapshot {
-    [CmdletBinding()]
-    param(
-        [string[]] $Source
-    )
-
-    $set = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($path in @(Get-WhisperNativeJsonCandidate -Source $Source)) {
-        [void]$set.Add($path)
-    }
-    # Virgule unaire : un HashSet vide s'énumère sinon en rien, et un HashSet à un
-    # élément redeviendrait une string — .Contains n'aurait plus la sémantique d'ensemble.
-    return , $set
-}
-
-function Get-WhisperNewJsonFile {
-    [CmdletBinding()]
-    [OutputType([string[]])]
-    param(
-        [string[]] $Source,
-        [AllowEmptyCollection()]
-        [Parameter(Mandatory)]
-        [System.Collections.Generic.HashSet[string]] $Before
-    )
-
-    foreach ($path in @(Get-WhisperNativeJsonCandidate -Source $Source)) {
-        if (-not $Before.Contains($path)) {
-            $path
-        }
-    }
+    return $results[0]
 }
 
 function ConvertFrom-WhisperTranscript {
@@ -313,12 +319,11 @@ function Write-TetramTranscript {
 
     $json = ConvertTo-Json -InputObject $Transcript -Depth 8
     $utf8 = [System.Text.UTF8Encoding]::new($false)
-    $directory = [IO.Path]::GetDirectoryName($Path)
-    $temp = Join-Path $directory ([guid]::NewGuid().ToString() + '.tmp')
+    $temp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + '.tmp')
 
     try {
         [IO.File]::WriteAllText($temp, $json, $utf8)
-        Move-Item -LiteralPath $temp -Destination $Path -Force
+        Move-Item -LiteralPath $temp -Destination $Path -Force -ErrorAction Stop
     }
     finally {
         if (Test-Path -LiteralPath $temp) {
@@ -332,28 +337,18 @@ function Convert-WhisperNativeToTetram {
     param(
         [Parameter(Mandatory)] [string] $NativeJsonPath,
         [Parameter(Mandatory)] [string] $Model,
+        [string[]] $Source,
         [string] $UseLanguage,
         [int] $AudioTrack = 1
     )
 
     $raw = Get-Content -LiteralPath $NativeJsonPath -Raw -Encoding UTF8
     $transcript = ConvertFrom-WhisperTranscript -InputObject $raw -Model $Model -UseLanguage $UseLanguage -AudioTrack $AudioTrack
-    $directory = [IO.Path]::GetDirectoryName($NativeJsonPath)
     $mediaBase = Get-WhisperMediaBaseName -NativeJsonPath $NativeJsonPath -Language $transcript.language
+    $directory = Resolve-WhisperTranscriptDirectory -MediaBase $mediaBase -Source $Source
+    if ([string]::IsNullOrWhiteSpace($directory)) {
+        throw "Impossible de rattacher le JSON natif '$NativeJsonPath' à une source média."
+    }
     $dest = Get-TetramTranscriptPath -Directory $directory -MediaBase $mediaBase -Language $transcript.language -Model $Model -AudioTrack $AudioTrack
     Write-TetramTranscript -Transcript $transcript -Path $dest
-}
-
-function Remove-WhisperNativeJson {
-    [CmdletBinding()]
-    param(
-        [string[]] $Path
-    )
-
-    foreach ($item in @($Path)) {
-        if ([string]::IsNullOrWhiteSpace($item)) { continue }
-        if (Test-Path -LiteralPath $item -PathType Leaf) {
-            Remove-Item -LiteralPath $item -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue
-        }
-    }
 }

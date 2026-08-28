@@ -54,11 +54,11 @@ function Get-MediaTranscript {
             return
         }
 
-        $whisperArgs = Get-WhisperArguments -Source $sources -Model $Model -UseLanguage $UseLanguage
-        Write-DebugLog -Text ($whisperArgs -join ' ')
-
-        $snapshot = Get-WhisperJsonSnapshot -Source $sources
+        $outputDir = New-WhisperTempDirectory
         try {
+            $whisperArgs = Get-WhisperArguments -Source $sources -Model $Model -UseLanguage $UseLanguage -OutputDir $outputDir
+            Write-DebugLog -Text ($whisperArgs -join ' ')
+
             $state = @{ ExitCode = $null }
             Invoke-Whisper -Exe $exe -Arguments $whisperArgs -Cmdlet $PSCmdlet -State $state
 
@@ -73,7 +73,7 @@ function Get-MediaTranscript {
                 return
             }
 
-            $nativeJsons = @(Get-WhisperNewJsonFile -Source $sources -Before $snapshot)
+            $nativeJsons = @(Get-WhisperNativeJsonFromOutputDir -OutputDir $outputDir)
             if ($nativeJsons.Count -eq 0) {
                 Write-ErrorLog -Text "Aucun JSON natif produit par faster-whisper-xxl pour '$( $sources[0] )'."
                 return
@@ -81,7 +81,7 @@ function Get-MediaTranscript {
 
             foreach ($native in $nativeJsons) {
                 try {
-                    Convert-WhisperNativeToTetram -NativeJsonPath $native -Model $Model -UseLanguage $UseLanguage
+                    Convert-WhisperNativeToTetram -NativeJsonPath $native -Model $Model -UseLanguage $UseLanguage -Source $sources
                 }
                 catch {
                     Write-ErrorLog -Text $_.Exception.Message
@@ -89,8 +89,7 @@ function Get-MediaTranscript {
             }
         }
         finally {
-            # Snapshot : seuls les JSON apparus pendant cet appel sont des artefacts, y compris si la normalisation a échoué.
-            Remove-WhisperNativeJson -Path @(Get-WhisperNewJsonFile -Source $sources -Before $snapshot)
+            Remove-WhisperTempDirectory -Path $outputDir
         }
     }
     catch {
