@@ -21,12 +21,12 @@ AfterAll {
 Describe 'Get-WhisperArguments' {
     It 'produit la séquence par défaut, dans l''ordre, et sans --language' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\Films\a.mkv') -Format @('srt') -Model 'large-v2'
+            $got = Get-WhisperArguments -Source @('D:\Films\a.mkv') -Model 'large-v2'
             $got | Should -Be @(
                 'D:\Films\a.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
-                '--output_format', 'srt'
+                '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v2'
                 '--ff_track', '1'
@@ -38,35 +38,22 @@ Describe 'Get-WhisperArguments' {
         }
     }
 
+    It 'n''accepte plus Format' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            (Get-Command Get-WhisperArguments).Parameters.ContainsKey('Format') | Should -BeFalse
+        }
+    }
+
     It 'passe chaque source comme argument nu, sans préfixe file_list=' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv', 'D:\b.mkv', 'D:\c.mkv') -Format @('srt') -Model 'large-v2'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv', 'D:\b.mkv', 'D:\c.mkv') -Model 'large-v2'
             $got | Should -Be @(
                 'D:\a.mkv'
                 'D:\b.mkv'
                 'D:\c.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
-                '--output_format', 'srt'
-                '--check_files'
-                '--model', 'large-v2'
-                '--ff_track', '1'
-                '--postfix'
-                '--print_progress'
-                '--task', 'transcribe'
-                '--beep_off'
-            )
-        }
-    }
-
-    It 'liste plusieurs formats derrière un seul --output_format' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt', 'vtt') -Model 'large-v2'
-            $got | Should -Be @(
-                'D:\a.mkv'
-                '--batch_recursive'
-                '--output_dir', 'source'
-                '--output_format', 'srt', 'vtt'
+                '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v2'
                 '--ff_track', '1'
@@ -80,12 +67,12 @@ Describe 'Get-WhisperArguments' {
 
     It 'reprend le modèle demandé' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt') -Model 'large-v3-turbo'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v3-turbo'
             $got | Should -Be @(
                 'D:\a.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
-                '--output_format', 'srt'
+                '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v3-turbo'
                 '--ff_track', '1'
@@ -99,12 +86,12 @@ Describe 'Get-WhisperArguments' {
 
     It 'insère --language entre --ff_track et --postfix quand UseLanguage est fourni' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt') -Model 'large-v2' -UseLanguage 'fr'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v2' -UseLanguage 'fr'
             $got | Should -Be @(
                 'D:\a.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
-                '--output_format', 'srt'
+                '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v2'
                 '--ff_track', '1'
@@ -119,12 +106,12 @@ Describe 'Get-WhisperArguments' {
 
     It 'ajoute les options Kotoba après la séquence générique pour kotoba-v2' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt') -Model 'kotoba-v2' -UseLanguage 'ja'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'kotoba-v2' -UseLanguage 'ja'
             $got | Should -Be @(
                 'D:\a.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
-                '--output_format', 'srt'
+                '--output_format', 'json'
                 '--check_files'
                 '--model', 'kotoba-v2'
                 '--ff_track', '1'
@@ -144,12 +131,12 @@ Describe 'Get-WhisperArguments' {
 
     It 'n''ajoute aucune option Kotoba pour large-v3' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt') -Model 'large-v3'
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v3'
             $got | Should -Be @(
                 'D:\a.mkv'
                 '--batch_recursive'
                 '--output_dir', 'source'
-                '--output_format', 'srt'
+                '--output_format', 'json'
                 '--check_files'
                 '--model', 'large-v3'
                 '--ff_track', '1'

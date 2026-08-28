@@ -5,7 +5,6 @@ function Get-WhisperArguments {
     [OutputType([string[]])]
     param(
         [Parameter(Mandatory)] [string[]] $Source,
-        [Parameter(Mandatory)] [string[]] $Format,
         [Parameter(Mandatory)] [string] $Model,
         [string] $UseLanguage
     )
@@ -16,10 +15,7 @@ function Get-WhisperArguments {
     $whisperArgs += @(
         '--batch_recursive'
         '--output_dir', 'source'
-        '--output_format'
-    )
-    $whisperArgs += $Format
-    $whisperArgs += @(
+        '--output_format', 'json'
         '--check_files'
         '--model', $Model
         '--ff_track', '1'
