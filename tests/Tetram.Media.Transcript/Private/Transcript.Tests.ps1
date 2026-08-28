@@ -1,25 +1,25 @@
 # Étendre la suite autour de l'orchestration générique de transcription Tetram.
 #
 # RepoRoot depuis tests/<Module>/Private : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Whisper') -Force
-# InModuleScope 'Tetram.Media.Whisper' : les fonctions ne sont pas exportées.
+# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Transcript') -Force
+# InModuleScope 'Tetram.Media.Transcript' : les fonctions ne sont pas exportées.
 # $TestDrive n'est pas visible depuis InModuleScope : le passer via -Parameters @{ Work = $TestDrive }.
 # Join-Path / [IO.Path] : ne pas figer D:\... — Linux CI n'a pas le lecteur D: et `\` n'est pas un séparateur.
 
 BeforeAll {
     Set-StrictMode -Version Latest
-    $script:RepoRootWhisper = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-    $script:ModuleRootWhisper = Join-Path $script:RepoRootWhisper 'Tetram.Media.Whisper'
-    Import-Module -Name $script:ModuleRootWhisper -Force -ErrorAction Stop
+    $script:RepoRootTranscript = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
+    $script:ModuleRootTranscript = Join-Path $script:RepoRootTranscript 'Tetram.Media.Transcript'
+    Import-Module -Name $script:ModuleRootTranscript -Force -ErrorAction Stop
 }
 
 AfterAll {
-    Remove-Module -Name 'Tetram.Media.Whisper' -Force -ErrorAction SilentlyContinue
+    Remove-Module -Name 'Tetram.Media.Transcript' -Force -ErrorAction SilentlyContinue
 }
 
 Describe 'Get-TetramTranscriptPath' {
     It 'place track avant langue et utilise le nom canonique large-v3' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $dir = Join-Path 'Videos' 'Shows'
             $got = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'large-v3'
             $got | Should -Be (Join-Path $dir 'Episode.track 1.ja.large-v3.json')
@@ -27,7 +27,7 @@ Describe 'Get-TetramTranscriptPath' {
     }
 
     It 'reprend la piste demandée dans le nom' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $dir = Join-Path 'Videos' 'Shows'
             $got = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'large-v3' -AudioTrack 2
             $got | Should -Be (Join-Path $dir 'Episode.track 2.ja.large-v3.json')
@@ -35,7 +35,7 @@ Describe 'Get-TetramTranscriptPath' {
     }
 
     It 'utilise kotoba-v2 comme nom de modèle, pas un dossier CTranslate2' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $dir = Join-Path 'Videos' 'Shows'
             $got = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'kotoba-v2'
             $got | Should -Be (Join-Path $dir 'Episode.track 1.ja.kotoba-v2.json')
@@ -46,7 +46,7 @@ Describe 'Get-TetramTranscriptPath' {
 
 Describe 'Resolve-TranscriptMediaFile' {
     It 'retourne le chemin concret d''un fichier existant' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $media = Join-Path $Work 'Episode.mkv'
             Set-Content -LiteralPath $media -Value 'x'
@@ -55,7 +55,7 @@ Describe 'Resolve-TranscriptMediaFile' {
     }
 
     It 'refuse un dossier' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $dir = Join-Path $Work 'films'
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -64,7 +64,7 @@ Describe 'Resolve-TranscriptMediaFile' {
     }
 
     It 'ne refuse pas un .lst : la contrainte fichier-liste est propre à Purfview' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $lst = Join-Path $Work 'lot.lst'
             Set-Content -LiteralPath $lst -Value 'D:\Films\a.mkv'
@@ -81,7 +81,7 @@ Describe 'Get-TranscriptEngineName' {
         @{ Model = 'kotoba-v2' }
     ) {
         param($Model)
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Model = $Model } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Model = $Model } {
             param($Model)
             Get-TranscriptEngineName -Model $Model | Should -Be 'Whisper'
         }
@@ -90,7 +90,7 @@ Describe 'Get-TranscriptEngineName' {
 
 Describe 'Write-TetramTranscript' {
     It 'écrit le JSON Tetram et ne laisse pas de temporaire de publication' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3' -UseLanguage 'ja'
             $dest = Join-Path $Work 'Episode.track 1.ja.large-v3.json'
@@ -104,7 +104,7 @@ Describe 'Write-TetramTranscript' {
     }
 
     It 'remplace un sidecar déjà présent' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $dest = Join-Path $Work 'Episode.track 1.ja.large-v3.json'
             Set-Content -LiteralPath $dest -Value 'ancien'
@@ -119,7 +119,7 @@ Describe 'Write-TetramTranscript' {
     }
 
     It 'conserve le sidecar précédent si la publication échoue' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $dest = Join-Path $Work 'Keep.track 1.en.large-v3.json'
             Set-Content -LiteralPath $dest -Value 'ancien'
@@ -132,7 +132,7 @@ Describe 'Write-TetramTranscript' {
     }
 
     It 'crée le .tmp de publication dans le dossier destination' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3' -UseLanguage 'ja'
             $dest = Join-Path $Work 'Episode.track 1.ja.large-v3.json'
@@ -152,7 +152,7 @@ Describe 'Write-TetramTranscript' {
     }
 
     It 'ne laisse ni JSON final ni .tmp si la publication échoue' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3'
             $dest = Join-Path $Work 'Episode.track 1.en.large-v3.json'
@@ -166,7 +166,7 @@ Describe 'Write-TetramTranscript' {
 
 Describe 'Publish-TetramTranscript' {
     It 'écrit le sidecar à côté du média, pas à côté du JSON natif' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $nativeDir = Join-Path $Work 'native-temp'
             $mediaDir = Join-Path $Work 'Videos'
