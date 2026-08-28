@@ -101,6 +101,27 @@ BeforeAll {
         return -1
     }
 
+    function script:Get-TranslationRawTempFiles {
+        @(
+            Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Filter 'tetram-translation-*.json' -File -ErrorAction SilentlyContinue |
+                Where-Object { $null -ne $_ }
+        )
+    }
+
+    function script:Assert-TranslationRawTempCleaned {
+        param($Before)
+        $beforeNames = @(
+            @($Before) |
+                Where-Object { $null -ne $_ } |
+                ForEach-Object { $_.FullName }
+        )
+        $leftover = @(
+            Get-TranslationRawTempFiles |
+                Where-Object { $_.FullName -notin $beforeNames }
+        )
+        $leftover | Should -HaveCount 0
+    }
+
 }
 
 Describe 'Tetram.Media.Translation manifest' {
@@ -251,17 +272,13 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $output = Join-Path $script:Work 'episode.fr.ass'
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $output -PathType Leaf | Should -BeTrue
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $script:HelloJson
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         $written = (Get-Content -LiteralPath $output -Raw -Encoding utf8) -replace '\r\n', "`n"
         $written | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
         $written | Should -Not -Match 'Hello'
-        foreach ($path in @($output, $raw)) {
-            $bytes = [IO.File]::ReadAllBytes($path)
-            ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) | Should -BeFalse
-        }
+        $bytes = [IO.File]::ReadAllBytes($output)
+        ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) | Should -BeFalse
     }
 
     It 'envoie un gabarit SRT cueId/start/end sans text, distinct des identifiants natifs' {
@@ -612,8 +629,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $written = (Get-Content -LiteralPath $custom -Raw -Encoding utf8) -replace '\r\n', "`n"
         $written | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
-        $raw = Join-Path $script:Work 'custom.fr.raw.json'
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:Work 'custom.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
     }
 
@@ -630,14 +646,13 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
         $output = Join-Path $script:Work 'episode.fr.srt'
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
         $written = (Get-Content -LiteralPath $output -Raw -Encoding utf8) -replace '\r\n', "`n"
         $written | Should -Match '00:05:59,237 --> 00:06:00,057'
         $written | Should -Match 'texte français'
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
     }
 
-    It 'conserve le raw.json et n''écrit pas le final si un cueId manque' {
+    It 'n''écrit pas le final ni de raw durable si un cueId manque' {
         $env:GEMINI_API_KEY = 'test-key'
         $script:SubtitlePath = Join-Path $script:Work 'episode.srt'
         Set-Content -LiteralPath $script:SubtitlePath -Value "1`n00:00:01,000 --> 00:00:02,000`nA`n`n2`n00:00:03,000 --> 00:00:04,000`nB`n`n3`n00:00:05,000 --> 00:00:06,000`nC`n`n4`n00:00:07,000 --> 00:00:08,000`nD`n" -Encoding utf8
@@ -648,12 +663,12 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
         }
 
+        $beforeTemp = Get-TranslationRawTempFiles
         $warn = $null
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.srt') | Should -BeFalse
+        Assert-TranslationRawTempCleaned -Before $beforeTemp
         "$warn" | Should -Match 'cueId 3 manquant'
     }
 
@@ -674,7 +689,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $written | Should -Match '(?s)30\n00:00:05,000 --> 00:00:06,000\nTroisième'
     }
 
-    It 'conserve le raw.json et n''écrit pas le final si un cueId est dupliqué' {
+    It 'n''écrit pas le final ni de raw durable si un cueId est dupliqué' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":"Bonjour"},{"cueId":1,"text":"Salut"}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
@@ -683,16 +698,16 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
         }
 
+        $beforeTemp = Get-TranslationRawTempFiles
         $warn = $null
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        Assert-TranslationRawTempCleaned -Before $beforeTemp
         "$warn" | Should -Match 'dupliqu'
     }
 
-    It 'conserve le raw.json et n''écrit pas le final si un cueId est hors plage' {
+    It 'n''écrit pas le final ni de raw durable si un cueId est hors plage' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":"Bonjour"},{"cueId":9,"text":"Trop loin"}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
@@ -701,16 +716,16 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
         }
 
+        $beforeTemp = Get-TranslationRawTempFiles
         $warn = $null
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        Assert-TranslationRawTempCleaned -Before $beforeTemp
         "$warn" | Should -Match 'hors plage'
     }
 
-    It 'conserve le raw.json et n''écrit pas le final si le JSON est invalide' {
+    It 'n''écrit pas le final ni de raw durable si le JSON est invalide' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = 'ceci n''est pas du JSON {'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
@@ -719,16 +734,16 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
         }
 
+        $beforeTemp = Get-TranslationRawTempFiles
         $warn = $null
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        Assert-TranslationRawTempCleaned -Before $beforeTemp
         "$warn" | Should -Match 'JSON'
     }
 
-    It 'conserve le raw.json et n''écrit pas le final si text est vide sur une source non vide' {
+    It 'n''écrit pas le final ni de raw durable si text est vide sur une source non vide' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":""}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
@@ -737,16 +752,16 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
         }
 
+        $beforeTemp = Get-TranslationRawTempFiles
         $warn = $null
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        Assert-TranslationRawTempCleaned -Before $beforeTemp
         "$warn" | Should -Match 'vide'
     }
 
-    It 'conserve le raw.json et n''écrit pas le final si text n''est que des espaces sur une source non vide' {
+    It 'n''écrit pas le final ni de raw durable si text n''est que des espaces sur une source non vide' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":" "}]'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
@@ -755,16 +770,16 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
         }
 
+        $beforeTemp = Get-TranslationRawTempFiles
         $warn = $null
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        Assert-TranslationRawTempCleaned -Before $beforeTemp
         "$warn" | Should -Match 'vide'
     }
 
-    It 'conserve le raw.json et n''écrit pas le final si Gemini altère une balise ASS' {
+    It 'n''écrit pas le final ni de raw durable si Gemini altère une balise ASS' {
         $env:GEMINI_API_KEY = 'test-key'
         $json = '[{"cueId":1,"text":"{\\b1}Bonjour{\\i0}"}]'
         Set-Content -LiteralPath $script:SubtitlePath -Value "[Events]`nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`nDialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\i1}Hello{\i0}`n" -Encoding utf8
@@ -774,28 +789,28 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
         }
 
+        $beforeTemp = Get-TranslationRawTempFiles
         $warn = $null
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+        Assert-TranslationRawTempCleaned -Before $beforeTemp
         "$warn" | Should -Match 'reconstruction'
     }
 
-    It 'refuse un raw.json déjà présent avant tout appel Gemini' {
+    It 'n''est pas bloqué par un .raw.json historique déjà présent à côté de la sortie' {
         $env:GEMINI_API_KEY = 'test-key'
         $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Set-Content -LiteralPath $raw -Value 'ne-pas-ecraser' -Encoding utf8
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
-            throw 'Gemini ne devait pas être appelé'
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                New-GeminiStopResponse $script:HelloJson
+            }
         }
 
-        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath } |
-            Should -Throw -ExpectedMessage '*existe déjà*'
-        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') -PathType Leaf | Should -BeTrue
         [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)).Trim() | Should -Be 'ne-pas-ecraser'
-        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
     }
 
     Context 'jalons de progression' {
@@ -809,7 +824,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
             }
         }
 
-        It 'annonce raw puis reconstruction et conserve le raw si le JSON métier est invalide' {
+        It 'annonce raw puis reconstruction et nettoie le temporaire si le JSON métier est invalide' {
             $env:GEMINI_API_KEY = 'test-key'
             $json = 'ceci n''est pas du JSON {'
             Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
@@ -818,17 +833,18 @@ Describe 'ConvertTo-FrenchSubtitle' {
                 }
             }
 
+            $beforeTemp = Get-TranslationRawTempFiles
             $warn = $null
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -WarningVariable warn -WarningAction Continue
 
-            $raw = Join-Path $script:Work 'episode.fr.raw.json'
-            $script:InfoLogs | Should -Contain "Réponse brute du modèle enregistrée : $raw"
+            $script:InfoLogs | Should -Contain 'Réponse brute du modèle reçue'
             $script:InfoLogs | Should -Contain 'Reconstruction du sous-titre final...'
-            (Find-InfoLogIndex "Réponse brute du modèle enregistrée : $raw") | Should -BeLessThan (Find-InfoLogIndex 'Reconstruction du sous-titre final...')
+            (Find-InfoLogIndex 'Réponse brute du modèle reçue') | Should -BeLessThan (Find-InfoLogIndex 'Reconstruction du sous-titre final...')
+            @($script:InfoLogs | Where-Object { $_ -like '*enregistrée*' -or $_ -like '*conservée*' }) | Should -HaveCount 0
             "$warn" | Should -Match 'reconstruction'
-            Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-            [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+            Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
             Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
+            Assert-TranslationRawTempCleaned -Before $beforeTemp
         }
 
     }

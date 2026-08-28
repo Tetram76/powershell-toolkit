@@ -509,7 +509,7 @@ Describe 'Llm.Ollama' {
         @(Get-RestCall '/api/chat').Count | Should -Be 0
     }
 
-    It 'écrit raw et final pour une réponse Ollama JSON complète' {
+    It 'écrit le final Ollama sans raw durable pour une réponse JSON complète' {
         $env:GEMINI_API_KEY = $null
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
             $u = [string]$Uri
@@ -525,15 +525,13 @@ Describe 'Llm.Ollama' {
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2
 
         $output = Join-Path $script:Work 'episode.fr.ass'
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
         Test-Path -LiteralPath $output -PathType Leaf | Should -BeTrue
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $script:HelloJson
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         $written = (Get-Content -LiteralPath $output -Raw -Encoding utf8) -replace '\r\n', "`n"
         $written | Should -Match 'Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Bonjour'
     }
 
-    It 'conserve le raw.json Ollama et n''écrit pas le final si le JSON métier est invalide' {
+    It 'n''écrit pas le final ni de raw durable Ollama si le JSON métier est invalide' {
         $env:GEMINI_API_KEY = $null
         $json = 'ceci n''est pas du JSON {'
         Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
@@ -549,9 +547,7 @@ Describe 'Llm.Ollama' {
 
         $warn = $null
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -Provider Ollama -Model llama3.2 -WarningVariable warn -WarningAction Continue
-        $raw = Join-Path $script:Work 'episode.fr.raw.json'
-        Test-Path -LiteralPath $raw -PathType Leaf | Should -BeTrue
-        [IO.File]::ReadAllText($raw, [Text.UTF8Encoding]::new($false)) | Should -Be $json
+        Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.ass') | Should -BeFalse
         "$warn" | Should -Match 'reconstruction'
     }

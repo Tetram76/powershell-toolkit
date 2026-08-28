@@ -14,11 +14,11 @@
 
 Le fournisseur se choisit avec `-Provider` (`Gemini` ou `Ollama`). Sans `-Provider`, Gemini est utilisé.
 
-Si la réponse du modèle est acceptée au niveau transport, elle est conservée telle quelle dans un fichier `.raw.json` dérivé de la sortie (`episode.fr.ass` → `episode.fr.raw.json`). Aucun `.raw.json` n'est créé si le transport échoue (Gemini : aucun candidat, `finishReason` autre que STOP, texte vide ; Ollama : réponse absente, génération inachevée, contenu vide). Le fichier final est reconstruit depuis la source principale (identifiants et timestamps natifs, champs techniques ASS) en remplaçant uniquement le texte via `cueId`. Un candidat incomplet ou invalide (cue manquant, dupliqué, hors plage, JSON illisible, texte vidé) est conservé sans produire de final (warning, pas d'exception de reconstruction).
+Si la réponse du modèle est acceptée au niveau transport, elle est écrite dans un fichier JSON temporaire sous le TEMP système, le temps du parsing et de la reconstruction, puis ce fichier est toujours supprimé. Aucun `.raw.json` durable n'est créé à côté de la sortie. Le fichier final est reconstruit depuis la source principale (identifiants et timestamps natifs, champs techniques ASS) en remplaçant uniquement le texte via `cueId`. Un candidat incomplet ou invalide (cue manquant, dupliqué, hors plage, JSON illisible, texte vidé) n'écrit pas de final (warning, pas d'exception de reconstruction).
 
 Les principales étapes longues sont journalisées : téléchargement éventuel du modèle Ollama, invocation du provider et reconstruction du sous-titre.
 
-Sans `-OutputPath`, le fichier final est écrit à côté de la source, avec le suffixe `.fr` avant l'extension (`episode.ass` → `episode.fr.ass`). Si le fichier final ou le `.raw.json` correspondant existe déjà, la commande échoue sans écraser et sans appeler le modèle.
+Sans `-OutputPath`, le fichier final est écrit à côté de la source, avec le suffixe `.fr` avant l'extension (`episode.ass` → `episode.fr.ass`). Si le fichier final existe déjà, la commande échoue sans écraser et sans appeler le modèle. Un ancien `.raw.json` à côté de la sortie n'est ni bloquant, ni modifié.
 
 ### Model spec (`-Model`)
 
@@ -260,7 +260,7 @@ Aucun objet n'est émis dans le pipeline. Le chemin du fichier produit est affic
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Prérequis : PowerShell 7+. Les chemins `-SubtitlePath` et `-SecondarySourcePath` sont littéraux (pas de jokers). `-SubtitlePath` est obligatoire. `-SecondarySourcePath` accepte 0..N fichiers. La commande lève une exception si la sortie ou le `.raw.json` existe déjà, ou si la réponse du modèle est inutilisable au niveau transport : dans ces cas aucun `.raw.json` n'est écrit. Un échec de reconstruction (JSON incomplet ou invalide, contrat ASS `{...}` / `\N`) conserve le `.raw.json` et émet un warning.
+        <maml:para>Prérequis : PowerShell 7+. Les chemins `-SubtitlePath` et `-SecondarySourcePath` sont littéraux (pas de jokers). `-SubtitlePath` est obligatoire. `-SecondarySourcePath` accepte 0..N fichiers. La commande lève une exception si la sortie existe déjà, ou si la réponse du modèle est inutilisable au niveau transport : dans ces cas aucun fichier final n'est écrit. Un échec de reconstruction (JSON incomplet ou invalide, contrat ASS `{...}` / `\N`) n'écrit pas de final et émet un warning.
 
 Gemini : `GEMINI_API_KEY` obligatoire ; modèle par défaut `gemini-3.6-flash` ; thinking projet `low` sans option, `medium` avec `[thinking]`, niveau explicite avec `[thinking=&lt;level&gt;]` (`minimal`, `low`, `medium`, `high`).
 
