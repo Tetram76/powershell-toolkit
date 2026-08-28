@@ -30,7 +30,7 @@ function ConvertTo-SecondarySourcePromptPart {
             $compactJson = ConvertTo-CompactWhisperJson -InputObject $whisper
         }
         catch {
-            throw "La source secondaire n'a pas la structure Whisper attendue : $Path"
+            throw "La source secondaire n'a pas la structure Tetram attendue : $Path"
         }
 
         return @"

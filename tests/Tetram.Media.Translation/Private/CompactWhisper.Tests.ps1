@@ -1,4 +1,4 @@
-# Étendre la suite autour de ConvertTo-CompactWhisperJson (réduction des JSON Whisper secondaires).
+# Étendre la suite autour de ConvertTo-CompactWhisperJson (réduction des JSON Tetram secondaires).
 #
 # RepoRoot depuis tests/<Module>/Private : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
 # Import-Module (Join-Path $RepoRoot 'Tetram.Media.Translation') -Force
@@ -11,33 +11,49 @@ BeforeAll {
     $script:ModuleRootTranslation = Join-Path $script:RepoRootTranslation 'Tetram.Media.Translation'
     Import-Module -Name $script:ModuleRootTranslation -Force -ErrorAction Stop
 
-    $script:RepresentativeWhisperJson = @'
+    $script:RepresentativeTetramJson = @'
 {
-  "text": "texte global dupliqué",
+  "engine": "faster-whisper",
+  "model": "large-v3",
   "language": "ja",
-  "duration": 1400.0,
+  "languageSource": "forced",
+  "audioTrack": 1,
   "unexpected_root": 123,
   "segments": [
     {
-      "id": 7,
-      "seek": 1000,
       "start": 12.34,
       "end": 15.67,
       "text": "recognized text",
-      "tokens": [50364, 1234, 5678, 50420],
-      "temperature": 0.0,
-      "avg_logprob": -0.42,
-      "compression_ratio": 1.31,
-      "no_speech_prob": 0.02,
       "words": [
         {
+          "text": "recognized",
           "start": 12.34,
           "end": 12.80,
-          "word": "recognized",
           "probability": 0.93
         }
       ],
+      "diagnostics": {
+        "temperature": 0,
+        "avg_logprob": -0.42,
+        "compression_ratio": 1.31,
+        "no_speech_prob": 0.02,
+        "tokens": [50364, 1234, 5678]
+      },
       "unexpected_segment": "drop me"
+    }
+  ]
+}
+'@
+
+    $script:LegacyWhisperJson = @'
+{
+  "language": "ja",
+  "segments": [
+    {
+      "start": 1.0,
+      "end": 2.0,
+      "text": "...",
+      "avg_logprob": -0.4
     }
   ]
 }
@@ -55,6 +71,28 @@ BeforeAll {
             ConvertTo-CompactWhisperJson -InputObject $InputObject
         }
     }
+
+    function script:Get-MinimalTetramJson {
+        param(
+            [string] $Engine = 'faster-whisper',
+            [string] $SegmentBody = '"start":1.0,"end":2.0,"text":"hello"'
+        )
+
+        return @"
+{
+  "engine": "$Engine",
+  "model": "large-v3",
+  "language": "ja",
+  "languageSource": "forced",
+  "audioTrack": 1,
+  "segments": [
+    {
+      $SegmentBody
+    }
+  ]
+}
+"@
+    }
 }
 
 AfterAll {
@@ -62,8 +100,8 @@ AfterAll {
 }
 
 Describe 'ConvertTo-CompactWhisperJson' {
-    It 'conserve language et les champs segmentaires utiles du JSON représentatif' {
-        $compact = Invoke-CompactWhisperJson -InputObject $script:RepresentativeWhisperJson
+    It 'conserve language et les diagnostics aplatis du JSON Tetram représentatif' {
+        $compact = Invoke-CompactWhisperJson -InputObject $script:RepresentativeTetramJson
         $got = ConvertFrom-Json -InputObject $compact
 
         $got.language | Should -Be 'ja'
@@ -78,27 +116,46 @@ Describe 'ConvertTo-CompactWhisperJson' {
         $segment.no_speech_prob | Should -Be 0.02
     }
 
-    It 'omet text racine, id, seek, tokens, words et les champs inconnus' {
-        $compact = Invoke-CompactWhisperJson -InputObject $script:RepresentativeWhisperJson
+    It 'omet engine, model, languageSource, audioTrack, words, diagnostics, tokens et les champs inconnus' {
+        $compact = Invoke-CompactWhisperJson -InputObject $script:RepresentativeTetramJson
         $got = ConvertFrom-Json -InputObject $compact
         $segment = @($got.segments)[0]
 
-        $got.PSObject.Properties['text'] | Should -BeNullOrEmpty
-        $got.PSObject.Properties['duration'] | Should -BeNullOrEmpty
+        $got.PSObject.Properties['engine'] | Should -BeNullOrEmpty
+        $got.PSObject.Properties['model'] | Should -BeNullOrEmpty
+        $got.PSObject.Properties['languageSource'] | Should -BeNullOrEmpty
+        $got.PSObject.Properties['audioTrack'] | Should -BeNullOrEmpty
         $got.PSObject.Properties['unexpected_root'] | Should -BeNullOrEmpty
-        $segment.PSObject.Properties['id'] | Should -BeNullOrEmpty
-        $segment.PSObject.Properties['seek'] | Should -BeNullOrEmpty
-        $segment.PSObject.Properties['tokens'] | Should -BeNullOrEmpty
         $segment.PSObject.Properties['words'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['diagnostics'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['tokens'] | Should -BeNullOrEmpty
         $segment.PSObject.Properties['unexpected_segment'] | Should -BeNullOrEmpty
-        $compact | Should -Not -Match 'texte global dupliqué'
-        $compact | Should -Not -Match 'drop me'
+        $compact | Should -Not -Match '"engine"'
+        $compact | Should -Not -Match '"model"'
+        $compact | Should -Not -Match '"languageSource"'
+        $compact | Should -Not -Match '"audioTrack"'
+        $compact | Should -Not -Match '"diagnostics"'
         $compact | Should -Not -Match '"tokens"'
         $compact | Should -Not -Match '"words"'
+        $compact | Should -Not -Match 'drop me'
+        $compact | Should -Not -Match '50364'
     }
 
-    It 'n''invente pas une métrique optionnelle absente' {
-        $json = '{"segments":[{"start":1.0,"end":2.0,"text":"hello","avg_logprob":-0.1}]}'
+    It 'reste valide sans diagnostics et n''invente aucune métrique' {
+        $json = script:Get-MinimalTetramJson
+        $compact = Invoke-CompactWhisperJson -InputObject $json
+        $segment = @( (ConvertFrom-Json -InputObject $compact).segments )[0]
+
+        $segment.text | Should -Be 'hello'
+        $segment.PSObject.Properties['temperature'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['avg_logprob'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['compression_ratio'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['no_speech_prob'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['diagnostics'] | Should -BeNullOrEmpty
+    }
+
+    It 'ne copie qu''une métrique présente dans un diagnostics partiel' {
+        $json = script:Get-MinimalTetramJson -SegmentBody '"start":1.0,"end":2.0,"text":"hello","diagnostics":{"avg_logprob":-0.1}'
         $compact = Invoke-CompactWhisperJson -InputObject $json
         $segment = @( (ConvertFrom-Json -InputObject $compact).segments )[0]
 
@@ -107,11 +164,11 @@ Describe 'ConvertTo-CompactWhisperJson' {
         $segment.PSObject.Properties['temperature'] | Should -BeNullOrEmpty
         $segment.PSObject.Properties['compression_ratio'] | Should -BeNullOrEmpty
         $segment.PSObject.Properties['no_speech_prob'] | Should -BeNullOrEmpty
-        $compact | Should -Not -Match '"language"'
+        $compact | Should -Not -Match '"diagnostics"'
     }
 
     It 'préserve le texte, y compris les espaces internes, et les timestamps' {
-        $json = '{"segments":[{"start":12.34,"end":15.67,"text":"recognized  text"}]}'
+        $json = script:Get-MinimalTetramJson -SegmentBody '"start":12.34,"end":15.67,"text":"recognized  text"'
         $compact = Invoke-CompactWhisperJson -InputObject $json
         $segment = @( (ConvertFrom-Json -InputObject $compact).segments )[0]
 
@@ -121,7 +178,7 @@ Describe 'ConvertTo-CompactWhisperJson' {
     }
 
     It 'produit un JSON valide et compact' {
-        $compact = Invoke-CompactWhisperJson -InputObject $script:RepresentativeWhisperJson
+        $compact = Invoke-CompactWhisperJson -InputObject $script:RepresentativeTetramJson
 
         { ConvertFrom-Json -InputObject $compact -ErrorAction Stop } | Should -Not -Throw
         $compact | Should -Not -Match '[\r\n]'
@@ -129,25 +186,41 @@ Describe 'ConvertTo-CompactWhisperJson' {
     }
 
     It 'accepte un objet déjà désérialisé' {
-        $parsed = ConvertFrom-Json -InputObject $script:RepresentativeWhisperJson
+        $parsed = ConvertFrom-Json -InputObject $script:RepresentativeTetramJson
         $compact = Invoke-CompactWhisperJson -InputObject $parsed
         $got = ConvertFrom-Json -InputObject $compact
 
         $got.language | Should -Be 'ja'
         @($got.segments)[0].text | Should -Be 'recognized text'
+        @($got.segments)[0].avg_logprob | Should -Be -0.42
     }
 
-    It 'lève si segments est absent' {
+    It 'lève si un JSON Whisper legacy à diagnostics plats est fourni' {
+        { Invoke-CompactWhisperJson -InputObject $script:LegacyWhisperJson } |
+            Should -Throw '*Tetram*'
+    }
+
+    It 'lève si les métadonnées racine Tetram manquent' {
+        { Invoke-CompactWhisperJson -InputObject '{"language":"ja","segments":[]}' } |
+            Should -Throw '*Tetram*'
+        { Invoke-CompactWhisperJson -InputObject '{"engine":"faster-whisper","model":"large-v3","language":"ja","languageSource":"forced","segments":[]}' } |
+            Should -Throw '*Tetram*'
         { Invoke-CompactWhisperJson -InputObject '{"text":"x"}' } |
-            Should -Throw '*structure Whisper*'
+            Should -Throw '*Tetram*'
+    }
+
+    It 'lève si engine n''est pas faster-whisper' {
+        $json = script:Get-MinimalTetramJson -Engine 'unknown-engine'
+        { Invoke-CompactWhisperJson -InputObject $json } |
+            Should -Throw '*Tetram*'
     }
 
     It 'lève si un segment n''a pas start, end ou text' {
-        { Invoke-CompactWhisperJson -InputObject '{"segments":[{"start":1.0,"end":2.0}]}' } |
-            Should -Throw '*structure Whisper*'
-        { Invoke-CompactWhisperJson -InputObject '{"segments":[{"start":1.0,"text":"x"}]}' } |
-            Should -Throw '*structure Whisper*'
-        { Invoke-CompactWhisperJson -InputObject '{"segments":[{"end":2.0,"text":"x"}]}' } |
-            Should -Throw '*structure Whisper*'
+        { Invoke-CompactWhisperJson -InputObject (script:Get-MinimalTetramJson -SegmentBody '"start":1.0,"end":2.0') } |
+            Should -Throw '*Tetram*'
+        { Invoke-CompactWhisperJson -InputObject (script:Get-MinimalTetramJson -SegmentBody '"start":1.0,"text":"x"') } |
+            Should -Throw '*Tetram*'
+        { Invoke-CompactWhisperJson -InputObject (script:Get-MinimalTetramJson -SegmentBody '"end":2.0,"text":"x"') } |
+            Should -Throw '*Tetram*'
     }
 }
