@@ -7,6 +7,7 @@ $script:WhisperRoot = Join-Path $PSScriptRoot 'Purfview-Whisper-Faster'
 
 # Dot-source plutôt que NestedModules : les fonctions de Tetram.Common du scope parent restent visibles.
 . (Join-Path $PSScriptRoot 'Private' 'Whisper.ps1')
+. (Join-Path $PSScriptRoot 'Private' 'Transcript.ps1')
 
 function Get-MediaTranscript {
     <#
@@ -23,9 +24,6 @@ function Get-MediaTranscript {
         [Parameter(ParameterSetName = 'Mixed', Mandatory)]
         [Alias('PSPath')]
         [string[]] $LiteralPath,
-
-        [ValidateSet('json', 'lrc', 'txt', 'text', 'vtt', 'srt', 'tsv', 'all')]
-        [string[]] $Format = @('srt'),
 
         [ValidateSet('large-v2', 'large-v3-turbo', 'large-v3', 'kotoba-v2')]
         [string] $Model = 'large-v2',
@@ -56,16 +54,43 @@ function Get-MediaTranscript {
             return
         }
 
-        $whisperArgs = Get-WhisperArguments -Source $sources -Format $Format -Model $Model -UseLanguage $UseLanguage
+        $whisperArgs = Get-WhisperArguments -Source $sources -Model $Model -UseLanguage $UseLanguage
         Write-DebugLog -Text ($whisperArgs -join ' ')
 
-        $state = @{ ExitCode = $null }
-        Invoke-Whisper -Exe $exe -Arguments $whisperArgs -Cmdlet $PSCmdlet -State $state
+        $snapshot = Get-WhisperJsonSnapshot -Source $sources
+        try {
+            $state = @{ ExitCode = $null }
+            Invoke-Whisper -Exe $exe -Arguments $whisperArgs -Cmdlet $PSCmdlet -State $state
 
-        # ExitCode nul = ShouldProcess a refusé (WhatIf), ce n'est pas un échec. Un code non nul en est un ;
-        # l'inverse n'est pas vrai, le binaire sortant en 0 même sans média trouvé.
-        if ($null -ne $state['ExitCode'] -and $state['ExitCode'] -ne 0) {
-            Write-ErrorLog -Text "faster-whisper-xxl a échoué (code $( $state['ExitCode'] )) sur '$( $sources[0] )'."
+            # ExitCode nul = ShouldProcess a refusé (WhatIf), ce n'est pas un échec. Un code non nul en est un ;
+            # l'inverse n'est pas vrai, le binaire sortant en 0 même sans média trouvé.
+            if ($null -ne $state['ExitCode'] -and $state['ExitCode'] -ne 0) {
+                Write-ErrorLog -Text "faster-whisper-xxl a échoué (code $( $state['ExitCode'] )) sur '$( $sources[0] )'."
+                return
+            }
+
+            if ($null -eq $state['ExitCode']) {
+                return
+            }
+
+            $nativeJsons = @(Get-WhisperNewJsonFile -Source $sources -Before $snapshot)
+            if ($nativeJsons.Count -eq 0) {
+                Write-ErrorLog -Text "Aucun JSON natif produit par faster-whisper-xxl pour '$( $sources[0] )'."
+                return
+            }
+
+            foreach ($native in $nativeJsons) {
+                try {
+                    Convert-WhisperNativeToTetram -NativeJsonPath $native -Model $Model -UseLanguage $UseLanguage
+                }
+                catch {
+                    Write-ErrorLog -Text $_.Exception.Message
+                }
+            }
+        }
+        finally {
+            # Snapshot : seuls les JSON apparus pendant cet appel sont des artefacts, y compris si la normalisation a échoué.
+            Remove-WhisperNativeJson -Path @(Get-WhisperNewJsonFile -Source $sources -Before $snapshot)
         }
     }
     catch {

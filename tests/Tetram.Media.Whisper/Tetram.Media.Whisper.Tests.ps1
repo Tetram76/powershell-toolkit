@@ -53,8 +53,8 @@ Describe 'Get-MediaTranscript binding' {
         }
     }
 
-    It 'refuse un format hors liste' {
-        { Get-MediaTranscript -Path 'a.mkv' -Format 'docx' -ErrorAction Stop } | Should -Throw
+    It 'n''expose plus -Format' {
+        (Get-Command Get-MediaTranscript).Parameters.ContainsKey('Format') | Should -BeFalse
     }
 
     It 'refuse un modèle hors liste' {
@@ -163,13 +163,18 @@ Describe 'Get-MediaTranscript orchestration' {
         Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 0
     }
 
-    It 'journalise un code de sortie non nul sans lever' {
+    It 'journalise un code de sortie non nul sans lever et sans publier de JSON Tetram' {
+        $work = Join-Path $TestDrive 'exit-nonzero'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
             $State['ExitCode'] = 1
         }
-        { Get-MediaTranscript -Path 'D:\a.mkv' } | Should -Not -Throw
+        { Get-MediaTranscript -LiteralPath $media } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
+        @(Get-ChildItem -LiteralPath $work -Filter '*.json' -File).Count | Should -Be 0
     }
 
     It 'journalise une exception d''exécution sans lever' {
@@ -185,16 +190,6 @@ Describe 'Get-MediaTranscript orchestration' {
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
     }
 
-    It 'transmet une source inexistante sans erreur' {
-        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
-            param($Exe, $Arguments, $Cmdlet, $State)
-            $State['ExitCode'] = 0
-        }
-        { Get-MediaTranscript -Path (Join-Path $TestDrive 'absent.mkv') } | Should -Not -Throw
-        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 0
-        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 1
-    }
-
     It 'n''émet rien dans le pipeline' {
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
@@ -204,13 +199,94 @@ Describe 'Get-MediaTranscript orchestration' {
         $out | Should -BeNullOrEmpty
     }
 
-    It 'sous -WhatIf, affiche la commande et ne lance pas le binaire' {
-        # Invoke-Whisper n'est volontairement pas mocké : avec un exe inexistant, toute exécution réelle
-        # lèverait et déclencherait Write-ErrorLog.
+    It 'sous -WhatIf, affiche la commande et ne crée ni ne supprime aucun fichier' {
+        $work = Join-Path $TestDrive 'whatif'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        $existing = Join-Path $work 'keep.ja.json'
+        Set-Content -LiteralPath $existing -Value '{"language":"ja","segments":[]}'
         Mock -ModuleName Tetram.Media.Whisper Get-WhisperPath { 'X:\binaire-absent-xyz.exe' }
-        Get-MediaTranscript -Path 'D:\a.mkv' -WhatIf
+        Get-MediaTranscript -LiteralPath $media -Model large-v3 -UseLanguage ja -WhatIf
         Should -Invoke -ModuleName Tetram.Media.Whisper Show-CommandLine -Times 1
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 0
+        Test-Path -LiteralPath $existing | Should -BeTrue
+        @(Get-ChildItem -LiteralPath $work -Filter '*.track *.json' -File).Count | Should -Be 0
+    }
+
+    It 'écrit le JSON Tetram canonique et supprime le JSON natif' {
+        $work = Join-Path $TestDrive 'success'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            Set-Content -LiteralPath (Join-Path $work 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $State['ExitCode'] = 0
+        }
+        Get-MediaTranscript -LiteralPath $media -Model large-v3 -UseLanguage ja
+        $dest = Join-Path $work 'Episode.track 1.ja.large-v3.json'
+        Test-Path -LiteralPath $dest | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $work 'Episode.ja.json') | Should -BeFalse
+        $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
+        $parsed.engine | Should -Be 'faster-whisper'
+        $parsed.model | Should -Be 'large-v3'
+        $parsed.language | Should -Be 'ja'
+        $parsed.languageSource | Should -Be 'forced'
+        $parsed.audioTrack | Should -Be 1
+        $out = Get-MediaTranscript -LiteralPath $media -Model large-v3 -UseLanguage ja
+        $out | Should -BeNullOrEmpty
+    }
+
+    It 'nomme le sidecar kotoba-v2 avec le nom canonique du modèle' {
+        $work = Join-Path $TestDrive 'kotoba'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            Set-Content -LiteralPath (Join-Path $work 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $State['ExitCode'] = 0
+        }
+        Get-MediaTranscript -LiteralPath $media -Model kotoba-v2 -UseLanguage ja
+        $dest = Join-Path $work 'Episode.track 1.ja.kotoba-v2.json'
+        Test-Path -LiteralPath $dest | Should -BeTrue
+        $dest | Should -Not -Match 'ctranslate'
+        $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
+        $parsed.model | Should -Be 'kotoba-v2'
+    }
+
+    It 'reprend la langue détectée du JSON natif sans -UseLanguage' {
+        $work = Join-Path $TestDrive 'detected'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            Set-Content -LiteralPath (Join-Path $work 'Episode.en.json') -Value '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"hi"}]}'
+            $State['ExitCode'] = 0
+        }
+        Get-MediaTranscript -LiteralPath $media -Model large-v3
+        $dest = Join-Path $work 'Episode.track 1.en.large-v3.json'
+        Test-Path -LiteralPath $dest | Should -BeTrue
+        $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
+        $parsed.language | Should -Be 'en'
+        $parsed.languageSource | Should -Be 'detected'
+    }
+
+    It 'ne laisse pas de JSON Tetram partiel si le JSON natif est invalide' {
+        $work = Join-Path $TestDrive 'invalid'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            Set-Content -LiteralPath (Join-Path $work 'Episode.ja.json') -Value 'not-json'
+            $State['ExitCode'] = 0
+        }
+        { Get-MediaTranscript -LiteralPath $media -Model large-v3 -UseLanguage ja } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
+        @(Get-ChildItem -LiteralPath $work -Filter '*.json' -File).Count | Should -Be 0
     }
 }
 
@@ -225,7 +301,7 @@ Describe 'Get-MediaTranscript bout en bout' -Tag 'Integration' {
         Remove-Module -Name 'Tetram.Media.Whisper' -Force -ErrorAction SilentlyContinue
     }
 
-    It 'produit un .srt à côté de la source' {
+    It 'produit un JSON Tetram à côté de la source' {
         if (-not (Test-Path -LiteralPath $script:RealExe -PathType Leaf)) {
             Set-ItResult -Skipped -Because 'distribution Purfview absente'
             return
@@ -238,6 +314,17 @@ Describe 'Get-MediaTranscript bout en bout' -Tag 'Integration' {
 
         Get-MediaTranscript -Path $wav -UseLanguage en
 
-        @(Get-ChildItem -LiteralPath $work -Filter '*.srt').Count | Should -BeGreaterThan 0
+        $dest = Join-Path $work 'sample.track 1.en.large-v2.json'
+        Test-Path -LiteralPath $dest | Should -BeTrue
+        @(Get-ChildItem -LiteralPath $work -Filter '*.srt' -File).Count | Should -Be 0
+        $native = @(Get-ChildItem -LiteralPath $work -Filter 'sample.en.json' -File)
+        $native.Count | Should -Be 0
+        $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
+        $parsed.engine | Should -Be 'faster-whisper'
+        $parsed.model | Should -Be 'large-v2'
+        $parsed.language | Should -Be 'en'
+        $parsed.languageSource | Should -Be 'forced'
+        $parsed.audioTrack | Should -Be 1
+        $parsed.PSObject.Properties['segments'] | Should -Not -BeNullOrEmpty
     }
 }
