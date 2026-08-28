@@ -430,8 +430,7 @@ Describe 'Get-MediaTranscript orchestration' {
             $Text -match "\(modèle $([regex]::Escape($Model))\)" -and
             $Text -match '-1073740791' -and
             $Text -match '0xC0000409' -and
-            $Text -match 'JSON natif exploitable' -and
-            $Text -match 'normalisation Tetram'
+            $Text -match 'JSON natif exploitable et normalisation Tetram terminée malgré le crash'
         }
         $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
         $parsed.engine | Should -Be 'faster-whisper'
