@@ -4,6 +4,7 @@
 # Import-Module (Join-Path $RepoRoot 'Tetram.Media.Whisper') -Force
 # InModuleScope 'Tetram.Media.Whisper' : les fonctions ne sont pas exportées.
 # $TestDrive n'est pas visible depuis InModuleScope : le passer via -Parameters @{ Work = $TestDrive }.
+# Join-Path / [IO.Path] : ne pas figer D:\... — Linux CI n'a pas le lecteur D: et `\` n'est pas un séparateur.
 
 BeforeAll {
     Set-StrictMode -Version Latest
@@ -49,15 +50,17 @@ AfterAll {
 Describe 'Get-TetramTranscriptPath' {
     It 'place track avant langue et utilise le nom canonique large-v3' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-TetramTranscriptPath -Directory 'D:\Videos' -MediaBase 'Episode' -Language 'ja' -Model 'large-v3'
-            $got | Should -Be 'D:\Videos\Episode.track 1.ja.large-v3.json'
+            $dir = Join-Path 'Videos' 'Shows'
+            $got = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'large-v3'
+            $got | Should -Be (Join-Path $dir 'Episode.track 1.ja.large-v3.json')
         }
     }
 
     It 'utilise kotoba-v2 comme nom de modèle, pas un dossier CTranslate2' {
         InModuleScope 'Tetram.Media.Whisper' {
-            $got = Get-TetramTranscriptPath -Directory 'D:\Videos' -MediaBase 'Episode' -Language 'ja' -Model 'kotoba-v2'
-            $got | Should -Be 'D:\Videos\Episode.track 1.ja.kotoba-v2.json'
+            $dir = Join-Path 'Videos' 'Shows'
+            $got = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'kotoba-v2'
+            $got | Should -Be (Join-Path $dir 'Episode.track 1.ja.kotoba-v2.json')
             $got | Should -Not -Match 'ctranslate'
         }
     }
@@ -66,14 +69,16 @@ Describe 'Get-TetramTranscriptPath' {
 Describe 'Get-WhisperMediaBaseName' {
     It 'retire le postfixe de langue du JSON natif Purfview' {
         InModuleScope 'Tetram.Media.Whisper' {
-            Get-WhisperMediaBaseName -NativeJsonPath 'D:\Videos\Episode.ja.json' -Language 'ja' |
+            $path = Join-Path 'Videos' 'Episode.ja.json'
+            Get-WhisperMediaBaseName -NativeJsonPath $path -Language 'ja' |
                 Should -Be 'Episode'
         }
     }
 
     It 'conserve le stem si le postfixe de langue est absent' {
         InModuleScope 'Tetram.Media.Whisper' {
-            Get-WhisperMediaBaseName -NativeJsonPath 'D:\Videos\Episode.json' -Language 'ja' |
+            $path = Join-Path 'Videos' 'Episode.json'
+            Get-WhisperMediaBaseName -NativeJsonPath $path -Language 'ja' |
                 Should -Be 'Episode'
         }
     }
@@ -213,7 +218,7 @@ Describe 'Write-TetramTranscript' {
         InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3'
-            $dest = Join-Path $Work ('no-such-dir-' + [guid]::NewGuid() + '\Episode.track 1.en.large-v3.json')
+            $dest = Join-Path (Join-Path $Work ('no-such-dir-' + [guid]::NewGuid())) 'Episode.track 1.en.large-v3.json'
             { Write-TetramTranscript -Transcript $transcript -Path $dest } | Should -Throw
             Test-Path -LiteralPath $dest | Should -BeFalse
         }
