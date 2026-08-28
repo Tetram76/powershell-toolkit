@@ -62,7 +62,10 @@ function Get-MediaTranscript {
 
                 # ExitCode nul = ShouldProcess a refusé (WhatIf), ce n'est pas un échec. Un code non nul en est un ;
                 # l'inverse n'est pas vrai, le binaire sortant en 0 même sans média trouvé.
-                if ($null -ne $state['ExitCode'] -and $state['ExitCode'] -ne 0) {
+                # Purfview r245.4 : large-v3 et large-v3-turbo écrivent le JSON natif, puis meurent
+                # en STATUS_STACK_BUFFER_OVERRUN (0xC0000409 / -1073740791) au post-traitement.
+                $recoverablePurfviewCrash = $state['ExitCode'] -eq -1073740791 -and $currentModel -in @('large-v3', 'large-v3-turbo')
+                if ($null -ne $state['ExitCode'] -and $state['ExitCode'] -ne 0 -and -not $recoverablePurfviewCrash) {
                     Write-ErrorLog -Text "faster-whisper-xxl a échoué (code $( $state['ExitCode'] )) sur '$mediaPath' (modèle $currentModel)."
                     continue
                 }
@@ -82,6 +85,10 @@ function Get-MediaTranscript {
                 }
 
                 Convert-WhisperNativeToTetram -NativeJsonPath $nativeJsons[0] -MediaPath $mediaPath -Model $currentModel -UseLanguage $UseLanguage -AudioTrack $AudioTrack
+
+                if ($recoverablePurfviewCrash) {
+                    Write-InfoLog -Force -Text "faster-whisper-xxl s'est terminé avec le code -1073740791 (0xC0000409) sur '$mediaPath' (modèle $currentModel) ; JSON natif exploitable, poursuite de la normalisation Tetram."
+                }
             }
             catch {
                 Write-ErrorLog -Text $_.Exception.Message
