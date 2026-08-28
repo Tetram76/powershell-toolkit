@@ -200,14 +200,18 @@ Describe 'ConvertFrom-WhisperTranscript' {
 }
 
 Describe 'Write-TetramTranscript' {
-    It 'écrit le JSON Tetram et ne laisse pas de fichier temporaire' {
+    It 'écrit le JSON Tetram via TEMP et ne laisse pas de fichier temporaire' {
         InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3' -UseLanguage 'ja'
             $dest = Join-Path $Work 'Episode.track 1.ja.large-v3.json'
+            $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+            $before = @(Get-ChildItem -LiteralPath $tempRoot -Filter '*.tmp' -File -ErrorAction SilentlyContinue).Name
             Write-TetramTranscript -Transcript $transcript -Path $dest
             Test-Path -LiteralPath $dest | Should -BeTrue
             @(Get-ChildItem -LiteralPath $Work -Filter '*.tmp' -File).Count | Should -Be 0
+            $after = @(Get-ChildItem -LiteralPath $tempRoot -Filter '*.tmp' -File -ErrorAction SilentlyContinue).Name
+            @($after | Where-Object { $_ -notin $before }).Count | Should -Be 0
             $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
             $parsed.engine | Should -Be 'faster-whisper'
             $parsed.language | Should -Be 'ja'
@@ -225,23 +229,51 @@ Describe 'Write-TetramTranscript' {
     }
 }
 
-Describe 'Get-WhisperNewJsonFile' {
-    It 'ne retient que les JSON natifs apparus après le snapshot' {
+Describe 'Get-WhisperNativeJsonFromOutputDir' {
+    It 'liste les JSON natifs du dossier de sortie et ignore le sidecar Tetram' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $outDir = Join-Path $Work 'whisper-out'
+            New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+            $native = Join-Path $outDir 'Episode.ja.json'
+            Set-Content -LiteralPath $native -Value '{"language":"ja","segments":[]}'
+            Set-Content -LiteralPath (Join-Path $outDir 'Episode.track 1.ja.large-v3.json') -Value '{}'
+            Set-Content -LiteralPath (Join-Path $outDir 'notes.txt') -Value 'x'
+
+            $got = @(Get-WhisperNativeJsonFromOutputDir -OutputDir $outDir)
+            $got | Should -Be @($native)
+        }
+    }
+}
+
+Describe 'Resolve-WhisperTranscriptDirectory' {
+    It 'prend le dossier d''un fichier source au stem égal, sans exiger l''existence' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            $media = Join-Path 'Videos' 'Episode.mkv'
+            Resolve-WhisperTranscriptDirectory -MediaBase 'Episode' -Source @($media) |
+                Should -Be ([IO.Path]::GetDirectoryName($media))
+        }
+    }
+
+    It 'trouve le média sous un masque et ignore un sidecar Tetram homonyme' {
         InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $media = Join-Path $Work 'Episode.mkv'
             Set-Content -LiteralPath $media -Value 'x'
-            $preexisting = Join-Path $Work 'Episode.fr.json'
-            Set-Content -LiteralPath $preexisting -Value '{"language":"fr","segments":[]}'
-            $tetram = Join-Path $Work 'Episode.track 1.ja.large-v3.json'
-            Set-Content -LiteralPath $tetram -Value '{}'
+            Set-Content -LiteralPath (Join-Path $Work 'Episode.track 1.ja.large-v3.json') -Value '{}'
+            $got = Resolve-WhisperTranscriptDirectory -MediaBase 'Episode' -Source @((Join-Path $Work '*.mkv'))
+            $got | Should -Be $Work
+        }
+    }
 
-            $snapshot = Get-WhisperJsonSnapshot -Source @($media)
-            $native = Join-Path $Work 'Episode.ja.json'
-            Set-Content -LiteralPath $native -Value '{"language":"ja","segments":[]}'
-
-            $got = @(Get-WhisperNewJsonFile -Source @($media) -Before $snapshot)
-            $got | Should -Be @($native)
+    It 'ne rattache pas un stem sans média correspondant' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dir = Join-Path $Work 'no-match'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $dir 'Other.mkv') -Value 'x'
+            $got = Resolve-WhisperTranscriptDirectory -MediaBase 'Episode' -Source @((Join-Path $dir '*.mkv'))
+            [string]::IsNullOrWhiteSpace($got) | Should -BeTrue
         }
     }
 }

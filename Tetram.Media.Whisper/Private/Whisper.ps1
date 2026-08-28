@@ -6,6 +6,7 @@ function Get-WhisperArguments {
     param(
         [Parameter(Mandatory)] [string[]] $Source,
         [Parameter(Mandatory)] [string] $Model,
+        [Parameter(Mandatory)] [string] $OutputDir,
         [string] $UseLanguage
     )
 
@@ -14,7 +15,7 @@ function Get-WhisperArguments {
 
     $whisperArgs += @(
         '--batch_recursive'
-        '--output_dir', 'source'
+        '--output_dir', $OutputDir
         '--output_format', 'json'
         '--check_files'
         '--model', $Model
@@ -157,7 +158,7 @@ function Invoke-Whisper {
     $State['ExitCode'] = $null
 
     # Avant ShouldProcess : sous -WhatIf, la ligne prévue reste visible.
-    Show-CommandLine -Exe $Exe -Arguments $Arguments -NoPathDetectionParameters 'output_dir', 'output_format', 'model', 'task', 'language', 'ff_track'
+    Show-CommandLine -Exe $Exe -Arguments $Arguments -NoPathDetectionParameters 'output_format', 'model', 'task', 'language', 'ff_track'
 
     if (-not $Cmdlet.ShouldProcess($Arguments[0], 'faster-whisper-xxl')) {
         return

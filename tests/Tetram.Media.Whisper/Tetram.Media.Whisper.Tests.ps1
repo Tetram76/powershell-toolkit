@@ -207,11 +207,19 @@ Describe 'Get-MediaTranscript orchestration' {
         $existing = Join-Path $work 'keep.ja.json'
         Set-Content -LiteralPath $existing -Value '{"language":"ja","segments":[]}'
         Mock -ModuleName Tetram.Media.Whisper Get-WhisperPath { 'X:\binaire-absent-xyz.exe' }
+        Mock -ModuleName Tetram.Media.Whisper Show-CommandLine {
+            param($Exe, $Arguments)
+            $script:SeenArguments = $Arguments
+        }
         Get-MediaTranscript -LiteralPath $media -Model large-v3 -UseLanguage ja -WhatIf
         Should -Invoke -ModuleName Tetram.Media.Whisper Show-CommandLine -Times 1
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 0
         Test-Path -LiteralPath $existing | Should -BeTrue
         @(Get-ChildItem -LiteralPath $work -Filter '*.track *.json' -File).Count | Should -Be 0
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        $outDir = $script:SeenArguments[$outIndex + 1]
+        $outDir | Should -Not -Be 'source'
+        Test-Path -LiteralPath $outDir | Should -BeFalse
     }
 
     It 'écrit le JSON Tetram canonique et supprime le JSON natif' {
@@ -221,13 +229,23 @@ Describe 'Get-MediaTranscript orchestration' {
         Set-Content -LiteralPath $media -Value 'x'
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
-            Set-Content -LiteralPath (Join-Path $work 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $script:SeenArguments = $Arguments
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            $outDir = $Arguments[$outIndex + 1]
+            Set-Content -LiteralPath (Join-Path $outDir 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
             $State['ExitCode'] = 0
         }
         Get-MediaTranscript -LiteralPath $media -Model large-v3 -UseLanguage ja
         $dest = Join-Path $work 'Episode.track 1.ja.large-v3.json'
         Test-Path -LiteralPath $dest | Should -BeTrue
         Test-Path -LiteralPath (Join-Path $work 'Episode.ja.json') | Should -BeFalse
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        $outDir = $script:SeenArguments[$outIndex + 1]
+        $outDir | Should -Not -Be 'source'
+        $gotTemp = [IO.Path]::GetFullPath((Split-Path -Parent $outDir)).TrimEnd('\', '/')
+        $wantTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+        $gotTemp | Should -Be $wantTemp
+        Test-Path -LiteralPath $outDir | Should -BeFalse
         $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
         $parsed.engine | Should -Be 'faster-whisper'
         $parsed.model | Should -Be 'large-v3'
@@ -245,7 +263,8 @@ Describe 'Get-MediaTranscript orchestration' {
         Set-Content -LiteralPath $media -Value 'x'
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
-            Set-Content -LiteralPath (Join-Path $work 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
             $State['ExitCode'] = 0
         }
         Get-MediaTranscript -LiteralPath $media -Model kotoba-v2 -UseLanguage ja
@@ -263,7 +282,8 @@ Describe 'Get-MediaTranscript orchestration' {
         Set-Content -LiteralPath $media -Value 'x'
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
-            Set-Content -LiteralPath (Join-Path $work 'Episode.en.json') -Value '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"hi"}]}'
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.en.json') -Value '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"hi"}]}'
             $State['ExitCode'] = 0
         }
         Get-MediaTranscript -LiteralPath $media -Model large-v3
@@ -281,12 +301,16 @@ Describe 'Get-MediaTranscript orchestration' {
         Set-Content -LiteralPath $media -Value 'x'
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
-            Set-Content -LiteralPath (Join-Path $work 'Episode.ja.json') -Value 'not-json'
+            $script:SeenArguments = $Arguments
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value 'not-json'
             $State['ExitCode'] = 0
         }
         { Get-MediaTranscript -LiteralPath $media -Model large-v3 -UseLanguage ja } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
         @(Get-ChildItem -LiteralPath $work -Filter '*.json' -File).Count | Should -Be 0
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        Test-Path -LiteralPath $script:SeenArguments[$outIndex + 1] | Should -BeFalse
     }
 }
 

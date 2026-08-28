@@ -42,7 +42,7 @@ Get-MediaTranscript -LiteralPath <string[]> [-Model <string>]
 
 ## DESCRIPTION
 
-`Get-MediaTranscript` produit uniquement un JSON Tetram canonique à côté du média source. Le JSON natif Faster-Whisper est un artefact temporaire : il est lu, normalisé, puis supprimé. Toutes les sources d'un appel sont traitées par une **seule** invocation du binaire, le chargement du modèle étant le coût dominant. La commande ne valide aucun chemin : c'est whisper qui signale une source introuvable ou sans média. La commande n'émet rien dans le pipeline.
+`Get-MediaTranscript` produit uniquement un JSON Tetram canonique à côté du média source. Le JSON natif Faster-Whisper est un artefact temporaire : il est écrit dans un dossier unique sous le répertoire temporaire système, lu, normalisé, puis ce dossier est supprimé. Toutes les sources d'un appel sont traitées par une **seule** invocation du binaire, le chargement du modèle étant le coût dominant. La commande ne valide aucun chemin : c'est whisper qui signale une source introuvable ou sans média. La commande n'émet rien dans le pipeline.
 
 Le fichier durable suit la convention `<media-base>.track <trackid>.<langue>.<model>.json` (piste puis langue). Exemple : `Episode.track 1.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.
 
