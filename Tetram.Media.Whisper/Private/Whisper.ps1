@@ -4,22 +4,20 @@ function Get-WhisperArguments {
     [CmdletBinding()]
     [OutputType([string[]])]
     param(
-        [Parameter(Mandatory)] [string[]] $Source,
+        [Parameter(Mandatory)] [string] $Source,
         [Parameter(Mandatory)] [string] $Model,
         [Parameter(Mandatory)] [string] $OutputDir,
+        [int] $AudioTrack = 1,
         [string] $UseLanguage
     )
 
-    # Chaque source est un argument nu (pas de préfixe file_list=).
-    $whisperArgs = @($Source)
-
-    $whisperArgs += @(
-        '--batch_recursive'
+    $whisperArgs = @(
+        $Source
         '--output_dir', $OutputDir
         '--output_format', 'json'
         '--check_files'
         '--model', $Model
-        '--ff_track', '1'
+        '--ff_track', "$AudioTrack"
     )
 
     if (-not [string]::IsNullOrWhiteSpace($UseLanguage)) {
@@ -47,69 +45,6 @@ function Get-WhisperArguments {
     }
 
     return $whisperArgs
-}
-
-function Resolve-WhisperSource {
-    [CmdletBinding()]
-    [OutputType([string[]])]
-    param(
-        [string[]] $Path,
-        [string[]] $LiteralPath
-    )
-
-    $sources = @()
-
-    foreach ($entry in @($Path)) {
-        if ([string]::IsNullOrWhiteSpace($entry)) { continue }
-
-        # '~' n'est compris que de PowerShell ; passé tel quel, whisper (natif) le prendrait au pied de la
-        # lettre (vérifié empiriquement : [System.IO.File]::Exists échoue sur un chemin en '~'). Expansion
-        # textuelle avant tout autre test, sans passer par Resolve-Path : un masque comme '~\Videos\*.mkv'
-        # reste ainsi un seul argument transmis à whisper, et l'existence n'est jamais testée ici.
-        if ($entry -eq '~' -or $entry.StartsWith('~/') -or $entry.StartsWith('~\')) {
-            $entry = Join-Path $HOME $entry.Substring(1).TrimStart('/', '\')
-        }
-
-        if (Test-PowerShellSpecificPath -Path $entry) {
-            $resolvedPaths = [System.Collections.Generic.List[string]]::new()
-
-            if ($entry.Contains('[')) {
-                # Un crochet est ambigu, et les deux lectures sont légitimes : nom de fichier réel
-                # (ex. "film[1].mkv", vérifié empiriquement introuvable par WildcardPattern sans cet
-                # échappement) ou classe de caractères glob (ex. "clip[12].mkv" -> clip1.mkv, clip2.mkv).
-                # On tente les deux et on fusionne : aucune des deux interprétations n'est présumée fausse.
-                $literalPattern = $entry -replace '(?<!`)([\[\]])', '`$1'
-                foreach ($resolved in @(Resolve-Path -Path $literalPattern -ErrorAction SilentlyContinue)) {
-                    $resolvedPaths.Add($resolved.ProviderPath)
-                }
-                foreach ($resolved in @(Resolve-Path -Path $entry -ErrorAction SilentlyContinue)) {
-                    if (-not $resolvedPaths.Contains($resolved.ProviderPath)) {
-                        $resolvedPaths.Add($resolved.ProviderPath)
-                    }
-                }
-            }
-            else {
-                foreach ($resolved in @(Resolve-Path -Path $entry -ErrorAction SilentlyContinue)) {
-                    $resolvedPaths.Add($resolved.ProviderPath)
-                }
-            }
-
-            # Une résolution vide ne se rabat pas sur le littéral : ce serait inventer une interprétation
-            # que l'appelant n'a pas demandée, et faire signaler par whisper un fichier jamais désigné.
-            $sources += $resolvedPaths
-            continue
-        }
-
-        # * / ? sont déjà le glob de whisper : on ne résout pas et on n'absolutise pas.
-        $sources += $entry
-    }
-
-    foreach ($entry in @($LiteralPath)) {
-        if ([string]::IsNullOrWhiteSpace($entry)) { continue }
-        $sources += $entry
-    }
-
-    return $sources
 }
 
 function Get-WhisperPath {

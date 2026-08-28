@@ -20,4 +20,4 @@ Transcription des pistes audio via le binaire Purfview Standalone Faster-Whisper
 
 ### [Get-MediaTranscript](Get-MediaTranscript.md)
 
-Transcrit les pistes audio de fichiers médias avec faster-whisper.
+Transcrit une piste audio d'un fichier média avec faster-whisper.

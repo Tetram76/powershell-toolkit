@@ -2,7 +2,7 @@
 #
 # Tout passe par InModuleScope 'Tetram.Media.Whisper' : ces fonctions ne sont pas exportées.
 # $TestDrive n'est pas visible depuis InModuleScope : le passer via -Parameters @{ Work = $TestDrive }.
-# Get-Whisper* / Resolve-* n'appellent aucun binaire. Invoke-Whisper s'exerce via pwsh (stand-in),
+# Get-Whisper* n'appelle aucun binaire. Invoke-Whisper s'exerce via pwsh (stand-in),
 # jamais via faster-whisper-xxl.
 
 BeforeAll {
@@ -19,13 +19,12 @@ AfterAll {
 # La fonction est pure et déterministe : chaque cas assert la séquence entière plutôt qu'un fragment.
 # Aucun paramètre n'est donc fourni sans être couvert, et toute régression d'ordre est vue partout.
 Describe 'Get-WhisperArguments' {
-    It 'produit la séquence par défaut, dans l''ordre, et sans --language' {
+    It 'produit la séquence unitaire par défaut, sans --batch_recursive ni --language' {
         InModuleScope 'Tetram.Media.Whisper' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
-            $got = Get-WhisperArguments -Source @('D:\Films\a.mkv') -Model 'large-v2' -OutputDir $outDir
+            $got = Get-WhisperArguments -Source 'D:\Films\a.mkv' -Model 'large-v2' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\Films\a.mkv'
-                '--batch_recursive'
                 '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
@@ -36,6 +35,8 @@ Describe 'Get-WhisperArguments' {
                 '--task', 'transcribe'
                 '--beep_off'
             )
+            $got | Should -Not -Contain '--batch_recursive'
+            (Get-Command Get-WhisperArguments).Parameters['Source'].ParameterType | Should -Be ([string])
         }
     }
 
@@ -45,35 +46,21 @@ Describe 'Get-WhisperArguments' {
         }
     }
 
-    It 'passe chaque source comme argument nu, sans préfixe file_list=' {
+    It 'passe --ff_track avec la piste demandée' {
         InModuleScope 'Tetram.Media.Whisper' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
-            $got = Get-WhisperArguments -Source @('D:\a.mkv', 'D:\b.mkv', 'D:\c.mkv') -Model 'large-v2' -OutputDir $outDir
-            $got | Should -Be @(
-                'D:\a.mkv'
-                'D:\b.mkv'
-                'D:\c.mkv'
-                '--batch_recursive'
-                '--output_dir', $outDir
-                '--output_format', 'json'
-                '--check_files'
-                '--model', 'large-v2'
-                '--ff_track', '1'
-                '--postfix'
-                '--print_progress'
-                '--task', 'transcribe'
-                '--beep_off'
-            )
+            $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'large-v2' -OutputDir $outDir -AudioTrack 2
+            $ff = [array]::IndexOf(@($got), '--ff_track')
+            $got[$ff + 1] | Should -Be '2'
         }
     }
 
     It 'reprend le modèle demandé' {
         InModuleScope 'Tetram.Media.Whisper' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v3-turbo' -OutputDir $outDir
+            $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'large-v3-turbo' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\a.mkv'
-                '--batch_recursive'
                 '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
@@ -90,10 +77,9 @@ Describe 'Get-WhisperArguments' {
     It 'insère --language entre --ff_track et --postfix quand UseLanguage est fourni' {
         InModuleScope 'Tetram.Media.Whisper' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v2' -UseLanguage 'fr' -OutputDir $outDir
+            $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'large-v2' -UseLanguage 'fr' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\a.mkv'
-                '--batch_recursive'
                 '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
@@ -111,10 +97,9 @@ Describe 'Get-WhisperArguments' {
     It 'ajoute les options Kotoba après la séquence générique pour kotoba-v2' {
         InModuleScope 'Tetram.Media.Whisper' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'kotoba-v2' -UseLanguage 'ja' -OutputDir $outDir
+            $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'kotoba-v2' -UseLanguage 'ja' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\a.mkv'
-                '--batch_recursive'
                 '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
@@ -137,10 +122,9 @@ Describe 'Get-WhisperArguments' {
     It 'n''ajoute aucune option Kotoba pour large-v3' {
         InModuleScope 'Tetram.Media.Whisper' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
-            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Model 'large-v3' -OutputDir $outDir
+            $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'large-v3' -OutputDir $outDir
             $got | Should -Be @(
                 'D:\a.mkv'
-                '--batch_recursive'
                 '--output_dir', $outDir
                 '--output_format', 'json'
                 '--check_files'
@@ -155,150 +139,6 @@ Describe 'Get-WhisperArguments' {
     }
 }
 
-Describe 'Resolve-WhisperSource' {
-    It 'transmet un masque tel quel, sans énumérer les fichiers' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            1..3 | ForEach-Object { Set-Content -LiteralPath (Join-Path $Work "f$_.mkv") -Value 'x' }
-            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work '*.mkv')))
-            $got.Count | Should -Be 1
-            $got[0] | Should -Be (Join-Path $Work '*.mkv')
-        }
-    }
-
-    It 'transmet un dossier tel quel' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $dir = Join-Path $Work 'films'
-            New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            $got = @(Resolve-WhisperSource -Path @($dir))
-            $got | Should -Be @($dir)
-        }
-    }
-
-    It 'transmet un fichier-liste tel quel, sans le lire' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $lst = Join-Path $Work 'lot.lst'
-            Set-Content -LiteralPath $lst -Value 'D:\Films\a.mkv'
-            $got = @(Resolve-WhisperSource -Path @($lst))
-            $got | Should -Be @($lst)
-        }
-    }
-
-    It 'transmet un chemin inexistant sans erreur' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $missing = Join-Path $Work 'absent.mkv'
-            $got = @(Resolve-WhisperSource -Path @($missing))
-            $got | Should -Be @($missing)
-        }
-    }
-
-    It 'résout une entrée à crochets sans neutraliser les crochets du résultat' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            Set-Content -LiteralPath (Join-Path $Work 'film[1].mkv') -Value 'x'
-            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work 'film[1].mkv')))
-            $got.Count | Should -Be 1
-            $got[0] | Should -Be (Join-Path $Work 'film[1].mkv')
-        }
-    }
-
-    It 'ne produit rien pour une entrée à crochets sans correspondance' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work 'rien[9].mkv')))
-            $got.Count | Should -Be 0
-        }
-    }
-
-    It 'résout une classe de caractères entre crochets vers les fichiers correspondants' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            Set-Content -LiteralPath (Join-Path $Work 'clip1.mkv') -Value 'x'
-            Set-Content -LiteralPath (Join-Path $Work 'clip2.mkv') -Value 'x'
-            Set-Content -LiteralPath (Join-Path $Work 'clip12.mkv') -Value 'x'
-            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work 'clip[12].mkv')))
-            $got.Count | Should -Be 2
-            $got | Should -Contain (Join-Path $Work 'clip1.mkv')
-            $got | Should -Contain (Join-Path $Work 'clip2.mkv')
-            $got | Should -Not -Contain (Join-Path $Work 'clip12.mkv')
-        }
-    }
-
-    It 'fusionne interprétation littérale et classe de caractères sans doublon' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            Set-Content -LiteralPath (Join-Path $Work 'film[1].mkv') -Value 'x'
-            Set-Content -LiteralPath (Join-Path $Work 'film1.mkv') -Value 'x'
-            $got = @(Resolve-WhisperSource -Path @((Join-Path $Work 'film[1].mkv')))
-            $got.Count | Should -Be 2
-            $got | Should -Contain (Join-Path $Work 'film[1].mkv')
-            $got | Should -Contain (Join-Path $Work 'film1.mkv')
-        }
-    }
-
-    It 'concatène -Path puis -LiteralPath' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $mask = Join-Path $Work '*.mkv'
-            $literal = Join-Path $Work 'film[1].mkv'
-            $got = @(Resolve-WhisperSource -Path @($mask) -LiteralPath @($literal))
-            $got[0] | Should -Be $mask
-            $got[1] | Should -Be (Join-Path $Work 'film[1].mkv')
-        }
-    }
-
-    It 'ne résout jamais -LiteralPath, même avec un masque dedans' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $entry = Join-Path $Work '*.mkv'
-            $got = @(Resolve-WhisperSource -LiteralPath @($entry))
-            $got | Should -Be @($entry)
-        }
-    }
-
-    It 'transmet un masque * / ? sans l''absolutiser' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            @(Resolve-WhisperSource -Path @('.\*.mkv')) | Should -Be @('.\*.mkv')
-            @(Resolve-WhisperSource -Path @('*.mkv')) | Should -Be @('*.mkv')
-        }
-    }
-
-    It 'ne prend pas le ? du préfixe Win32 \\?\ pour un joker' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            $long = '\\?\C:\Videos\film.mkv'
-            @(Resolve-WhisperSource -Path @($long)) | Should -Be @($long)
-        }
-    }
-
-    It 'transmet -LiteralPath tel quel, sans absolutiser' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            @(Resolve-WhisperSource -LiteralPath @('film[1].mkv')) | Should -Be @('film[1].mkv')
-        }
-    }
-
-    It 'développe ~ sans tester l''existence' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            @(Resolve-WhisperSource -Path @('~\Videos\film.mkv')) | Should -Be @((Join-Path $HOME 'Videos\film.mkv'))
-            @(Resolve-WhisperSource -Path @('~/Videos/film.mkv')) | Should -Be @((Join-Path $HOME 'Videos/film.mkv'))
-        }
-    }
-
-    It 'développe ~ sans casser le masque qui le suit' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            $expected = Join-Path $HOME 'Videos\*.mkv'
-            @(Resolve-WhisperSource -Path @('~\Videos\*.mkv')) | Should -Be @($expected)
-        }
-    }
-
-    It 'ne développe pas ~ dans -LiteralPath' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            @(Resolve-WhisperSource -LiteralPath @('~\Videos\film.mkv')) | Should -Be @('~\Videos\film.mkv')
-        }
-    }
-}
 
 Describe 'Get-WhisperPath' {
     It 'retourne l''override quand c''est un fichier' {
