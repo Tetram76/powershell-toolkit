@@ -87,7 +87,7 @@ function Get-MediaTranscript {
                 Convert-WhisperNativeToTetram -NativeJsonPath $nativeJsons[0] -MediaPath $mediaPath -Model $currentModel -UseLanguage $UseLanguage -AudioTrack $AudioTrack
 
                 if ($recoverablePurfviewCrash) {
-                    Write-InfoLog -Force -Text "faster-whisper-xxl s'est terminé avec le code -1073740791 (0xC0000409) sur '$mediaPath' (modèle $currentModel) ; JSON natif exploitable, poursuite de la normalisation Tetram."
+                    Write-InfoLog -Force -Text "faster-whisper-xxl s'est terminé avec le code -1073740791 (0xC0000409) sur '$mediaPath' (modèle $currentModel) ; JSON natif exploitable et normalisation Tetram terminée malgré le crash."
                 }
             }
             catch {
