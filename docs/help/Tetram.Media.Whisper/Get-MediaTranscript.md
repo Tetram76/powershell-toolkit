@@ -4,7 +4,7 @@ external help file: Tetram.Media.Whisper-Help.xml
 HelpUri: ''
 Locale: fr-FR
 Module Name: Tetram.Media.Whisper
-ms.date: 08/15/2026
+ms.date: 08/28/2026
 PlatyPS schema version: 2024-05-01
 title: Get-MediaTranscript
 ---
@@ -20,21 +20,21 @@ Transcrit les pistes audio de fichiers médias avec faster-whisper.
 ### Path (Default)
 
 ```
-Get-MediaTranscript [-Path] <string[]> [-Format <string[]>] [-Model <string>]
+Get-MediaTranscript [-Path] <string[]> [-Model <string>]
  [-UseLanguage <string>] [-WhisperPath <string>] [-WhatIf] [-Confirm]
 ```
 
 ### Mixed
 
 ```
-Get-MediaTranscript -Path <string[]> -LiteralPath <string[]> [-Format <string[]>] [-Model <string>]
+Get-MediaTranscript -Path <string[]> -LiteralPath <string[]> [-Model <string>]
  [-UseLanguage <string>] [-WhisperPath <string>] [-WhatIf] [-Confirm]
 ```
 
 ### LiteralPath
 
 ```
-Get-MediaTranscript -LiteralPath <string[]> [-Format <string[]>] [-Model <string>]
+Get-MediaTranscript -LiteralPath <string[]> [-Model <string>]
  [-UseLanguage <string>] [-WhisperPath <string>] [-WhatIf] [-Confirm]
 ```
 
@@ -42,15 +42,19 @@ Get-MediaTranscript -LiteralPath <string[]> [-Format <string[]>] [-Model <string
 
 ## DESCRIPTION
 
-Le transcript est écrit à côté du fichier source, au(x) format(s) demandé(s), le code de langue étant ajouté au nom du fichier produit. Toutes les sources d'un appel sont traitées par une **seule** invocation du binaire, le chargement du modèle étant le coût dominant. La commande ne valide aucun chemin : c'est whisper qui signale une source introuvable ou sans média.
+`Get-MediaTranscript` produit uniquement un JSON Tetram canonique à côté du média source. Le JSON natif Faster-Whisper est un artefact temporaire : il est lu, normalisé, puis supprimé. Toutes les sources d'un appel sont traitées par une **seule** invocation du binaire, le chargement du modèle étant le coût dominant. La commande ne valide aucun chemin : c'est whisper qui signale une source introuvable ou sans média. La commande n'émet rien dans le pipeline.
+
+Le fichier durable suit la convention `<media-base>.track <trackid>.<langue>.<model>.json` (piste puis langue). Exemple : `Episode.track 1.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.
 
 ## EXAMPLES
 
 ### Example 1: Transcrire un fichier
 
 ```powershell
-Get-MediaTranscript -Path 'D:\Films\film.mkv'
+Get-MediaTranscript -Model large-v3 -UseLanguage ja 'D:\Videos\Episode.mkv'
 ```
+
+Produit `D:\Videos\Episode.track 1.ja.large-v3.json`.
 
 ### Example 2: Transcrire plusieurs fichiers dans un seul appel
 
@@ -82,31 +86,25 @@ Get-MediaTranscript -LiteralPath 'D:\Films\film[1].mkv'
 Get-MediaTranscript -Path 'D:\Films\*.mkv' -LiteralPath 'D:\Films\film[1].mkv'
 ```
 
-### Example 7: Produire plusieurs formats
-
-```powershell
-Get-MediaTranscript -Path 'D:\Films\film.mkv' -Format srt, vtt
-```
-
-### Example 8: Choisir le modèle
+### Example 7: Choisir le modèle
 
 ```powershell
 Get-MediaTranscript -Path 'D:\Films\film.mkv' -Model large-v3-turbo
 ```
 
-### Example 9: Forcer la langue
+### Example 8: Forcer la langue
 
 ```powershell
 Get-MediaTranscript -Path 'D:\Films\film.mkv' -UseLanguage fr
 ```
 
-### Example 10: Afficher la ligne de commande sans lancer le binaire
+### Example 9: Afficher la ligne de commande sans lancer le binaire
 
 ```powershell
 Get-MediaTranscript -Path 'D:\Films\film.mkv' -WhatIf
 ```
 
-### Example 11: Transcrire avec kotoba-v2
+### Example 10: Transcrire avec kotoba-v2
 
 ```powershell
 Get-MediaTranscript -Path 'D:\Films\film.mkv' -Model kotoba-v2 -UseLanguage ja
@@ -133,35 +131,6 @@ ParameterSets:
   ValueFromRemainingArguments: false
 DontShow: false
 AcceptedValues: []
-HelpMessage: ''
-```
-
-### -Format
-
-Formats de sortie, défaut `srt`.
-
-```yaml
-Type: System.String[]
-DefaultValue: srt
-SupportsWildcards: false
-Aliases: []
-ParameterSets:
-- Name: (All)
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-DontShow: false
-AcceptedValues:
-- json
-- lrc
-- txt
-- text
-- vtt
-- srt
-- tsv
-- all
 HelpMessage: ''
 ```
 
@@ -322,6 +291,6 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Une source peut être un fichier média, un masque ou un dossier ; une source d'extension `.txt`, `.m3u`, `.m3u8` ou `.lst` est lue par le binaire comme une **liste de médias** et n'est pas transcrite ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; seul le premier flux audio est transcrit ; jamais de traduction ; une réexécution réécrit les transcripts existants ; la commande n'accepte pas d'entrée pipeline, un masque sur `-Path` remplaçant `Get-ChildItem | ...`.
+Une source peut être un fichier média, un masque ou un dossier ; une source d'extension `.txt`, `.m3u`, `.m3u8` ou `.lst` est lue par le binaire comme une **liste de médias** et n'est pas transcrite ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; seul le premier flux audio est transcrit (`audioTrack` = 1) ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline, un masque sur `-Path` remplaçant `Get-ChildItem | ...`.
 
 ## RELATED LINKS

@@ -10,7 +10,9 @@
       <command:noun>MediaTranscript</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Le transcript est écrit à côté du fichier source, au(x) format(s) demandé(s), le code de langue étant ajouté au nom du fichier produit. Toutes les sources d'un appel sont traitées par une **seule** invocation du binaire, le chargement du modèle étant le coût dominant. La commande ne valide aucun chemin : c'est whisper qui signale une source introuvable ou sans média.</maml:para>
+      <maml:para>`Get-MediaTranscript` produit uniquement un JSON Tetram canonique à côté du média source. Le JSON natif Faster-Whisper est un artefact temporaire : il est lu, normalisé, puis supprimé. Toutes les sources d'un appel sont traitées par une **seule** invocation du binaire, le chargement du modèle étant le coût dominant. La commande ne valide aucun chemin : c'est whisper qui signale une source introuvable ou sans média. La commande n'émet rien dans le pipeline.
+
+Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.&lt;langue&gt;.&lt;model&gt;.json` (piste puis langue). Exemple : `Episode.track 1.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -18,24 +20,6 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
           <maml:name>Path</maml:name>
           <maml:description />
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String[]</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Format</maml:name>
-          <maml:description />
-          <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">json</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">lrc</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">txt</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">text</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">vtt</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">srt</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">tsv</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">all</command:parameterValue>
-          </command:parameterValueGroup>
           <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
           <dev:type>
             <maml:name>System.String[]</maml:name>
@@ -105,24 +89,6 @@
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Format</maml:name>
-          <maml:description />
-          <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">json</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">lrc</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">txt</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">text</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">vtt</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">srt</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">tsv</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">all</command:parameterValue>
-          </command:parameterValueGroup>
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String[]</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>Model</maml:name>
           <maml:description />
           <command:parameterValueGroup>
@@ -172,24 +138,6 @@
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="PSPath">
           <maml:name>LiteralPath</maml:name>
           <maml:description />
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String[]</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Format</maml:name>
-          <maml:description />
-          <command:parameterValueGroup>
-            <command:parameterValue required="false" variableLength="false">json</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">lrc</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">txt</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">text</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">vtt</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">srt</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">tsv</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">all</command:parameterValue>
-          </command:parameterValueGroup>
           <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
           <dev:type>
             <maml:name>System.String[]</maml:name>
@@ -249,26 +197,6 @@
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-        </dev:type>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
-        <maml:name>Format</maml:name>
-        <maml:description>
-          <maml:para>Formats de sortie, défaut `srt`.</maml:para>
-        </maml:description>
-        <command:parameterValueGroup>
-          <command:parameterValue required="false" variableLength="false">json</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">lrc</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">txt</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">text</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">vtt</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">srt</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">tsv</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">all</command:parameterValue>
-        </command:parameterValueGroup>
-        <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
-        <dev:type>
-          <maml:name>System.String[]</maml:name>
         </dev:type>
       </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="PSPath">
@@ -341,15 +269,17 @@
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Une source peut être un fichier média, un masque ou un dossier ; une source d'extension `.txt`, `.m3u`, `.m3u8` ou `.lst` est lue par le binaire comme une **liste de médias** et n'est pas transcrite ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; seul le premier flux audio est transcrit ; jamais de traduction ; une réexécution réécrit les transcripts existants ; la commande n'accepte pas d'entrée pipeline, un masque sur `-Path` remplaçant `Get-ChildItem | ...`.</maml:para>
+        <maml:para>Une source peut être un fichier média, un masque ou un dossier ; une source d'extension `.txt`, `.m3u`, `.m3u8` ou `.lst` est lue par le binaire comme une **liste de médias** et n'est pas transcrite ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; seul le premier flux audio est transcrit (`audioTrack` = 1) ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline, un masque sur `-Path` remplaçant `Get-ChildItem | ...`.</maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
       <command:example>
         <maml:title>--------- Example 1: Transcrire un fichier ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Get-MediaTranscript -Path 'D:\Films\film.mkv'</dev:code>
-        <dev:remarks />
+        <dev:code>Get-MediaTranscript -Model large-v3 -UseLanguage ja 'D:\Videos\Episode.mkv'</dev:code>
+        <dev:remarks>
+          <maml:para>Produit `D:\Videos\Episode.track 1.ja.large-v3.json`.</maml:para>
+        </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>--------- Example 2: Transcrire plusieurs fichiers dans un seul appel ---------</maml:title>
@@ -382,31 +312,25 @@
         <dev:remarks />
       </command:example>
       <command:example>
-        <maml:title>--------- Example 7: Produire plusieurs formats ---------</maml:title>
-        <maml:introduction></maml:introduction>
-        <dev:code>Get-MediaTranscript -Path 'D:\Films\film.mkv' -Format srt, vtt</dev:code>
-        <dev:remarks />
-      </command:example>
-      <command:example>
-        <maml:title>--------- Example 8: Choisir le modèle ---------</maml:title>
+        <maml:title>--------- Example 7: Choisir le modèle ---------</maml:title>
         <maml:introduction></maml:introduction>
         <dev:code>Get-MediaTranscript -Path 'D:\Films\film.mkv' -Model large-v3-turbo</dev:code>
         <dev:remarks />
       </command:example>
       <command:example>
-        <maml:title>--------- Example 9: Forcer la langue ---------</maml:title>
+        <maml:title>--------- Example 8: Forcer la langue ---------</maml:title>
         <maml:introduction></maml:introduction>
         <dev:code>Get-MediaTranscript -Path 'D:\Films\film.mkv' -UseLanguage fr</dev:code>
         <dev:remarks />
       </command:example>
       <command:example>
-        <maml:title>--------- Example 10: Afficher la ligne de commande sans lancer le binaire ---------</maml:title>
+        <maml:title>--------- Example 9: Afficher la ligne de commande sans lancer le binaire ---------</maml:title>
         <maml:introduction></maml:introduction>
         <dev:code>Get-MediaTranscript -Path 'D:\Films\film.mkv' -WhatIf</dev:code>
         <dev:remarks />
       </command:example>
       <command:example>
-        <maml:title>--------- Example 11: Transcrire avec kotoba-v2 ---------</maml:title>
+        <maml:title>--------- Example 10: Transcrire avec kotoba-v2 ---------</maml:title>
         <maml:introduction></maml:introduction>
         <dev:code>Get-MediaTranscript -Path 'D:\Films\film.mkv' -Model kotoba-v2 -UseLanguage ja</dev:code>
         <dev:remarks />
