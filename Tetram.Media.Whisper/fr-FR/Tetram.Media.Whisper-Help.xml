@@ -48,6 +48,7 @@
             <command:parameterValue required="false" variableLength="false">large-v2</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">large-v3-turbo</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
           </command:parameterValueGroup>
           <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
           <dev:type>
@@ -128,6 +129,7 @@
             <command:parameterValue required="false" variableLength="false">large-v2</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">large-v3-turbo</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
           </command:parameterValueGroup>
           <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
           <dev:type>
@@ -200,6 +202,7 @@
             <command:parameterValue required="false" variableLength="false">large-v2</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">large-v3-turbo</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
           </command:parameterValueGroup>
           <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
           <dev:type>
@@ -281,12 +284,13 @@
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Model</maml:name>
         <maml:description>
-          <maml:para>Modèle whisper, défaut `large-v2`.</maml:para>
+          <maml:para>Modèle Faster-Whisper, défaut `large-v2`. `kotoba-v2` est un modèle japonais custom pour Faster-Whisper/Purfview : il doit être installé séparément dans la distribution Purfview (le module ne le télécharge pas). `Get-MediaTranscript` lui applique automatiquement les options d'inférence compatibles. `-UseLanguage ja` reste recommandé pour ce scénario.</maml:para>
         </maml:description>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">large-v2</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">large-v3-turbo</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
         </command:parameterValueGroup>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -337,7 +341,7 @@
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Une source peut être un fichier média, un masque ou un dossier ; une source d'extension `.txt`, `.m3u`, `.m3u8` ou `.lst` est lue par le binaire comme une **liste de médias** et n'est pas transcrite ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; le modèle est téléchargé au premier usage, le premier appel est donc long ; seul le premier flux audio est transcrit ; jamais de traduction ; une réexécution réécrit les transcripts existants ; la commande n'accepte pas d'entrée pipeline, un masque sur `-Path` remplaçant `Get-ChildItem | ...`.</maml:para>
+        <maml:para>Une source peut être un fichier média, un masque ou un dossier ; une source d'extension `.txt`, `.m3u`, `.m3u8` ou `.lst` est lue par le binaire comme une **liste de médias** et n'est pas transcrite ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; seul le premier flux audio est transcrit ; jamais de traduction ; une réexécution réécrit les transcripts existants ; la commande n'accepte pas d'entrée pipeline, un masque sur `-Path` remplaçant `Get-ChildItem | ...`.</maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -399,6 +403,12 @@
         <maml:title>--------- Example 10: Afficher la ligne de commande sans lancer le binaire ---------</maml:title>
         <maml:introduction></maml:introduction>
         <dev:code>Get-MediaTranscript -Path 'D:\Films\film.mkv' -WhatIf</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 11: Transcrire avec kotoba-v2 ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -Path 'D:\Films\film.mkv' -Model kotoba-v2 -UseLanguage ja</dev:code>
         <dev:remarks />
       </command:example>
     </command:examples>

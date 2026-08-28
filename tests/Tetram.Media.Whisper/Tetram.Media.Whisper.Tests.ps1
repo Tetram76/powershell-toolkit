@@ -61,6 +61,22 @@ Describe 'Get-MediaTranscript binding' {
         { Get-MediaTranscript -Path 'a.mkv' -Model 'tiny' -ErrorAction Stop } | Should -Throw
     }
 
+    It 'accepte kotoba-v2 comme modèle' {
+        $validate = (Get-Command Get-MediaTranscript).Parameters['Model'].Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+        @($validate.ValidValues) | Should -Contain 'kotoba-v2'
+
+        # Binding seulement : sans mocks, Get-MediaTranscript irait jusqu'au binaire Purfview.
+        Mock -ModuleName Tetram.Media.Whisper Get-WhisperPath { 'whisper.exe' }
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $State['ExitCode'] = 0
+        }
+        Mock -ModuleName Tetram.Media.Whisper Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Whisper Show-CommandLine {}
+        { Get-MediaTranscript -Path 'a.mkv' -Model kotoba-v2 -ErrorAction Stop } | Should -Not -Throw
+    }
+
     It 'refuse une langue hors liste' {
         { Get-MediaTranscript -Path 'a.mkv' -UseLanguage 'French' -ErrorAction Stop } | Should -Throw
     }
