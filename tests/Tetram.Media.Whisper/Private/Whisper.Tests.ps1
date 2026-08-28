@@ -139,6 +139,60 @@ Describe 'Get-WhisperArguments' {
     }
 }
 
+Describe 'Resolve-WhisperMediaFile' {
+    It 'retourne le chemin concret d''un fichier existant' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $media = Join-Path $Work 'Episode.mkv'
+            Set-Content -LiteralPath $media -Value 'x'
+            Resolve-WhisperMediaFile -LiteralPath $media | Should -Be (Get-Item -LiteralPath $media).FullName
+        }
+    }
+
+    It 'traite les crochets comme un nom de fichier, pas comme un glob' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            Set-Content -LiteralPath (Join-Path $Work 'Episode[1].mkv') -Value 'x'
+            Set-Content -LiteralPath (Join-Path $Work 'Episode1.mkv') -Value 'x'
+            $got = Resolve-WhisperMediaFile -LiteralPath (Join-Path $Work 'Episode[1].mkv')
+            $got | Should -Be (Get-Item -LiteralPath (Join-Path $Work 'Episode[1].mkv')).FullName
+            $got | Should -Not -Be (Get-Item -LiteralPath (Join-Path $Work 'Episode1.mkv')).FullName
+        }
+    }
+
+    It 'refuse un chemin inexistant' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            { Resolve-WhisperMediaFile -LiteralPath (Join-Path $Work 'absent.mkv') } | Should -Throw '*fichier unique*'
+        }
+    }
+
+    It 'refuse un dossier' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dir = Join-Path $Work 'films'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            { Resolve-WhisperMediaFile -LiteralPath $dir } | Should -Throw '*pas un dossier*'
+        }
+    }
+
+    It 'refuse un masque qui n''est pas un nom de fichier littéral' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            1..2 | ForEach-Object { Set-Content -LiteralPath (Join-Path $Work "f$_.mkv") -Value 'x' }
+            { Resolve-WhisperMediaFile -LiteralPath (Join-Path $Work '*.mkv') } | Should -Throw '*fichier unique*'
+        }
+    }
+
+    It 'refuse un fichier-liste Purfview' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $lst = Join-Path $Work 'lot.lst'
+            Set-Content -LiteralPath $lst -Value 'D:\Films\a.mkv'
+            { Resolve-WhisperMediaFile -LiteralPath $lst } | Should -Throw '*fichier-liste*'
+        }
+    }
+}
 
 Describe 'Get-WhisperPath' {
     It 'retourne l''override quand c''est un fichier' {
