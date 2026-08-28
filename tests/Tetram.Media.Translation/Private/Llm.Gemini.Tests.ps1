@@ -461,14 +461,14 @@ Describe 'Llm.Gemini' {
             }
 
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
-            $raw = Join-Path $script:Work 'episode.fr.raw.json'
             $invoke = Find-InfoLogIndex "Invocation de Gemini avec 'gemini-3.6-flash' (thinking=low, 100 tokens estimés)..."
-            $rawLog = Find-InfoLogIndex "Réponse brute du modèle enregistrée : $raw"
+            $rawLog = Find-InfoLogIndex 'Réponse brute du modèle reçue'
             $rebuild = Find-InfoLogIndex 'Reconstruction du sous-titre final...'
             $invoke | Should -BeGreaterOrEqual 0
             $rawLog | Should -BeGreaterThan $invoke
             $rebuild | Should -BeGreaterThan $rawLog
-            $script:InfoLogs[$rawLog] | Should -Not -Match 'tokens réels'
+            $script:InfoLogs[$rawLog] | Should -Be 'Réponse brute du modèle reçue'
+            Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         }
 
         It 'ajoute totalTokenCount au jalon raw quand usageMetadata est présent' {
@@ -480,8 +480,8 @@ Describe 'Llm.Gemini' {
             }
 
             ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath
-            $raw = Join-Path $script:Work 'episode.fr.raw.json'
-            $script:InfoLogs | Should -Contain "Réponse brute du modèle enregistrée : $raw (42 tokens réels)"
+            $script:InfoLogs | Should -Contain 'Réponse brute du modèle reçue (42 tokens réels)'
+            Test-Path -LiteralPath (Join-Path $script:Work 'episode.fr.raw.json') | Should -BeFalse
         }
 
     }

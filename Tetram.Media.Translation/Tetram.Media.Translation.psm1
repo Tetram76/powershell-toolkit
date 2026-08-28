@@ -52,16 +52,12 @@ $json
 "@
 }
 
-function Get-RawSubtitleOutputPath {
-    param([Parameter(Mandatory)][string] $OutputPath)
+function New-RawTranslationTempPath {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
 
-    $parent = Split-Path -Parent $OutputPath
-    $stem = [IO.Path]::GetFileNameWithoutExtension($OutputPath)
-    $rawName = "$stem.raw.json"
-    if ([string]::IsNullOrEmpty($parent)) {
-        return $rawName
-    }
-    return Join-Path $parent $rawName
+    Join-Path ([IO.Path]::GetTempPath()) ("tetram-translation-" + [guid]::NewGuid().ToString('N') + '.json')
 }
 
 function ConvertTo-FrenchSubtitle {
@@ -107,11 +103,6 @@ function ConvertTo-FrenchSubtitle {
 
     if (Test-Path -LiteralPath $OutputPath) {
         throw "Le fichier de sortie existe déjà : $OutputPath"
-    }
-
-    $rawPath = Get-RawSubtitleOutputPath -OutputPath $OutputPath
-    if (Test-Path -LiteralPath $rawPath) {
-        throw "Le fichier de réponse brute existe déjà : $rawPath"
     }
 
 
@@ -178,34 +169,40 @@ $structuringJson
     # --- Écriture ---------------------------------------------------------------
 
     $utf8 = [Text.UTF8Encoding]::new($false)
-    [IO.File]::WriteAllText($rawPath, $result, $utf8)
-
-    $rawLog = "Réponse brute du modèle enregistrée : $rawPath"
-    if ($null -ne $script:LastLlmResponseTokenCount) {
-        $rawLog = "$rawLog ($($script:LastLlmResponseTokenCount) tokens réels)"
-    }
-    Write-InfoLog -Text $rawLog -Force
-
+    $rawPath = New-RawTranslationTempPath
     try {
-        Write-InfoLog -Text 'Reconstruction du sous-titre final...' -Force
-        $sourceText = @($canonicalCue | ForEach-Object { $_.text })
-        $translationByCueId = ConvertFrom-CueTranslationJson -Json $result -CueCount $canonicalCue.Count
-        Assert-CueTranslationNotEmptied -SourceText $sourceText -TranslationByCueId $translationByCueId
-        $mergedResult = Merge-TranslatedSubtitle `
-            -Source $subtitle `
-            -TranslationByCueId $translationByCueId `
-            -Extension $subtitleFile.Extension
-    }
-    catch {
-        Write-Host "Réponse brute du modèle conservée : $rawPath"
-        Write-Warning "La reconstruction du sous-titre final a échoué : $($_.Exception.Message)"
-        return
-    }
+        [IO.File]::WriteAllText($rawPath, $result, $utf8)
 
-    [IO.File]::WriteAllText($OutputPath, $mergedResult, $utf8)
+        $rawLog = 'Réponse brute du modèle reçue'
+        if ($null -ne $script:LastLlmResponseTokenCount) {
+            $rawLog = "$rawLog ($($script:LastLlmResponseTokenCount) tokens réels)"
+        }
+        Write-InfoLog -Text $rawLog -Force
 
-    Write-Host "Réponse brute du modèle : $rawPath"
-    Write-Host "Sous-titres traduits : $OutputPath"
+        try {
+            Write-InfoLog -Text 'Reconstruction du sous-titre final...' -Force
+            $sourceText = @($canonicalCue | ForEach-Object { $_.text })
+            $translationByCueId = ConvertFrom-CueTranslationJson -Json $result -CueCount $canonicalCue.Count
+            Assert-CueTranslationNotEmptied -SourceText $sourceText -TranslationByCueId $translationByCueId
+            $mergedResult = Merge-TranslatedSubtitle `
+                -Source $subtitle `
+                -TranslationByCueId $translationByCueId `
+                -Extension $subtitleFile.Extension
+        }
+        catch {
+            Write-Warning "La reconstruction du sous-titre final a échoué : $($_.Exception.Message)"
+            return
+        }
+
+        [IO.File]::WriteAllText($OutputPath, $mergedResult, $utf8)
+
+        Write-Host "Sous-titres traduits : $OutputPath"
+    }
+    finally {
+        if ($rawPath -and (Test-Path -LiteralPath $rawPath)) {
+            Remove-Item -LiteralPath $rawPath -Force -Confirm:$false -WhatIf:$false -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 Export-ModuleMember -Function ConvertTo-FrenchSubtitle
