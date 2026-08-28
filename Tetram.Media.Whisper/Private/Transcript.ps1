@@ -14,50 +14,20 @@ function Get-TetramTranscriptPath {
     Join-Path $Directory "$MediaBase.track $AudioTrack.$Language.$Model.json"
 }
 
-function Get-WhisperMediaBaseName {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param(
-        [Parameter(Mandatory)] [string] $NativeJsonPath,
-        [Parameter(Mandatory)] [string] $Language
-    )
-
-    $name = [IO.Path]::GetFileNameWithoutExtension($NativeJsonPath)
-    $suffix = ".$Language"
-    if ($name.EndsWith($suffix, [StringComparison]::OrdinalIgnoreCase)) {
-        return $name.Substring(0, $name.Length - $suffix.Length)
-    }
-
-    return $name
-}
-
 function Test-WhisperNativeJsonName {
     [CmdletBinding()]
     [OutputType([bool])]
     param(
-        [Parameter(Mandatory)] [string] $FileName,
-        [string] $Stem
+        [Parameter(Mandatory)] [string] $FileName
     )
 
-    # Le sidecar Tetram (`.track N.`) ne doit jamais être pris pour un artefact natif.
+    # Dossier GUID dédié à l'exécution : tout JSON y est natif, sauf un sidecar Tetram
+    # posé par erreur. Purfview --postfix nomme `stem_lang.json`, pas `stem.lang.json`.
     if ($FileName -match '\.track \d+\.') {
         return $false
     }
 
-    if (-not $FileName.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)) {
-        return $false
-    }
-
-    if ([string]::IsNullOrWhiteSpace($Stem)) {
-        return [bool]($FileName -match '^.+\.[A-Za-z]{2,3}\.json$')
-    }
-
-    $escaped = [regex]::Escape($Stem)
-    if ($FileName -match ('^' + $escaped + '\.[A-Za-z]{2,3}\.json$')) {
-        return $true
-    }
-
-    return $FileName.Equals("$Stem.json", [StringComparison]::OrdinalIgnoreCase)
+    return $FileName.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)
 }
 
 function New-WhisperTempDirectory {
@@ -102,87 +72,6 @@ function Get-WhisperNativeJsonFromOutputDir {
         }
     }
     return @($results)
-}
-
-function Add-WhisperTranscriptDirectoryMatch {
-    param(
-        [string] $FilePath,
-        [string] $MediaBase,
-        [System.Collections.Generic.List[string]] $Results
-    )
-
-    if ([string]::IsNullOrWhiteSpace($FilePath)) { return }
-    if ([IO.Path]::GetExtension($FilePath).Equals('.json', [StringComparison]::OrdinalIgnoreCase)) { return }
-    $stem = [IO.Path]::GetFileNameWithoutExtension($FilePath)
-    if (-not $stem.Equals($MediaBase, [StringComparison]::OrdinalIgnoreCase)) {
-        return
-    }
-
-    $dir = [IO.Path]::GetDirectoryName($FilePath)
-    if ([string]::IsNullOrWhiteSpace($dir)) {
-        $dir = (Get-Location).Path
-    }
-    if (-not $Results.Contains($dir)) {
-        $Results.Add($dir)
-    }
-}
-
-function Resolve-WhisperTranscriptDirectory {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param(
-        [Parameter(Mandatory)] [string] $MediaBase,
-        [string[]] $Source
-    )
-
-    $results = [System.Collections.Generic.List[string]]::new()
-
-    foreach ($entry in @($Source)) {
-        if ([string]::IsNullOrWhiteSpace($entry)) { continue }
-
-        $ext = [IO.Path]::GetExtension($entry)
-        if ($ext -in @('.lst', '.m3u', '.m3u8', '.txt') -and (Test-Path -LiteralPath $entry -PathType Leaf)) {
-            foreach ($line in @(Get-Content -LiteralPath $entry)) {
-                if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                $found = Resolve-WhisperTranscriptDirectory -MediaBase $MediaBase -Source @($line.Trim())
-                if (-not [string]::IsNullOrWhiteSpace($found) -and -not $results.Contains($found)) {
-                    $results.Add($found)
-                }
-            }
-            continue
-        }
-
-        $isGlob = -not $entry.StartsWith('\\?\') -and ($entry.Contains('*') -or $entry.Contains('?'))
-        if ($isGlob) {
-            $dir = [IO.Path]::GetDirectoryName($entry)
-            if ([string]::IsNullOrWhiteSpace($dir)) {
-                $dir = (Get-Location).Path
-            }
-            if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
-                continue
-            }
-            $filter = [IO.Path]::GetFileName($entry)
-            foreach ($file in @(Get-ChildItem -LiteralPath $dir -Filter $filter -File -Recurse -ErrorAction SilentlyContinue)) {
-                Add-WhisperTranscriptDirectoryMatch -FilePath $file.FullName -MediaBase $MediaBase -Results $results
-            }
-            continue
-        }
-
-        if (Test-Path -LiteralPath $entry -PathType Container -ErrorAction SilentlyContinue) {
-            foreach ($file in @(Get-ChildItem -LiteralPath $entry -File -Recurse -ErrorAction SilentlyContinue)) {
-                Add-WhisperTranscriptDirectoryMatch -FilePath $file.FullName -MediaBase $MediaBase -Results $results
-            }
-            continue
-        }
-
-        # Fichier explicite : parse du chemin, sans exiger l'existence.
-        Add-WhisperTranscriptDirectoryMatch -FilePath $entry -MediaBase $MediaBase -Results $results
-    }
-
-    if ($results.Count -eq 0) {
-        return [string]::Empty
-    }
-    return $results[0]
 }
 
 function ConvertFrom-WhisperTranscript {
@@ -319,7 +208,12 @@ function Write-TetramTranscript {
 
     $json = ConvertTo-Json -InputObject $Transcript -Depth 8
     $utf8 = [System.Text.UTF8Encoding]::new($false)
-    $temp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString() + '.tmp')
+    # Même volume que le sidecar : un Move-Item depuis TEMP serait une copie inter-filesystem.
+    $destDir = [IO.Path]::GetDirectoryName($Path)
+    if ([string]::IsNullOrWhiteSpace($destDir)) {
+        $destDir = (Get-Location).Path
+    }
+    $temp = Join-Path $destDir ([guid]::NewGuid().ToString() + '.tmp')
 
     try {
         [IO.File]::WriteAllText($temp, $json, $utf8)
@@ -336,19 +230,19 @@ function Convert-WhisperNativeToTetram {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $NativeJsonPath,
+        [Parameter(Mandatory)] [string] $MediaPath,
         [Parameter(Mandatory)] [string] $Model,
-        [string[]] $Source,
         [string] $UseLanguage,
         [int] $AudioTrack = 1
     )
 
     $raw = Get-Content -LiteralPath $NativeJsonPath -Raw -Encoding UTF8
     $transcript = ConvertFrom-WhisperTranscript -InputObject $raw -Model $Model -UseLanguage $UseLanguage -AudioTrack $AudioTrack
-    $mediaBase = Get-WhisperMediaBaseName -NativeJsonPath $NativeJsonPath -Language $transcript.language
-    $directory = Resolve-WhisperTranscriptDirectory -MediaBase $mediaBase -Source $Source
+    $directory = [IO.Path]::GetDirectoryName($MediaPath)
     if ([string]::IsNullOrWhiteSpace($directory)) {
-        throw "Impossible de rattacher le JSON natif '$NativeJsonPath' à une source média."
+        $directory = (Get-Location).Path
     }
+    $mediaBase = [IO.Path]::GetFileNameWithoutExtension($MediaPath)
     $dest = Get-TetramTranscriptPath -Directory $directory -MediaBase $mediaBase -Language $transcript.language -Model $Model -AudioTrack $AudioTrack
     Write-TetramTranscript -Transcript $transcript -Path $dest
 }
