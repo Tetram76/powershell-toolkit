@@ -41,15 +41,15 @@ Describe 'Get-MediaTranscript binding' {
     }
 
     It 'refuse un appel sans aucune source' {
-        # N'invoque jamais la cmdlet sans lier -Path ni -LiteralPath : PowerShell ne lèverait pas
+        # N'invoque jamais la cmdlet sans lier -LiteralPath : PowerShell ne lèverait pas
         # d'erreur de binding mais déclencherait son prompt interactif natif pour le paramètre
         # obligatoire manquant, qui bloque en console réelle (seul un hôte non interactif comme la CI
-        # échoue immédiatement). On vérifie donc l'obligation via les métadonnées des jeux de paramètres.
+        # échoue immédiatement). On vérifie donc l'obligation via les métadonnées.
         $meta = Get-Command Get-MediaTranscript
         foreach ($setName in @($meta.ParameterSets | Select-Object -ExpandProperty Name)) {
             $set = $meta.ParameterSets | Where-Object Name -EQ $setName
-            $sourceParams = @($set.Parameters | Where-Object { $_.Name -in @('Path', 'LiteralPath') -and $_.IsMandatory })
-            $sourceParams.Count | Should -BeGreaterThan 0 -Because "le jeu '$setName' doit exiger Path ou LiteralPath"
+            $sourceParams = @($set.Parameters | Where-Object { $_.Name -eq 'LiteralPath' -and $_.IsMandatory })
+            $sourceParams.Count | Should -Be 1 -Because "le jeu '$setName' doit exiger LiteralPath"
         }
     }
 
@@ -57,8 +57,36 @@ Describe 'Get-MediaTranscript binding' {
         (Get-Command Get-MediaTranscript).Parameters.ContainsKey('Format') | Should -BeFalse
     }
 
+    It 'n''expose plus -Path' {
+        (Get-Command Get-MediaTranscript).Parameters.ContainsKey('Path') | Should -BeFalse
+    }
+
+    It 'expose LiteralPath scalaire, positionnel, avec alias PSPath' {
+        $p = (Get-Command Get-MediaTranscript).Parameters['LiteralPath']
+        $p.ParameterType | Should -Be ([string])
+        $p.Aliases | Should -Contain 'PSPath'
+        $attrs = @($p.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] })
+        $attrs.Count | Should -BeGreaterThan 0
+        $attrs[0].Position | Should -Be 0
+        $attrs[0].Mandatory | Should -BeTrue
+    }
+
+    It 'n''a plus les jeux Path / Mixed / LiteralPath de l''ancien contrat multiple' {
+        $names = @((Get-Command Get-MediaTranscript).ParameterSets | Select-Object -ExpandProperty Name)
+        $names | Should -Not -Contain 'Path'
+        $names | Should -Not -Contain 'Mixed'
+        $names | Should -Not -Contain 'LiteralPath'
+    }
+
+    It 'expose AudioTrack entier 1-based avec défaut 1' {
+        $p = (Get-Command Get-MediaTranscript).Parameters['AudioTrack']
+        $p.ParameterType | Should -Be ([int])
+        { Get-MediaTranscript -LiteralPath 'a.mkv' -AudioTrack 0 -ErrorAction Stop } | Should -Throw
+        { Get-MediaTranscript -LiteralPath 'a.mkv' -AudioTrack @(1, 2) -ErrorAction Stop } | Should -Throw
+    }
+
     It 'refuse un modèle hors liste' {
-        { Get-MediaTranscript -Path 'a.mkv' -Model 'tiny' -ErrorAction Stop } | Should -Throw
+        { Get-MediaTranscript -LiteralPath 'a.mkv' -Model 'tiny' -ErrorAction Stop } | Should -Throw
     }
 
     It 'accepte kotoba-v2 comme modèle' {
@@ -74,25 +102,11 @@ Describe 'Get-MediaTranscript binding' {
         }
         Mock -ModuleName Tetram.Media.Whisper Write-ErrorLog {}
         Mock -ModuleName Tetram.Media.Whisper Show-CommandLine {}
-        { Get-MediaTranscript -Path 'a.mkv' -Model kotoba-v2 -ErrorAction Stop } | Should -Not -Throw
+        { Get-MediaTranscript -LiteralPath 'a.mkv' -Model kotoba-v2 -ErrorAction Stop } | Should -Not -Throw
     }
 
     It 'refuse une langue hors liste' {
-        { Get-MediaTranscript -Path 'a.mkv' -UseLanguage 'French' -ErrorAction Stop } | Should -Throw
-    }
-
-    It 'expose trois jeux de paramètres dont Path par défaut' {
-        $meta = Get-Command Get-MediaTranscript
-        $meta.DefaultParameterSet | Should -Be 'Path'
-        @($meta.ParameterSets | Select-Object -ExpandProperty Name | Sort-Object) | Should -Be @('LiteralPath', 'Mixed', 'Path')
-    }
-
-    It 'rend -Path positionnel dans Path et nommé dans Mixed' {
-        $meta = Get-Command Get-MediaTranscript
-        $inPath = ($meta.ParameterSets | Where-Object Name -EQ 'Path').Parameters | Where-Object Name -EQ 'Path'
-        $inMixed = ($meta.ParameterSets | Where-Object Name -EQ 'Mixed').Parameters | Where-Object Name -EQ 'Path'
-        $inPath.Position | Should -Be 0
-        $inMixed.Position | Should -Be ([int]::MinValue)
+        { Get-MediaTranscript -LiteralPath 'a.mkv' -UseLanguage 'French' -ErrorAction Stop } | Should -Throw
     }
 
     It 'n''accepte aucune entrée pipeline' {
@@ -123,42 +137,52 @@ Describe 'Get-MediaTranscript orchestration' {
         $script:SeenArguments = $null
     }
 
-    It 'invoque le binaire une seule fois pour tout le lot' {
+    It 'invoque le binaire une seule fois pour un seul média' {
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
             $script:SeenArguments = $Arguments
             $State['ExitCode'] = 0
         }
-        Get-MediaTranscript -Path @('D:\a.mkv', 'D:\b.mkv')
+        Get-MediaTranscript -LiteralPath 'D:\a.mkv'
         Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 1
         $script:SeenArguments[0] | Should -Be 'D:\a.mkv'
-        $script:SeenArguments[1] | Should -Be 'D:\b.mkv'
+        $script:SeenArguments | Should -Not -Contain '--batch_recursive'
+        $script:SeenArguments | Should -Contain '--output_format'
+        $fmt = [array]::IndexOf(@($script:SeenArguments), '--output_format')
+        $script:SeenArguments[$fmt + 1] | Should -Be 'json'
+        $ff = [array]::IndexOf(@($script:SeenArguments), '--ff_track')
+        $script:SeenArguments[$ff + 1] | Should -Be '1'
     }
 
-    It 'concatène -Path puis -LiteralPath dans le jeu Mixed' {
+    It 'transmet un chemin à crochets tel quel, sans le résoudre en glob' {
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
             param($Exe, $Arguments, $Cmdlet, $State)
             $script:SeenArguments = $Arguments
             $State['ExitCode'] = 0
         }
-        Get-MediaTranscript -Path 'D:\Films\*.mkv' -LiteralPath 'D:\Films\film[1].mkv'
-        $script:SeenArguments[0] | Should -Be 'D:\Films\*.mkv'
-        # LiteralPath n'est pas glob-échappé : whisper teste l'existence avant de globaliser, et
-        # film[[]1].mkv ne serait pas trouvé (décision Task 6 / spec, pas ConvertTo-GlobLiteral).
-        $script:SeenArguments[1] | Should -Be 'D:\Films\film[1].mkv'
+        Get-MediaTranscript -LiteralPath 'D:\Films\Episode[1].mkv'
+        $script:SeenArguments[0] | Should -Be 'D:\Films\Episode[1].mkv'
+        $script:SeenArguments[0] | Should -Not -Be 'D:\Films\Episode1.mkv'
     }
 
-    It 'ne lance rien et journalise si toutes les entrées résolvent à vide' {
-        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper { throw 'ne doit pas tourner' }
-        Get-MediaTranscript -Path (Join-Path $TestDrive 'rien[9].mkv')
-        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 0
-        Should -Invoke -ModuleName Tetram.Media.Whisper Write-InfoLog -Times 1
+    It 'ne développe pas un masque en lot de fichiers' {
+        $work = Join-Path $TestDrive 'mask'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        1..2 | ForEach-Object { Set-Content -LiteralPath (Join-Path $work "f$_.mkv") -Value 'x' }
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $State['ExitCode'] = 0
+        }
+        Get-MediaTranscript -LiteralPath (Join-Path $work '*.mkv')
+        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 1
+        $script:SeenArguments[0] | Should -Be (Join-Path $work '*.mkv')
     }
 
     It 'ne throw pas et journalise si le binaire est introuvable' {
         Mock -ModuleName Tetram.Media.Whisper Get-WhisperPath { throw 'faster-whisper-xxl introuvable (test)' }
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper { throw 'ne doit pas tourner' }
-        { Get-MediaTranscript -Path 'D:\a.mkv' } | Should -Not -Throw
+        { Get-MediaTranscript -LiteralPath 'D:\a.mkv' } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
         Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 0
     }
@@ -179,7 +203,7 @@ Describe 'Get-MediaTranscript orchestration' {
 
     It 'journalise une exception d''exécution sans lever' {
         Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper { throw 'accès refusé' }
-        { Get-MediaTranscript -Path 'D:\a.mkv' } | Should -Not -Throw
+        { Get-MediaTranscript -LiteralPath 'D:\a.mkv' } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
     }
 
@@ -195,7 +219,7 @@ Describe 'Get-MediaTranscript orchestration' {
             param($Exe, $Arguments, $Cmdlet, $State)
             $State['ExitCode'] = 0
         }
-        $out = Get-MediaTranscript -Path 'D:\a.mkv'
+        $out = Get-MediaTranscript -LiteralPath 'D:\a.mkv'
         $out | Should -BeNullOrEmpty
     }
 
@@ -254,6 +278,46 @@ Describe 'Get-MediaTranscript orchestration' {
         $parsed.audioTrack | Should -Be 1
         $out = Get-MediaTranscript -LiteralPath $media -Model large-v3 -UseLanguage ja
         $out | Should -BeNullOrEmpty
+    }
+
+    It 'propage -AudioTrack 2 jusqu''à --ff_track, audioTrack et le nom du sidecar' {
+        $work = Join-Path $TestDrive 'track2'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $State['ExitCode'] = 0
+        }
+        Get-MediaTranscript -LiteralPath $media -AudioTrack 2 -Model large-v3 -UseLanguage ja
+        $ff = [array]::IndexOf(@($script:SeenArguments), '--ff_track')
+        $script:SeenArguments[$ff + 1] | Should -Be '2'
+        $dest = Join-Path $work 'Episode.track 2.ja.large-v3.json'
+        Test-Path -LiteralPath $dest | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $work 'Episode.track 1.ja.large-v3.json') | Should -BeFalse
+        $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
+        $parsed.audioTrack | Should -Be 2
+    }
+
+    It 'journalise et ne publie pas si le JSON natif est ambigu' {
+        $work = Join-Path $TestDrive 'ambiguous'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            $outDir = $Arguments[$outIndex + 1]
+            Set-Content -LiteralPath (Join-Path $outDir 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            Set-Content -LiteralPath (Join-Path $outDir 'Other.en.json') -Value '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"y"}]}'
+            $State['ExitCode'] = 0
+        }
+        { Get-MediaTranscript -LiteralPath $media -Model large-v3 -UseLanguage ja } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
+        @(Get-ChildItem -LiteralPath $work -Filter '*.json' -File -ErrorAction SilentlyContinue).Count | Should -Be 0
     }
 
     It 'nomme le sidecar kotoba-v2 avec le nom canonique du modèle' {
@@ -336,7 +400,7 @@ Describe 'Get-MediaTranscript bout en bout' -Tag 'Integration' {
         $wav = Join-Path $work 'sample.wav'
         & $script:RealFfmpeg -f lavfi -i 'sine=frequency=440:duration=3' -y $wav 2>&1 | Out-Null
 
-        Get-MediaTranscript -Path $wav -UseLanguage en
+        Get-MediaTranscript -LiteralPath $wav -UseLanguage en
 
         $dest = Join-Path $work 'sample.track 1.en.large-v2.json'
         Test-Path -LiteralPath $dest | Should -BeTrue

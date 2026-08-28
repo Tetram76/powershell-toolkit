@@ -56,30 +56,20 @@ Describe 'Get-TetramTranscriptPath' {
         }
     }
 
+    It 'reprend la piste demandée dans le nom' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            $dir = Join-Path 'Videos' 'Shows'
+            $got = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'large-v3' -AudioTrack 2
+            $got | Should -Be (Join-Path $dir 'Episode.track 2.ja.large-v3.json')
+        }
+    }
+
     It 'utilise kotoba-v2 comme nom de modèle, pas un dossier CTranslate2' {
         InModuleScope 'Tetram.Media.Whisper' {
             $dir = Join-Path 'Videos' 'Shows'
             $got = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'kotoba-v2'
             $got | Should -Be (Join-Path $dir 'Episode.track 1.ja.kotoba-v2.json')
             $got | Should -Not -Match 'ctranslate'
-        }
-    }
-}
-
-Describe 'Get-WhisperMediaBaseName' {
-    It 'retire le postfixe de langue du JSON natif Purfview' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            $path = Join-Path 'Videos' 'Episode.ja.json'
-            Get-WhisperMediaBaseName -NativeJsonPath $path -Language 'ja' |
-                Should -Be 'Episode'
-        }
-    }
-
-    It 'conserve le stem si le postfixe de langue est absent' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            $path = Join-Path 'Videos' 'Episode.json'
-            Get-WhisperMediaBaseName -NativeJsonPath $path -Language 'ja' |
-                Should -Be 'Episode'
         }
     }
 }
@@ -97,6 +87,14 @@ Describe 'ConvertFrom-WhisperTranscript' {
             $got.PSObject.Properties['schemaVersion'] | Should -BeNullOrEmpty
             $got.PSObject.Properties['source'] | Should -BeNullOrEmpty
             $got.PSObject.Properties['text'] | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'reprend la piste demandée dans audioTrack' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Native = $script:NativeWhisperJson } {
+            param($Native)
+            $got = ConvertFrom-WhisperTranscript -InputObject $Native -Model 'large-v3' -UseLanguage 'ja' -AudioTrack 2
+            $got.audioTrack | Should -Be 2
         }
     }
 
@@ -200,31 +198,74 @@ Describe 'ConvertFrom-WhisperTranscript' {
 }
 
 Describe 'Write-TetramTranscript' {
-    It 'écrit le JSON Tetram via TEMP et ne laisse pas de fichier temporaire' {
+    It 'écrit le JSON Tetram et ne laisse pas de temporaire de publication' {
         InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3' -UseLanguage 'ja'
             $dest = Join-Path $Work 'Episode.track 1.ja.large-v3.json'
-            $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
-            $before = @(Get-ChildItem -LiteralPath $tempRoot -Filter '*.tmp' -File -ErrorAction SilentlyContinue).Name
             Write-TetramTranscript -Transcript $transcript -Path $dest
             Test-Path -LiteralPath $dest | Should -BeTrue
-            @(Get-ChildItem -LiteralPath $Work -Filter '*.tmp' -File).Count | Should -Be 0
-            $after = @(Get-ChildItem -LiteralPath $tempRoot -Filter '*.tmp' -File -ErrorAction SilentlyContinue).Name
-            @($after | Where-Object { $_ -notin $before }).Count | Should -Be 0
+            @(Get-ChildItem -LiteralPath $Work -Filter '*.tmp' -File -ErrorAction SilentlyContinue).Count | Should -Be 0
             $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
             $parsed.engine | Should -Be 'faster-whisper'
             $parsed.language | Should -Be 'ja'
         }
     }
 
-    It 'ne laisse pas de JSON Tetram partiel si la destination est illégale' {
+    It 'crée le .tmp de publication dans le dossier destination' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3' -UseLanguage 'ja'
+            $dest = Join-Path $Work 'Episode.track 1.ja.large-v3.json'
+            $script:SeenTemp = $null
+            Mock Move-Item {
+                param($LiteralPath)
+                $script:SeenTemp = $LiteralPath
+            }
+            Write-TetramTranscript -Transcript $transcript -Path $dest
+            $script:SeenTemp | Should -Not -BeNullOrEmpty
+            [IO.Path]::GetExtension($script:SeenTemp) | Should -Be '.tmp'
+            $gotDir = [IO.Path]::GetFullPath([IO.Path]::GetDirectoryName($script:SeenTemp)).TrimEnd('\', '/')
+            $wantDir = [IO.Path]::GetFullPath($Work).TrimEnd('\', '/')
+            $gotDir | Should -Be $wantDir
+            @(Get-ChildItem -LiteralPath $Work -Filter '*.tmp' -File -ErrorAction SilentlyContinue).Count | Should -Be 0
+        }
+    }
+
+    It 'ne laisse ni JSON final ni .tmp si la publication échoue' {
         InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3'
-            $dest = Join-Path (Join-Path $Work ('no-such-dir-' + [guid]::NewGuid())) 'Episode.track 1.en.large-v3.json'
-            { Write-TetramTranscript -Transcript $transcript -Path $dest } | Should -Throw
+            $dest = Join-Path $Work 'Episode.track 1.en.large-v3.json'
+            Mock Move-Item { throw 'publication impossible' }
+            { Write-TetramTranscript -Transcript $transcript -Path $dest } | Should -Throw '*publication impossible*'
             Test-Path -LiteralPath $dest | Should -BeFalse
+            @(Get-ChildItem -LiteralPath $Work -Filter '*.tmp' -File -ErrorAction SilentlyContinue).Count | Should -Be 0
+        }
+    }
+}
+
+Describe 'Convert-WhisperNativeToTetram' {
+    It 'dérive le sidecar du média demandé, pas du dossier du JSON natif' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $nativeDir = Join-Path $Work 'native-temp'
+            $mediaDir = Join-Path $Work 'Videos'
+            New-Item -ItemType Directory -Path $nativeDir -Force | Out-Null
+            New-Item -ItemType Directory -Path $mediaDir -Force | Out-Null
+            $native = Join-Path $nativeDir 'Episode.ja.json'
+            Set-Content -LiteralPath $native -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $media = Join-Path $mediaDir 'Episode.mkv'
+            Set-Content -LiteralPath $media -Value 'x'
+
+            Convert-WhisperNativeToTetram -NativeJsonPath $native -MediaPath $media -Model 'large-v3' -UseLanguage 'ja' -AudioTrack 2
+
+            $dest = Join-Path $mediaDir 'Episode.track 2.ja.large-v3.json'
+            Test-Path -LiteralPath $dest | Should -BeTrue
+            Test-Path -LiteralPath (Join-Path $nativeDir 'Episode.track 2.ja.large-v3.json') | Should -BeFalse
+            $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
+            $parsed.audioTrack | Should -Be 2
+            $parsed.language | Should -Be 'ja'
         }
     }
 }
@@ -244,36 +285,34 @@ Describe 'Get-WhisperNativeJsonFromOutputDir' {
             $got | Should -Be @($native)
         }
     }
-}
 
-Describe 'Resolve-WhisperTranscriptDirectory' {
-    It 'prend le dossier d''un fichier source au stem égal, sans exiger l''existence' {
-        InModuleScope 'Tetram.Media.Whisper' {
-            $media = Join-Path 'Videos' 'Episode.mkv'
-            Resolve-WhisperTranscriptDirectory -MediaBase 'Episode' -Source @($media) |
-                Should -Be ([IO.Path]::GetDirectoryName($media))
+    It 'reconnaît le JSON natif Purfview en postfixe underscore' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $outDir = Join-Path $Work 'whisper-out-underscore'
+            New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+            $native = Join-Path $outDir 'sample_en.json'
+            Set-Content -LiteralPath $native -Value '{"language":"en","segments":[]}'
+
+            $got = @(Get-WhisperNativeJsonFromOutputDir -OutputDir $outDir)
+            $got | Should -Be @($native)
         }
     }
 
-    It 'trouve le média sous un masque et ignore un sidecar Tetram homonyme' {
+    It 'liste plusieurs JSON natifs sans en choisir un' {
         InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
-            $media = Join-Path $Work 'Episode.mkv'
-            Set-Content -LiteralPath $media -Value 'x'
-            Set-Content -LiteralPath (Join-Path $Work 'Episode.track 1.ja.large-v3.json') -Value '{}'
-            $got = Resolve-WhisperTranscriptDirectory -MediaBase 'Episode' -Source @((Join-Path $Work '*.mkv'))
-            $got | Should -Be $Work
-        }
-    }
-
-    It 'ne rattache pas un stem sans média correspondant' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $dir = Join-Path $Work 'no-match'
-            New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            Set-Content -LiteralPath (Join-Path $dir 'Other.mkv') -Value 'x'
-            $got = Resolve-WhisperTranscriptDirectory -MediaBase 'Episode' -Source @((Join-Path $dir '*.mkv'))
-            [string]::IsNullOrWhiteSpace($got) | Should -BeTrue
+            $outDir = Join-Path $Work 'whisper-out-multi'
+            New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+            $a = Join-Path $outDir 'Episode.ja.json'
+            $b = Join-Path $outDir 'Other.en.json'
+            Set-Content -LiteralPath $a -Value '{}'
+            Set-Content -LiteralPath $b -Value '{}'
+            $got = @(Get-WhisperNativeJsonFromOutputDir -OutputDir $outDir)
+            $got.Count | Should -Be 2
+            $got | Should -Contain $a
+            $got | Should -Contain $b
         }
     }
 }
+
