@@ -18,7 +18,7 @@ Transcrit une piste audio d'un fichier média avec faster-whisper.
 ## SYNTAX
 
 ```
-Get-MediaTranscript [-LiteralPath] <string> [-AudioTrack <int>] [-Model <string>]
+Get-MediaTranscript [-LiteralPath] <string> [-AudioTrack <int>] [-Model <string[]>]
  [-UseLanguage <string>] [-WhisperPath <string>] [-WhatIf] [-Confirm]
 ```
 
@@ -26,7 +26,7 @@ Get-MediaTranscript [-LiteralPath] <string> [-AudioTrack <int>] [-Model <string>
 
 ## DESCRIPTION
 
-`Get-MediaTranscript` traite exactement un média, une piste audio et un modèle par invocation. Elle produit uniquement un JSON Tetram canonique à côté du média. Le JSON natif Faster-Whisper est un artefact temporaire : il est écrit dans un dossier unique sous le répertoire temporaire système, lu, normalisé, puis ce dossier est supprimé. Le chemin passé à `-LiteralPath` est pris au pied de la lettre : ni masque, ni dossier à parcourir, ni fichier-liste. La commande n'émet rien dans le pipeline.
+`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation Faster-Whisper distincte, puis un JSON Tetram canonique à côté du média. Le JSON natif Faster-Whisper est un artefact temporaire : il est écrit dans un dossier unique sous le répertoire temporaire système, lu, normalisé, puis ce dossier est supprimé. Le chemin passé à `-LiteralPath` est pris au pied de la lettre : ni masque, ni dossier à parcourir, ni fichier-liste. La commande n'émet rien dans le pipeline.
 
 Le fichier durable suit la convention `<media-base>.track <trackid>.<langue>.<model>.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.
 
@@ -83,6 +83,14 @@ Get-MediaTranscript -LiteralPath 'D:\Films\film.mkv' -WhatIf
 ```powershell
 Get-MediaTranscript -LiteralPath 'D:\Films\film.mkv' -Model kotoba-v2 -UseLanguage ja
 ```
+
+### Example 8: Enchaîner plusieurs modèles
+
+```powershell
+Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model large-v3, kotoba-v2 -UseLanguage ja
+```
+
+Produit `Episode.track 1.ja.large-v3.json` puis `Episode.track 1.ja.kotoba-v2.json`, chacune via sa propre ligne de commande Faster-Whisper.
 
 ## PARAMETERS
 
@@ -153,10 +161,10 @@ HelpMessage: ''
 
 ### -Model
 
-Modèle Faster-Whisper, défaut `large-v2`. `kotoba-v2` est un modèle japonais custom pour Faster-Whisper/Purfview : il doit être installé séparément dans la distribution Purfview (le module ne le télécharge pas). `Get-MediaTranscript` lui applique automatiquement les options d'inférence compatibles. `-UseLanguage ja` reste recommandé pour ce scénario.
+Modèle Faster-Whisper, défaut `large-v2`. Plusieurs valeurs : une ligne de commande par modèle. `kotoba-v2` est un modèle japonais custom pour Faster-Whisper/Purfview : il doit être installé séparément dans la distribution Purfview (le module ne le télécharge pas). `Get-MediaTranscript` lui applique automatiquement les options d'inférence compatibles. `-UseLanguage ja` reste recommandé pour ce scénario.
 
 ```yaml
-Type: System.String
+Type: System.String[]
 DefaultValue: large-v2
 SupportsWildcards: false
 Aliases: []
@@ -253,6 +261,6 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline.
+Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs, chacune produisant sa propre ligne de commande et son sidecar ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline.
 
 ## RELATED LINKS

@@ -85,8 +85,14 @@ Describe 'Get-MediaTranscript binding' {
         { Get-MediaTranscript -LiteralPath 'a.mkv' -AudioTrack @(1, 2) -ErrorAction Stop } | Should -Throw
     }
 
+    It 'expose Model comme tableau, défaut large-v2' {
+        $p = (Get-Command Get-MediaTranscript).Parameters['Model']
+        $p.ParameterType | Should -Be ([string[]])
+    }
+
     It 'refuse un modèle hors liste' {
         { Get-MediaTranscript -LiteralPath 'a.mkv' -Model 'tiny' -ErrorAction Stop } | Should -Throw
+        { Get-MediaTranscript -LiteralPath 'a.mkv' -Model large-v3, tiny -ErrorAction Stop } | Should -Throw
     }
 
     It 'accepte kotoba-v2 comme modèle' {
@@ -135,6 +141,7 @@ Describe 'Get-MediaTranscript orchestration' {
         Mock -ModuleName Tetram.Media.Whisper Write-DebugLog {}
         Mock -ModuleName Tetram.Media.Whisper Show-CommandLine {}
         $script:SeenArguments = $null
+        $script:SeenCalls = $null
     }
 
     It 'invoque le binaire une seule fois pour un seul média' {
@@ -337,6 +344,77 @@ Describe 'Get-MediaTranscript orchestration' {
         $dest | Should -Not -Match 'ctranslate'
         $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
         $parsed.model | Should -Be 'kotoba-v2'
+    }
+
+    It 'invoque une ligne de commande distincte par modèle demandé' {
+        $work = Join-Path $TestDrive 'multi-model'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        $script:SeenCalls = [System.Collections.Generic.List[object]]::new()
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenCalls.Add(@($Arguments))
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $State['ExitCode'] = 0
+        }
+        Get-MediaTranscript -LiteralPath $media -Model large-v3, kotoba-v2 -UseLanguage ja
+        $script:SeenCalls.Count | Should -Be 2
+        $firstModel = [array]::IndexOf(@($script:SeenCalls[0]), '--model')
+        $script:SeenCalls[0][$firstModel + 1] | Should -Be 'large-v3'
+        $script:SeenCalls[0] | Should -Not -Contain '--condition_on_previous_text'
+        $secondModel = [array]::IndexOf(@($script:SeenCalls[1]), '--model')
+        $script:SeenCalls[1][$secondModel + 1] | Should -Be 'kotoba-v2'
+        $script:SeenCalls[1] | Should -Contain '--condition_on_previous_text'
+        Test-Path -LiteralPath (Join-Path $work 'Episode.track 1.ja.large-v3.json') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $work 'Episode.track 1.ja.kotoba-v2.json') | Should -BeTrue
+        $kotoba = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $work 'Episode.track 1.ja.kotoba-v2.json') -Raw -Encoding UTF8)
+        $kotoba.model | Should -Be 'kotoba-v2'
+    }
+
+    It 'poursuit les modèles suivants si une invocation échoue' {
+        $work = Join-Path $TestDrive 'multi-model-fail'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Whisper Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $modelIndex = [array]::IndexOf(@($Arguments), '--model')
+            if ($Arguments[$modelIndex + 1] -eq 'large-v3') {
+                $State['ExitCode'] = 1
+                return
+            }
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $State['ExitCode'] = 0
+        }
+        { Get-MediaTranscript -LiteralPath $media -Model large-v3, kotoba-v2 -UseLanguage ja } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Whisper Invoke-Whisper -Times 2
+        Should -Invoke -ModuleName Tetram.Media.Whisper Write-ErrorLog -Times 1
+        Test-Path -LiteralPath (Join-Path $work 'Episode.track 1.ja.large-v3.json') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $work 'Episode.track 1.ja.kotoba-v2.json') | Should -BeTrue
+    }
+
+    It 'sous -WhatIf, affiche une commande par modèle sans créer de fichier' {
+        $work = Join-Path $TestDrive 'whatif-multi'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        $script:SeenCalls = [System.Collections.Generic.List[object]]::new()
+        Mock -ModuleName Tetram.Media.Whisper Get-WhisperPath { 'X:\binaire-absent-xyz.exe' }
+        Mock -ModuleName Tetram.Media.Whisper Show-CommandLine {
+            param($Exe, $Arguments)
+            $script:SeenCalls.Add(@($Arguments))
+        }
+        Get-MediaTranscript -LiteralPath $media -Model large-v3, kotoba-v2 -UseLanguage ja -WhatIf
+        Should -Invoke -ModuleName Tetram.Media.Whisper Show-CommandLine -Times 2
+        $script:SeenCalls.Count | Should -Be 2
+        @(Get-ChildItem -LiteralPath $work -Filter '*.track *.json' -File -ErrorAction SilentlyContinue).Count | Should -Be 0
+        foreach ($args in $script:SeenCalls) {
+            $outIndex = [array]::IndexOf(@($args), '--output_dir')
+            Test-Path -LiteralPath $args[$outIndex + 1] | Should -BeFalse
+        }
     }
 
     It 'reprend la langue détectée du JSON natif sans -UseLanguage' {
