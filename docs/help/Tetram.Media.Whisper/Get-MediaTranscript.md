@@ -106,6 +106,12 @@ Get-MediaTranscript -Path 'D:\Films\film.mkv' -UseLanguage fr
 Get-MediaTranscript -Path 'D:\Films\film.mkv' -WhatIf
 ```
 
+### Example 11: Transcrire avec kotoba-v2
+
+```powershell
+Get-MediaTranscript -Path 'D:\Films\film.mkv' -Model kotoba-v2 -UseLanguage ja
+```
+
 ## PARAMETERS
 
 ### -Confirm
@@ -189,7 +195,7 @@ HelpMessage: ''
 
 ### -Model
 
-Modèle whisper, défaut `large-v2`.
+Modèle Faster-Whisper, défaut `large-v2`. `kotoba-v2` est un modèle japonais custom pour Faster-Whisper/Purfview : il doit être installé séparément dans la distribution Purfview (le module ne le télécharge pas). `Get-MediaTranscript` lui applique automatiquement les options d'inférence compatibles. `-UseLanguage ja` reste recommandé pour ce scénario.
 
 ```yaml
 Type: System.String
@@ -208,6 +214,7 @@ AcceptedValues:
 - large-v2
 - large-v3-turbo
 - large-v3
+- kotoba-v2
 HelpMessage: ''
 ```
 
@@ -315,6 +322,6 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Une source peut être un fichier média, un masque ou un dossier ; une source d'extension `.txt`, `.m3u`, `.m3u8` ou `.lst` est lue par le binaire comme une **liste de médias** et n'est pas transcrite ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; le modèle est téléchargé au premier usage, le premier appel est donc long ; seul le premier flux audio est transcrit ; jamais de traduction ; une réexécution réécrit les transcripts existants ; la commande n'accepte pas d'entrée pipeline, un masque sur `-Path` remplaçant `Get-ChildItem | ...`.
+Une source peut être un fichier média, un masque ou un dossier ; une source d'extension `.txt`, `.m3u`, `.m3u8` ou `.lst` est lue par le binaire comme une **liste de médias** et n'est pas transcrite ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; seul le premier flux audio est transcrit ; jamais de traduction ; une réexécution réécrit les transcripts existants ; la commande n'accepte pas d'entrée pipeline, un masque sur `-Path` remplaçant `Get-ChildItem | ...`.
 
 ## RELATED LINKS

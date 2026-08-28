@@ -116,6 +116,50 @@ Describe 'Get-WhisperArguments' {
             )
         }
     }
+
+    It 'ajoute les options Kotoba après la séquence générique pour kotoba-v2' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt') -Model 'kotoba-v2' -UseLanguage 'ja'
+            $got | Should -Be @(
+                'D:\a.mkv'
+                '--batch_recursive'
+                '--output_dir', 'source'
+                '--output_format', 'srt'
+                '--check_files'
+                '--model', 'kotoba-v2'
+                '--ff_track', '1'
+                '--language', 'ja'
+                '--postfix'
+                '--print_progress'
+                '--task', 'transcribe'
+                '--beep_off'
+                '--condition_on_previous_text', 'False'
+                '-prompt', 'None'
+                '--word_timestamps', 'False'
+                '--chunk_length', '15'
+                '--compute_type', 'float16'
+            )
+        }
+    }
+
+    It 'n''ajoute aucune option Kotoba pour large-v3' {
+        InModuleScope 'Tetram.Media.Whisper' {
+            $got = Get-WhisperArguments -Source @('D:\a.mkv') -Format @('srt') -Model 'large-v3'
+            $got | Should -Be @(
+                'D:\a.mkv'
+                '--batch_recursive'
+                '--output_dir', 'source'
+                '--output_format', 'srt'
+                '--check_files'
+                '--model', 'large-v3'
+                '--ff_track', '1'
+                '--postfix'
+                '--print_progress'
+                '--task', 'transcribe'
+                '--beep_off'
+            )
+        }
+    }
 }
 
 Describe 'Resolve-WhisperSource' {
