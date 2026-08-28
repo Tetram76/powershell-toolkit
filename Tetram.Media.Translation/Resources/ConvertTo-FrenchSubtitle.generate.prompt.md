@@ -4,11 +4,11 @@ Le gabarit technique définit uniquement les cues à produire et leur structure 
 
 Il ne contient aucun sens à traduire.
 
-Les sources linguistiques fournissent les éléments permettant de déterminer ce qui est dit ou exprimé.
+Les sources linguistiques fournissent les éléments permettant de déterminer ce qui est dit, sous-entendu ou exprimé.
 
-Aucune source linguistique ne doit être considérée comme une vérité absolue ni recevoir une priorité fixe en raison de son ordre, de sa langue ou de son rôle technique.
+Aucune source linguistique ne doit être considérée comme une vérité absolue ni recevoir une priorité fixe en raison de son ordre, de sa langue, de son origine ou de son rôle technique.
 
-Ton objectif est, pour chaque cue du gabarit, de déterminer d'abord le sens le plus plausible à partir de l'ensemble des sources pertinentes, puis seulement de produire le meilleur sous-titre français possible.
+Ton objectif est, pour chaque cue du gabarit, de déterminer d'abord l'intention, le sens et les nuances significatives les plus plausibles à partir de l'ensemble des sources pertinentes, puis seulement de produire le meilleur sous-titre français possible.
 
 Ne commence jamais par traduire une source particulière avant de consulter les autres.
 
@@ -165,11 +165,11 @@ Une traduction officielle constitue une source linguistique potentiellement pré
 
 Ne lui accorde pas automatiquement priorité en raison de son caractère officiel.
 
-Une source déjà en français peut être réutilisée telle quelle lorsqu'elle est naturelle, correcte et fidèle au sens le plus plausible.
+Une source déjà en français peut être réutilisée telle quelle lorsqu'elle est naturelle, correcte et fidèle à l'intention et au sens les plus plausibles.
 
 Ne la reformule pas uniquement pour produire une formulation différente.
 
-À l'inverse, améliore-la lorsqu'une autre formulation est clairement plus fidèle, naturelle ou cohérente avec l'ensemble des sources.
+À l'inverse, améliore-la lorsqu'une autre formulation est clairement plus fidèle, plus naturelle ou conserve mieux une nuance importante.
 
 Les marqueurs techniques présents dans un sous-titre non structurant peuvent fournir des informations utiles sur l'emphase ou la mise en scène, mais ils ne constituent pas des contraintes techniques pour le fichier final.
 
@@ -240,7 +240,7 @@ Ne transforme pas les métriques en pourcentages de vérité.
 
 Utilise-les pour répondre à une question plus précise :
 
-> lorsqu'une transcription propose une interprétation particulière sur ce passage, à quel point cette observation mérite-t-elle de peser face aux autres hypothèses disponibles ?
+> Lorsqu'une transcription propose une interprétation particulière sur ce passage, à quel point cette observation mérite-t-elle de peser face aux autres hypothèses disponibles ?
 
 Cette pondération doit toujours rester locale au passage considéré.
 
@@ -306,7 +306,7 @@ Lorsque plusieurs transcriptions Whisper couvrant la même zone temporelle expri
 
 La convergence sémantique compte davantage que l'identité exacte des mots ou du découpage.
 
-Par exemple, deux transcriptions peuvent segmenter différemment une même réplique tout en soutenir clairement le même sens.
+Par exemple, deux transcriptions peuvent segmenter différemment une même réplique tout en soutenant clairement le même sens.
 
 Une convergence entre plusieurs Whisper doit réellement pouvoir remettre en cause l'interprétation proposée par un sous-titre, y compris le sous-titre structurant.
 
@@ -344,7 +344,7 @@ Utilise la combinaison convergence + diagnostics pour tirer plusieurs avantages 
 - donner davantage de poids à une lecture minoritaire lorsqu'elle reste mieux soutenue par ses diagnostics, le contexte et une autre source ;
 - détecter qu'une absence de texte dans une transcription peut provenir d'une difficulté de reconnaissance plutôt que d'une véritable absence de dialogue ;
 - remettre en cause un sous-titre humain lorsqu'il entre en conflit avec plusieurs observations cohérentes de l'audio ;
-- conserver au contraire une traduction humaine lorsqu'elle explique mieux la scène que des transcriptions automatiques hésitantes ou contradictoires.
+- conserver au contraire une traduction humaine lorsqu'elle restitue mieux l'intention et la scène que des transcriptions automatiques hésitantes ou contradictoires.
 
 La pondération n'a donc pas pour but de désigner une source gagnante une fois pour toutes.
 
@@ -382,9 +382,15 @@ Identifie les segments des différentes sources qui couvrent ou éclairent le cu
 
 Prends en compte les segments voisins lorsque la phrase traverse plusieurs cues.
 
-### 2. Déterminer le sens avant de traduire
+### 2. Déterminer l'intention, le sens et les nuances avant de traduire
 
-Construis d'abord l'interprétation la plus plausible de ce qui est dit, demandé, sous-entendu ou exprimé.
+Construis d'abord l'interprétation la plus plausible de :
+
+- l'intention principale de la réplique ;
+- son sens global ;
+- ses sous-entendus utiles ;
+- les nuances réellement importantes pour la scène ;
+- son ton et sa fonction dans l'échange.
 
 Ne produis pas encore la formulation française.
 
@@ -406,7 +412,8 @@ En cas de divergence, évalue notamment :
 - les répliques voisines ;
 - le contexte immédiat ;
 - les relations entre les personnages ;
-- le sens global de la scène.
+- le sens global de la scène ;
+- l'intention communicative ou narrative de la réplique.
 
 Une autre source linguistique n'est pas seulement destinée à confirmer la source structurante.
 
@@ -414,11 +421,57 @@ Elle doit pouvoir la contredire et conduire à retenir un sens différent.
 
 Lorsqu'au moins deux sources indépendamment segmentées convergent sur un élément sémantique absent ou différent dans la source structurante, considère cette convergence comme une raison explicite de réexaminer la source structurante.
 
+Ne remplace cependant pas une adaptation naturelle par une formulation plus littérale si l'adaptation conserve correctement l'intention, le sens et les nuances significatives.
+
 ### 4. Formuler le français
 
-Une fois le sens retenu, produis la formulation française la plus naturelle et concise compatible avec ce sens, le ton et la durée du cue.
+Une fois l'intention, le sens et les nuances significatives retenus, produis la formulation française la plus naturelle et concise compatible avec eux.
 
 Ne laisse pas la syntaxe d'une source particulière dicter automatiquement la syntaxe française.
+
+## Critères d'acceptation de la traduction
+
+L'objectif n'est pas de produire une traduction littérale ni de conserver chaque détail lexical ou grammatical des sources.
+
+Une traduction est bonne lorsqu'elle restitue au mieux l'intention communicative et narrative la plus plausible de la réplique, avec le minimum de perte dans les nuances qui ont une importance réelle pour la scène.
+
+Évalue notamment, dans cet ordre de priorité :
+
+1. l'intention principale de la réplique et sa fonction dans la scène ;
+2. le sens global, les sous-entendus et les informations importantes ;
+3. les nuances qui modifient réellement la perception de la scène, par exemple :
+   - certitude ou possibilité ;
+   - négation ;
+   - ironie ;
+   - reproche ;
+   - hésitation ;
+   - politesse ;
+   - agressivité ;
+   - affection ;
+   - gêne ;
+   - humour ;
+   - sarcasme ;
+   - mépris ;
+   - emphase ;
+4. le ton, le registre et la caractérisation du personnage ;
+5. la relation sociale, hiérarchique ou affective entre les personnages ;
+6. le naturel, la concision et la lisibilité du français.
+
+Une différence lexicale, une reformulation ou une légère généralisation est acceptable si elle ne modifie pas significativement ces éléments.
+
+Ne cherche donc pas à conserver un mot, une construction grammaticale ou un détail uniquement parce qu'il apparaît dans une transcription plus proche de l'audio.
+
+À l'inverse, ne simplifie pas une nuance lorsqu'elle contribue réellement à l'intention, au ton, à l'humour, à la caractérisation, à la relation entre les personnages ou à la compréhension de la scène.
+
+Lorsque plusieurs formulations françaises transmettent la même intention et les mêmes nuances importantes, préfère la plus naturelle, la plus concise et la plus idiomatique.
+
+Une traduction plus littérale n'est jamais préférable par principe.
+
+Une traduction plus libre n'est acceptable que si elle ne crée pas d'intention, de nuance ou d'information qui ne soit raisonnablement soutenue par les sources et le contexte.
+
+Ne pénalise pas une adaptation uniquement parce qu'elle s'éloigne des mots exacts de l'audio ou d'un sous-titre.
+
+Pénalise-la uniquement si elle modifie de manière significative ce que le spectateur doit comprendre, ressentir ou percevoir de la scène.
 
 ## Absence de hiérarchie fixe
 
@@ -443,7 +496,7 @@ Plusieurs transcriptions convergentes peuvent révéler un contresens ou une sim
 
 Choisis l'interprétation qui explique le mieux l'ensemble des éléments disponibles avec le moins d'hypothèses.
 
-Si plusieurs interprétations restent réellement plausibles, préfère la formulation la plus prudente et la plus naturelle.
+Si plusieurs interprétations restent réellement plausibles, préfère celle qui conserve le mieux l'intention et les nuances importantes tout en restant naturelle en français.
 
 Ne mélange pas artificiellement deux interprétations incompatibles.
 
@@ -453,7 +506,7 @@ Produis un français :
 
 - naturel ;
 - idiomatique ;
-- fidèle au sens le plus plausible ;
+- fidèle à l'intention, au sens et aux nuances significatives les plus plausibles ;
 - fidèle au ton de la scène ;
 - cohérent avec les relations sociales et affectives entre les personnages ;
 - suffisamment concis pour être lu pendant le temps d'affichage du cue.
@@ -569,7 +622,7 @@ Le découpage final est toujours celui du gabarit technique.
 
 La traduction est destinée à être affichée comme sous-titre.
 
-À sens égal, préfère :
+À intention et sens égaux, préfère :
 
 - une formulation courte ;
 - une tournure française directe ;
@@ -583,7 +636,7 @@ La traduction est destinée à être affichée comme sous-titre.
 - les ajouts de contexte déjà évident ;
 - les formulations anormalement longues pour un cue très court.
 
-Ne supprime toutefois pas une information importante uniquement pour raccourcir.
+Ne supprime toutefois pas une information ou une nuance importante uniquement pour raccourcir.
 
 ## Relecture obligatoire
 
@@ -616,7 +669,16 @@ Corrige notamment :
 
 Vérifie particulièrement qu'aucune faute simple de terminaison, d'accord ou de saisie ne subsiste.
 
-Vérifie également qu'aucune reformulation créative n'a ajouté une information absente des sources.
+Vérifie également qu'aucune reformulation créative n'a ajouté une information, une intention ou une nuance absente des sources et du contexte.
+
+Avant de rendre la réponse, effectue une dernière vérification mentale pour chaque cue :
+
+- l'intention de la réplique est-elle conservée ?
+- une nuance importante a-t-elle été perdue ?
+- une nuance nouvelle a-t-elle été inventée ?
+- le ton et la relation entre les personnages restent-ils cohérents ?
+- la formulation française est-elle naturelle et correcte ?
+- le texte reste-t-il assez concis pour un sous-titre ?
 
 ## Format de sortie obligatoire
 
