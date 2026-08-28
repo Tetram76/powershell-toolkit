@@ -121,7 +121,9 @@ Describe 'Tetram.Media.Translation manifest' {
 
         $prompt | Should -Match 'gabarit technique'
         $prompt | Should -Match 'SOURCE LINGUISTIQUE 1 — SOUS-TITRE STRUCTURANT'
-        $prompt | Should -Match 'Déterminer le sens avant de traduire'
+        $prompt | Should -Match "Déterminer l'intention, le sens et les nuances avant de traduire"
+        $prompt | Should -Match "Critères d'acceptation de la traduction"
+        $prompt | Should -Match "Une traduction plus littérale n'est jamais préférable par principe"
         $prompt | Should -Match 'Convergence et divergence entre plusieurs Whisper'
         $prompt | Should -Match 'pondération locale'
         $prompt | Should -Match "Aucune source n'est autoritaire linguistiquement"
@@ -129,6 +131,7 @@ Describe 'Tetram.Media.Translation manifest' {
         $prompt | Should -Match 'JSON compact par segments'
         $prompt | Should -Match 'avg_logprob'
         $prompt | Should -Match 'no_speech_prob'
+        $prompt | Should -Not -Match 'Déterminer le sens avant de traduire'
         $prompt | Should -Not -Match 'SOURCE PRINCIPALE'
         $prompt | Should -Not -Match 'JSON brut'
         $prompt | Should -Not -Match 'niveau mot'
