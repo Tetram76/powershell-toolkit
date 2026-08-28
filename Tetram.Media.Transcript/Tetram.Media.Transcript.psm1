@@ -8,7 +8,7 @@ Import-Module -Name (Join-Path $PSScriptRoot '..' 'Tetram.Common') -Force
 
 function Get-MediaTranscript {
     <#
-.EXTERNALHELP Tetram.Media.Whisper-Help.xml
+.EXTERNALHELP Tetram.Media.Transcript-Help.xml
 #>
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(

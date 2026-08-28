@@ -1,9 +1,9 @@
 ---
 document type: cmdlet
-external help file: Tetram.Media.Whisper-Help.xml
+external help file: Tetram.Media.Transcript-Help.xml
 HelpUri: ''
 Locale: fr-FR
-Module Name: Tetram.Media.Whisper
+Module Name: Tetram.Media.Transcript
 ms.date: 08/28/2026
 PlatyPS schema version: 2024-05-01
 title: Get-MediaTranscript

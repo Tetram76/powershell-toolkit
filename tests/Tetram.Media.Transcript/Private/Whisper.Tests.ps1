@@ -1,15 +1,15 @@
 # Étendre la suite autour des unités privées Faster-Whisper / Purfview.
 #
-# Tout passe par InModuleScope 'Tetram.Media.Whisper' : ces fonctions ne sont pas exportées.
+# Tout passe par InModuleScope 'Tetram.Media.Transcript' : ces fonctions ne sont pas exportées.
 # $TestDrive n'est pas visible depuis InModuleScope : le passer via -Parameters @{ Work = $TestDrive }.
 # Get-Whisper* n'appelle aucun binaire. Invoke-Whisper s'exerce via pwsh (stand-in),
 # jamais via faster-whisper-xxl.
 
 BeforeAll {
     Set-StrictMode -Version Latest
-    $script:RepoRootWhisper = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-    $script:ModuleRootWhisper = Join-Path $script:RepoRootWhisper 'Tetram.Media.Whisper'
-    Import-Module -Name $script:ModuleRootWhisper -Force -ErrorAction Stop
+    $script:RepoRootTranscript = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
+    $script:ModuleRootTranscript = Join-Path $script:RepoRootTranscript 'Tetram.Media.Transcript'
+    Import-Module -Name $script:ModuleRootTranscript -Force -ErrorAction Stop
 
     $script:NativeWhisperJson = @'
 {
@@ -43,14 +43,14 @@ BeforeAll {
 }
 
 AfterAll {
-    Remove-Module -Name 'Tetram.Media.Whisper' -Force -ErrorAction SilentlyContinue
+    Remove-Module -Name 'Tetram.Media.Transcript' -Force -ErrorAction SilentlyContinue
 }
 
 # La fonction est pure et déterministe : chaque cas assert la séquence entière plutôt qu'un fragment.
 # Aucun paramètre n'est donc fourni sans être couvert, et toute régression d'ordre est vue partout.
 Describe 'Get-WhisperArguments' {
     It 'produit la séquence unitaire par défaut, sans --batch_recursive ni --language' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
             $got = Get-WhisperArguments -Source 'D:\Films\a.mkv' -Model 'large-v2' -OutputDir $outDir
             $got | Should -Be @(
@@ -71,13 +71,13 @@ Describe 'Get-WhisperArguments' {
     }
 
     It 'n''accepte plus Format' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             (Get-Command Get-WhisperArguments).Parameters.ContainsKey('Format') | Should -BeFalse
         }
     }
 
     It 'passe --ff_track avec la piste demandée' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
             $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'large-v2' -OutputDir $outDir -AudioTrack 2
             $ff = [array]::IndexOf(@($got), '--ff_track')
@@ -86,7 +86,7 @@ Describe 'Get-WhisperArguments' {
     }
 
     It 'reprend le modèle demandé' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
             $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'large-v3-turbo' -OutputDir $outDir
             $got | Should -Be @(
@@ -105,7 +105,7 @@ Describe 'Get-WhisperArguments' {
     }
 
     It 'insère --language entre --ff_track et --postfix quand UseLanguage est fourni' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
             $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'large-v2' -UseLanguage 'fr' -OutputDir $outDir
             $got | Should -Be @(
@@ -125,7 +125,7 @@ Describe 'Get-WhisperArguments' {
     }
 
     It 'ajoute les options Kotoba après la séquence générique pour kotoba-v2' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
             $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'kotoba-v2' -UseLanguage 'ja' -OutputDir $outDir
             $got | Should -Be @(
@@ -150,7 +150,7 @@ Describe 'Get-WhisperArguments' {
     }
 
     It 'n''ajoute aucune option Kotoba pour large-v3' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $outDir = Join-Path ([IO.Path]::GetTempPath()) 'whisper-args-out'
             $got = Get-WhisperArguments -Source 'D:\a.mkv' -Model 'large-v3' -OutputDir $outDir
             $got | Should -Be @(
@@ -171,7 +171,7 @@ Describe 'Get-WhisperArguments' {
 
 Describe 'Resolve-WhisperMediaFile' {
     It 'retourne le chemin concret d''un fichier existant' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $media = Join-Path $Work 'Episode.mkv'
             Set-Content -LiteralPath $media -Value 'x'
@@ -180,7 +180,7 @@ Describe 'Resolve-WhisperMediaFile' {
     }
 
     It 'traite les crochets comme un nom de fichier, pas comme un glob' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             Set-Content -LiteralPath (Join-Path $Work 'Episode[1].mkv') -Value 'x'
             Set-Content -LiteralPath (Join-Path $Work 'Episode1.mkv') -Value 'x'
@@ -191,14 +191,14 @@ Describe 'Resolve-WhisperMediaFile' {
     }
 
     It 'refuse un chemin inexistant' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             { Resolve-WhisperMediaFile -LiteralPath (Join-Path $Work 'absent.mkv') } | Should -Throw '*fichier unique*'
         }
     }
 
     It 'refuse un dossier' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $dir = Join-Path $Work 'films'
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -207,7 +207,7 @@ Describe 'Resolve-WhisperMediaFile' {
     }
 
     It 'refuse un masque qui n''est pas un nom de fichier littéral' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             1..2 | ForEach-Object { Set-Content -LiteralPath (Join-Path $Work "f$_.mkv") -Value 'x' }
             { Resolve-WhisperMediaFile -LiteralPath (Join-Path $Work '*.mkv') } | Should -Throw '*fichier unique*'
@@ -215,7 +215,7 @@ Describe 'Resolve-WhisperMediaFile' {
     }
 
     It 'refuse un fichier-liste Purfview' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $lst = Join-Path $Work 'lot.lst'
             Set-Content -LiteralPath $lst -Value 'D:\Films\a.mkv'
@@ -226,7 +226,7 @@ Describe 'Resolve-WhisperMediaFile' {
 
 Describe 'Get-WhisperPath' {
     It 'retourne l''override quand c''est un fichier' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $exe = Join-Path $Work 'ailleurs.exe'
             Set-Content -LiteralPath $exe -Value 'stub'
@@ -235,7 +235,7 @@ Describe 'Get-WhisperPath' {
     }
 
     It 'rejette un override qui est un dossier' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $dir = Join-Path $Work 'dossier-exe'
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -244,14 +244,14 @@ Describe 'Get-WhisperPath' {
     }
 
     It 'rejette un override inexistant' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             { Get-WhisperPath -OverridePath (Join-Path $Work 'absent.exe') } | Should -Throw '*inexistant*'
         }
     }
 
     It 'prend le binaire du dossier du module quand il existe' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $fakeRoot = Join-Path $Work 'purfview'
             New-Item -ItemType Directory -Path $fakeRoot -Force | Out-Null
@@ -269,7 +269,7 @@ Describe 'Get-WhisperPath' {
     }
 
     It 'échoue avec un message qui indique où poser la distribution' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             Mock Get-Command { $null } -ParameterFilter { $Name -eq 'faster-whisper-xxl' }
             $saved = $script:WhisperRoot
@@ -284,7 +284,7 @@ Describe 'Get-WhisperPath' {
     }
 
     It 'ignore une fonction de même nom au lieu de renvoyer une Source vide' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             function faster-whisper-xxl { 'ne doit jamais être choisie' }
             $saved = $script:WhisperRoot
@@ -302,7 +302,7 @@ Describe 'Get-WhisperPath' {
 
 Describe 'Invoke-Whisper' {
     It 'affiche la ligne de commande avant toute exécution' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             Mock Show-CommandLine {}
             $cmdlet = [PSCustomObject]@{}
             $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $false }
@@ -313,7 +313,7 @@ Describe 'Invoke-Whisper' {
     }
 
     It 'laisse ExitCode à $null et n''exécute rien si ShouldProcess refuse' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             Mock Show-CommandLine {}
             $cmdlet = [PSCustomObject]@{}
             $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $false }
@@ -324,7 +324,7 @@ Describe 'Invoke-Whisper' {
     }
 
     It 'relève le code de sortie du binaire' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             Mock Show-CommandLine {}
             $cmdlet = [PSCustomObject]@{}
             $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $true }
@@ -335,7 +335,7 @@ Describe 'Invoke-Whisper' {
     }
 
     It 'préserve les frontières d''arguments, y compris les chemins à espaces' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             Mock Show-CommandLine {}
             $cmdlet = [PSCustomObject]@{}
@@ -352,7 +352,7 @@ Describe 'Invoke-Whisper' {
 
 Describe 'New-WhisperTempDirectory' {
     It 'crée un dossier GUID sous TEMP, sans stem média' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $dir = New-WhisperTempDirectory
             try {
                 $gotDir = [IO.Path]::GetFullPath((Split-Path -Parent $dir)).TrimEnd('\', '/')
@@ -370,7 +370,7 @@ Describe 'New-WhisperTempDirectory' {
     }
 
     It 'ne retourne pas un chemin si New-Item échoue' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             Mock New-Item { throw 'TEMP inaccessible' }
             { New-WhisperTempDirectory } | Should -Throw '*TEMP inaccessible*'
         }
@@ -379,7 +379,7 @@ Describe 'New-WhisperTempDirectory' {
 
 Describe 'ConvertFrom-WhisperTranscript' {
     It 'produit le contrat racine Tetram avec langue forcée' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Native = $script:NativeWhisperJson } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeWhisperJson } {
             param($Native)
             $got = ConvertFrom-WhisperTranscript -InputObject $Native -Model 'large-v3' -UseLanguage 'ja'
             $got.engine | Should -Be 'faster-whisper'
@@ -394,7 +394,7 @@ Describe 'ConvertFrom-WhisperTranscript' {
     }
 
     It 'reprend la piste demandée dans audioTrack' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Native = $script:NativeWhisperJson } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeWhisperJson } {
             param($Native)
             $got = ConvertFrom-WhisperTranscript -InputObject $Native -Model 'large-v3' -UseLanguage 'ja' -AudioTrack 2
             $got.audioTrack | Should -Be 2
@@ -402,7 +402,7 @@ Describe 'ConvertFrom-WhisperTranscript' {
     }
 
     It 'reprend la langue native avec languageSource detected' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Native = $script:NativeWhisperJson } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeWhisperJson } {
             param($Native)
             $got = ConvertFrom-WhisperTranscript -InputObject $Native -Model 'large-v2'
             $got.language | Should -Be 'ja'
@@ -411,7 +411,7 @@ Describe 'ConvertFrom-WhisperTranscript' {
     }
 
     It 'conserve l''ordre, start, end, text, sans id Tetram' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Native = $script:NativeWhisperJson } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeWhisperJson } {
             param($Native)
             $got = ConvertFrom-WhisperTranscript -InputObject $Native -Model 'large-v3' -UseLanguage 'ja'
             $segments = @($got.segments)
@@ -427,7 +427,7 @@ Describe 'ConvertFrom-WhisperTranscript' {
     }
 
     It 'conserve les diagnostics Whisper connus sous diagnostics, y compris les tokens natifs' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Native = $script:NativeWhisperJson } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeWhisperJson } {
             param($Native)
             $got = ConvertFrom-WhisperTranscript -InputObject $Native -Model 'large-v3' -UseLanguage 'ja'
             $diag = @($got.segments)[0].diagnostics
@@ -440,7 +440,7 @@ Describe 'ConvertFrom-WhisperTranscript' {
     }
 
     It 'n''invente pas un diagnostic absent' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $json = '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"hello","avg_logprob":-0.1}]}'
             $got = ConvertFrom-WhisperTranscript -InputObject $json -Model 'large-v3'
             $segment = @($got.segments)[0]
@@ -454,7 +454,7 @@ Describe 'ConvertFrom-WhisperTranscript' {
     }
 
     It 'conserve words au niveau du segment en normalisant word vers text' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Native = $script:NativeWhisperJson } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeWhisperJson } {
             param($Native)
             $got = ConvertFrom-WhisperTranscript -InputObject $Native -Model 'large-v3' -UseLanguage 'ja'
             $words = @(@($got.segments)[0].words)
@@ -468,7 +468,7 @@ Describe 'ConvertFrom-WhisperTranscript' {
     }
 
     It 'accepte un segment sans words' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $json = '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
             $got = ConvertFrom-WhisperTranscript -InputObject $json -Model 'kotoba-v2' -UseLanguage 'ja'
             $segment = @($got.segments)[0]
@@ -478,7 +478,7 @@ Describe 'ConvertFrom-WhisperTranscript' {
     }
 
     It 'n''ajoute pas un tableau words vide' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             $json = '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"x","words":[]}]}'
             $got = ConvertFrom-WhisperTranscript -InputObject $json -Model 'large-v3'
             @($got.segments)[0].PSObject.Properties['words'] | Should -BeNullOrEmpty
@@ -486,14 +486,14 @@ Describe 'ConvertFrom-WhisperTranscript' {
     }
 
     It 'lève si segments est absent' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             { ConvertFrom-WhisperTranscript -InputObject '{"language":"ja"}' -Model 'large-v3' } |
                 Should -Throw '*segments*'
         }
     }
 
     It 'lève si la langue détectée est absente' {
-        InModuleScope 'Tetram.Media.Whisper' {
+        InModuleScope 'Tetram.Media.Transcript' {
             { ConvertFrom-WhisperTranscript -InputObject '{"segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3' } |
                 Should -Throw '*langue*'
         }
@@ -502,7 +502,7 @@ Describe 'ConvertFrom-WhisperTranscript' {
 
 Describe 'Convert-WhisperNativeToTetram' {
     It 'retourne le transcript Tetram en mémoire sans publier de sidecar' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $nativeDir = Join-Path $Work 'native-temp'
             $mediaDir = Join-Path $Work 'Videos'
@@ -524,7 +524,7 @@ Describe 'Convert-WhisperNativeToTetram' {
 
 Describe 'Get-WhisperNativeJsonFromOutputDir' {
     It 'liste les JSON natifs du dossier de sortie et ignore le sidecar Tetram' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $outDir = Join-Path $Work 'whisper-out'
             New-Item -ItemType Directory -Path $outDir -Force | Out-Null
@@ -539,7 +539,7 @@ Describe 'Get-WhisperNativeJsonFromOutputDir' {
     }
 
     It 'reconnaît le JSON natif Purfview en postfixe underscore' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $outDir = Join-Path $Work 'whisper-out-underscore'
             New-Item -ItemType Directory -Path $outDir -Force | Out-Null
@@ -552,7 +552,7 @@ Describe 'Get-WhisperNativeJsonFromOutputDir' {
     }
 
     It 'liste plusieurs JSON natifs sans en choisir un' {
-        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $outDir = Join-Path $Work 'whisper-out-multi'
             New-Item -ItemType Directory -Path $outDir -Force | Out-Null
