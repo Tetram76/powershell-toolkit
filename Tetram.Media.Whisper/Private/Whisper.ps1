@@ -37,6 +37,18 @@ function Get-WhisperArguments {
         '--beep_off'
     )
 
+    # kotoba-v2 (CTranslate2 custom) plante en 0xC0000005 avec les défauts Purfview ; ces flags
+    # sont ceux qui ont été validés empiriquement. Ne pas les appliquer aux modèles Whisper.
+    if ($Model -eq 'kotoba-v2') {
+        $whisperArgs += @(
+            '--condition_on_previous_text', 'False'
+            '-prompt', 'None'
+            '--word_timestamps', 'False'
+            '--chunk_length', '15'
+            '--compute_type', 'float16'
+        )
+    }
+
     return $whisperArgs
 }
 

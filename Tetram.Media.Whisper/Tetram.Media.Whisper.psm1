@@ -27,7 +27,7 @@ function Get-MediaTranscript {
         [ValidateSet('json', 'lrc', 'txt', 'text', 'vtt', 'srt', 'tsv', 'all')]
         [string[]] $Format = @('srt'),
 
-        [ValidateSet('large-v2', 'large-v3-turbo', 'large-v3')]
+        [ValidateSet('large-v2', 'large-v3-turbo', 'large-v3', 'kotoba-v2')]
         [string] $Model = 'large-v2',
 
         [ValidateSet(
