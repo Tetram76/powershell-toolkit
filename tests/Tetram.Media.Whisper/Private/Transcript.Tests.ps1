@@ -212,6 +212,34 @@ Describe 'Write-TetramTranscript' {
         }
     }
 
+    It 'remplace un sidecar déjà présent' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dest = Join-Path $Work 'Episode.track 1.ja.large-v3.json'
+            Set-Content -LiteralPath $dest -Value 'ancien'
+            $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"nouveau"}]}' -Model 'large-v3' -UseLanguage 'ja'
+            Write-TetramTranscript -Transcript $transcript -Path $dest
+            $raw = Get-Content -LiteralPath $dest -Raw -Encoding UTF8
+            $raw | Should -Not -Be 'ancien'
+            $parsed = ConvertFrom-Json -InputObject $raw
+            $parsed.segments[0].text | Should -Be 'nouveau'
+            @(Get-ChildItem -LiteralPath $Work -Filter '*.tmp' -File -ErrorAction SilentlyContinue).Count | Should -Be 0
+        }
+    }
+
+    It 'conserve le sidecar précédent si la publication échoue' {
+        InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dest = Join-Path $Work 'Keep.track 1.en.large-v3.json'
+            Set-Content -LiteralPath $dest -Value 'ancien'
+            $transcript = ConvertFrom-WhisperTranscript -InputObject '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Model 'large-v3'
+            Mock Move-Item { throw 'publication impossible' }
+            { Write-TetramTranscript -Transcript $transcript -Path $dest } | Should -Throw '*publication impossible*'
+            Get-Content -LiteralPath $dest -Raw | Should -BeLike 'ancien*'
+            @(Get-ChildItem -LiteralPath $Work -Filter '*.tmp' -File -ErrorAction SilentlyContinue).Count | Should -Be 0
+        }
+    }
+
     It 'crée le .tmp de publication dans le dossier destination' {
         InModuleScope 'Tetram.Media.Whisper' -Parameters @{ Work = "$TestDrive" } {
             param($Work)

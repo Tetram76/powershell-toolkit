@@ -217,6 +217,7 @@ function Write-TetramTranscript {
 
     try {
         [IO.File]::WriteAllText($temp, $json, $utf8)
+        # -Force : une réexécution doit remplacer le sidecar existant ; sans ça Move-Item échoue si $Path est déjà là.
         Move-Item -LiteralPath $temp -Destination $Path -Force -ErrorAction Stop
     }
     finally {

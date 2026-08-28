@@ -26,7 +26,7 @@ Get-MediaTranscript [-LiteralPath] <string> [-AudioTrack <int>] [-Model <string[
 
 ## DESCRIPTION
 
-`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation Faster-Whisper distincte, puis un JSON Tetram canonique à côté du média. Le JSON natif Faster-Whisper est un artefact temporaire : il est écrit dans un dossier unique sous le répertoire temporaire système, lu, normalisé, puis ce dossier est supprimé. Le chemin passé à `-LiteralPath` est pris au pied de la lettre : ni masque, ni dossier à parcourir, ni fichier-liste. La commande n'émet rien dans le pipeline.
+`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation Faster-Whisper distincte, puis un JSON Tetram canonique à côté du média. Le JSON natif Faster-Whisper est un artefact temporaire : il est écrit dans un dossier unique sous le répertoire temporaire système, lu, normalisé, puis ce dossier est supprimé. `-LiteralPath` doit désigner un fichier unique existant : un masque, un dossier ou un fichier-liste est refusé avant toute invocation Faster-Whisper. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
 
 Le fichier durable suit la convention `<media-base>.track <trackid>.<langue>.<model>.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.
 
@@ -139,7 +139,7 @@ HelpMessage: ''
 
 ### -LiteralPath
 
-Chemin littéral d'un seul fichier média. Les caractères spéciaux PowerShell (`*`, `?`, `[`) font partie du nom ; ils ne sont pas interprétés comme un masque.
+Chemin littéral d'un fichier média unique existant. Les caractères spéciaux PowerShell (`*`, `?`, `[`) font partie du nom ; ils ne sont pas interprétés comme un masque. Un chemin qui n'est pas un fichier (masque, dossier, fichier-liste Purfview) est refusé avant l'invocation native ; le chemin concret de ce fichier est ensuite transmis au backend.
 
 ```yaml
 Type: System.String
