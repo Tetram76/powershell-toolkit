@@ -67,8 +67,34 @@ Describe 'Resolve-TranscriptMediaFile' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $lst = Join-Path $Work 'lot.lst'
-            Set-Content -LiteralPath $lst -Value 'D:\Films\a.mkv'
+            Set-Content -LiteralPath $lst -Value (Join-Path 'Films' 'a.mkv')
             Resolve-TranscriptMediaFile -LiteralPath $lst | Should -Be (Get-Item -LiteralPath $lst).FullName
+        }
+    }
+
+    It 'traite les crochets comme un nom de fichier, pas comme un glob' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            Set-Content -LiteralPath (Join-Path $Work 'Episode[1].mkv') -Value 'x'
+            Set-Content -LiteralPath (Join-Path $Work 'Episode1.mkv') -Value 'x'
+            $got = Resolve-TranscriptMediaFile -LiteralPath (Join-Path $Work 'Episode[1].mkv')
+            $got | Should -Be (Get-Item -LiteralPath (Join-Path $Work 'Episode[1].mkv')).FullName
+            $got | Should -Not -Be (Get-Item -LiteralPath (Join-Path $Work 'Episode1.mkv')).FullName
+        }
+    }
+
+    It 'refuse un chemin inexistant' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            { Resolve-TranscriptMediaFile -LiteralPath (Join-Path $Work 'absent.mkv') } | Should -Throw '*fichier unique*'
+        }
+    }
+
+    It 'refuse un masque qui n''est pas un nom de fichier littéral' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            1..2 | ForEach-Object { Set-Content -LiteralPath (Join-Path $Work "f$_.mkv") -Value 'x' }
+            { Resolve-TranscriptMediaFile -LiteralPath (Join-Path $Work '*.mkv') } | Should -Throw '*fichier unique*'
         }
     }
 }
@@ -84,6 +110,59 @@ Describe 'Get-TranscriptEngineName' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Model = $Model } {
             param($Model)
             Get-TranscriptEngineName -Model $Model | Should -Be 'Whisper'
+        }
+    }
+}
+
+Describe 'Invoke-TranscriptBackend' {
+    BeforeAll {
+        $script:FakeCmdlet = [PSCustomObject]@{}
+        $script:FakeCmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $true }
+    }
+
+    It 'délègue un modèle Whisper à Invoke-WhisperTranscript sans résoudre Purfview' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Cmdlet = $script:FakeCmdlet } {
+            param($Cmdlet)
+            Mock Get-WhisperPath { throw 'le dispatcher ne doit pas résoudre Purfview' }
+            Mock Invoke-Whisper { throw 'le dispatcher ne doit pas invoquer Purfview' }
+            Mock Invoke-WhisperTranscript {
+                param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhisperPath, $WhatIf)
+                [pscustomobject]@{
+                    model      = $Model
+                    mediaPath  = $MediaPath
+                    audioTrack = $AudioTrack
+                    language   = $UseLanguage
+                    whisper    = $WhisperPath
+                    whatIf     = [bool]$WhatIf
+                }
+            }
+
+            $media = Join-Path 'Videos' 'Episode.mkv'
+            $got = Invoke-TranscriptBackend -MediaPath $media -Model 'large-v3' -AudioTrack 2 -UseLanguage 'ja' -WhisperPath 'whisper.exe' -Cmdlet $Cmdlet
+
+            Should -Invoke Invoke-WhisperTranscript -Times 1 -ParameterFilter {
+                $MediaPath -eq $media -and
+                $Model -eq 'large-v3' -and
+                $AudioTrack -eq 2 -and
+                $UseLanguage -eq 'ja' -and
+                $WhisperPath -eq 'whisper.exe' -and
+                -not $WhatIf
+            }
+            $got.model | Should -Be 'large-v3'
+        }
+    }
+
+    It 'propage -WhatIf vers Invoke-WhisperTranscript' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Cmdlet = $script:FakeCmdlet } {
+            param($Cmdlet)
+            Mock Invoke-WhisperTranscript {
+                param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhisperPath, $WhatIf)
+                [pscustomobject]@{ WhatIf = [bool]$WhatIf }
+            }
+
+            $got = Invoke-TranscriptBackend -MediaPath (Join-Path 'Videos' 'a.mkv') -Model 'kotoba-v2' -Cmdlet $Cmdlet -WhatIf
+            Should -Invoke Invoke-WhisperTranscript -Times 1 -ParameterFilter { [bool]$WhatIf }
+            $got.WhatIf | Should -BeTrue
         }
     }
 }

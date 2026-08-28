@@ -169,61 +169,6 @@ Describe 'Get-WhisperArguments' {
     }
 }
 
-Describe 'Resolve-WhisperMediaFile' {
-    It 'retourne le chemin concret d''un fichier existant' {
-        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $media = Join-Path $Work 'Episode.mkv'
-            Set-Content -LiteralPath $media -Value 'x'
-            Resolve-WhisperMediaFile -LiteralPath $media | Should -Be (Get-Item -LiteralPath $media).FullName
-        }
-    }
-
-    It 'traite les crochets comme un nom de fichier, pas comme un glob' {
-        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            Set-Content -LiteralPath (Join-Path $Work 'Episode[1].mkv') -Value 'x'
-            Set-Content -LiteralPath (Join-Path $Work 'Episode1.mkv') -Value 'x'
-            $got = Resolve-WhisperMediaFile -LiteralPath (Join-Path $Work 'Episode[1].mkv')
-            $got | Should -Be (Get-Item -LiteralPath (Join-Path $Work 'Episode[1].mkv')).FullName
-            $got | Should -Not -Be (Get-Item -LiteralPath (Join-Path $Work 'Episode1.mkv')).FullName
-        }
-    }
-
-    It 'refuse un chemin inexistant' {
-        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            { Resolve-WhisperMediaFile -LiteralPath (Join-Path $Work 'absent.mkv') } | Should -Throw '*fichier unique*'
-        }
-    }
-
-    It 'refuse un dossier' {
-        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $dir = Join-Path $Work 'films'
-            New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            { Resolve-WhisperMediaFile -LiteralPath $dir } | Should -Throw '*pas un dossier*'
-        }
-    }
-
-    It 'refuse un masque qui n''est pas un nom de fichier littéral' {
-        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            1..2 | ForEach-Object { Set-Content -LiteralPath (Join-Path $Work "f$_.mkv") -Value 'x' }
-            { Resolve-WhisperMediaFile -LiteralPath (Join-Path $Work '*.mkv') } | Should -Throw '*fichier unique*'
-        }
-    }
-
-    It 'refuse un fichier-liste Purfview' {
-        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $lst = Join-Path $Work 'lot.lst'
-            Set-Content -LiteralPath $lst -Value 'D:\Films\a.mkv'
-            { Resolve-WhisperMediaFile -LiteralPath $lst } | Should -Throw '*fichier-liste*'
-        }
-    }
-}
-
 Describe 'Get-WhisperPath' {
     It 'retourne l''override quand c''est un fichier' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
@@ -565,5 +510,425 @@ Describe 'Get-WhisperNativeJsonFromOutputDir' {
             $got | Should -Contain $a
             $got | Should -Contain $b
         }
+    }
+}
+
+Describe 'Invoke-WhisperTranscript' {
+    BeforeAll {
+        function Invoke-PrivateWhisperTranscript {
+            param(
+                [Parameter(Mandatory)] [string] $MediaPath,
+                [Parameter(Mandatory)] [string] $Model,
+                [Parameter(Mandatory)] $Cmdlet,
+                [int] $AudioTrack = 1,
+                [string] $UseLanguage,
+                [string] $WhisperPath,
+                [switch] $WhatIf
+            )
+
+            InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+                MediaPath   = $MediaPath
+                Model       = $Model
+                Cmdlet      = $Cmdlet
+                AudioTrack  = $AudioTrack
+                UseLanguage = $UseLanguage
+                WhisperPath = $WhisperPath
+                WhatIf      = [bool]$WhatIf
+            } {
+                param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhisperPath, $WhatIf)
+                Invoke-WhisperTranscript -MediaPath $MediaPath -Model $Model -Cmdlet $Cmdlet -AudioTrack $AudioTrack -UseLanguage $UseLanguage -WhisperPath $WhisperPath -WhatIf:$WhatIf
+            }
+        }
+
+        $script:FakeCmdlet = [PSCustomObject]@{}
+        $script:FakeCmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $true }
+        # Fixture minimal : un crash Purfview 0xC0000409 n'autorise pas de valider via un
+        # décompte de segments (Maison Ikkoku a déjà oscillé entre 315 et 321).
+        $script:PurfviewCrashExitCode = -1073740791
+        $script:RecoverableNativeJson = @'
+{
+  "language": "ja",
+  "segments": [
+    {
+      "id": 1,
+      "start": 1.25,
+      "end": 2.50,
+      "text": "テスト",
+      "temperature": 0.0,
+      "avg_logprob": -0.2,
+      "compression_ratio": 1.1,
+      "no_speech_prob": 0.0,
+      "tokens": [1, 2, 3],
+      "words": [
+        {
+          "start": 1.25,
+          "end": 2.50,
+          "word": "テスト",
+          "probability": 0.95
+        }
+      ]
+    }
+  ]
+}
+'@
+    }
+
+    BeforeEach {
+        Mock -ModuleName Tetram.Media.Transcript Get-WhisperPath { 'whisper.exe' }
+        Mock -ModuleName Tetram.Media.Transcript Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Transcript Write-DebugLog {}
+        Mock -ModuleName Tetram.Media.Transcript Show-CommandLine {}
+        $script:SeenArguments = $null
+    }
+
+    It 'invoque le binaire une seule fois avec le JSON natif et --ff_track' {
+        $media = Join-Path $TestDrive 'once.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $State['ExitCode'] = 0
+        }
+        $null = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v2 -Cmdlet $script:FakeCmdlet
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-Whisper -Times 1
+        $script:SeenArguments[0] | Should -Be $media
+        $script:SeenArguments | Should -Not -Contain '--batch_recursive'
+        $fmt = [array]::IndexOf(@($script:SeenArguments), '--output_format')
+        $script:SeenArguments[$fmt + 1] | Should -Be 'json'
+        $ff = [array]::IndexOf(@($script:SeenArguments), '--ff_track')
+        $script:SeenArguments[$ff + 1] | Should -Be '1'
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        $gotTemp = [IO.Path]::GetFullPath((Split-Path -Parent $script:SeenArguments[$outIndex + 1])).TrimEnd('\', '/')
+        $wantTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+        $gotTemp | Should -Be $wantTemp
+    }
+
+    It 'refuse un fichier-liste <Name> avant d''invoquer Purfview' -TestCases @(
+        @{ Name = 'lot.lst' }
+        @{ Name = 'lot.m3u' }
+        @{ Name = 'lot.m3u8' }
+        @{ Name = 'lot.txt' }
+    ) {
+        param($Name)
+        $listFile = Join-Path $TestDrive $Name
+        Set-Content -LiteralPath $listFile -Value (Join-Path 'Films' 'a.mkv')
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper { throw 'ne doit pas tourner' }
+        { Invoke-PrivateWhisperTranscript -MediaPath $listFile -Model large-v2 -Cmdlet $script:FakeCmdlet } | Should -Throw '*fichier-liste*'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-Whisper -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Transcript Get-WhisperPath -Times 0
+    }
+
+    It 'lève le message faster-whisper-xxl si le binaire est introuvable' {
+        $media = Join-Path $TestDrive 'missing-exe.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Get-WhisperPath { throw 'faster-whisper-xxl introuvable (test)' }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper { throw 'ne doit pas tourner' }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v2 -Cmdlet $script:FakeCmdlet } | Should -Throw '*faster-whisper-xxl*'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-Whisper -Times 0
+    }
+
+    It 'lève si le binaire rend un code non nul, sans produire de transcript' {
+        $media = Join-Path $TestDrive 'exit-nonzero.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $State['ExitCode'] = 1
+        }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v2 -Cmdlet $script:FakeCmdlet } |
+            Should -Throw '*faster-whisper-xxl a échoué (code 1)*'
+    }
+
+    It 'ne récupère pas le crash 0xC0000409 pour <Model>' -TestCases @(
+        @{ Model = 'large-v2' }
+        @{ Model = 'kotoba-v2' }
+    ) {
+        param($Model)
+        $media = Join-Path $TestDrive "crash-other-$Model.mkv"
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value $script:RecoverableNativeJson
+            $State['ExitCode'] = $script:PurfviewCrashExitCode
+        }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja } |
+            Should -Throw '*faster-whisper-xxl a échoué (code -1073740791)*'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
+    }
+
+    It 'ne récupère pas <Model> pour un autre code non nul que 0xC0000409' -TestCases @(
+        @{ Model = 'large-v3-turbo' }
+        @{ Model = 'large-v3' }
+    ) {
+        param($Model)
+        $media = Join-Path $TestDrive "other-crash-$Model.mkv"
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value $script:RecoverableNativeJson
+            $State['ExitCode'] = -1073741819
+        }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja } |
+            Should -Throw '*faster-whisper-xxl a échoué (code -1073741819)*'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
+    }
+
+    It 'échoue si <Model> crashe en 0xC0000409 sans JSON natif et nettoie le temporaire' -TestCases @(
+        @{ Model = 'large-v3-turbo' }
+        @{ Model = 'large-v3' }
+    ) {
+        param($Model)
+        $media = Join-Path $TestDrive "crash-no-json-$Model.mkv"
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $State['ExitCode'] = $script:PurfviewCrashExitCode
+        }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja } |
+            Should -Throw '*Aucun JSON natif*'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        Test-Path -LiteralPath $script:SeenArguments[$outIndex + 1] | Should -BeFalse
+    }
+
+    It 'échoue si <Model> crashe en 0xC0000409 avec plusieurs JSON natifs' -TestCases @(
+        @{ Model = 'large-v3-turbo' }
+        @{ Model = 'large-v3' }
+    ) {
+        param($Model)
+        $media = Join-Path $TestDrive "crash-ambiguous-$Model.mkv"
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            $outDir = $Arguments[$outIndex + 1]
+            Set-Content -LiteralPath (Join-Path $outDir 'Episode.ja.json') -Value $script:RecoverableNativeJson
+            Set-Content -LiteralPath (Join-Path $outDir 'Other.en.json') -Value '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"y"}]}'
+            $State['ExitCode'] = $script:PurfviewCrashExitCode
+        }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja } |
+            Should -Throw '*Résultat natif ambigu*'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
+    }
+
+    It 'échoue si <Model> crashe en 0xC0000409 avec un JSON natif tronqué et nettoie le temporaire' -TestCases @(
+        @{ Model = 'large-v3-turbo' }
+        @{ Model = 'large-v3' }
+    ) {
+        param($Model)
+        $media = Join-Path $TestDrive "crash-truncated-$Model.mkv"
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0'
+            $State['ExitCode'] = $script:PurfviewCrashExitCode
+        }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja } | Should -Throw
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        Test-Path -LiteralPath $script:SeenArguments[$outIndex + 1] | Should -BeFalse
+    }
+
+    It 'échoue si <Model> crashe en 0xC0000409 avec un JSON sans segments exploitable' -TestCases @(
+        @{ Model = 'large-v3-turbo' }
+        @{ Model = 'large-v3' }
+    ) {
+        param($Model)
+        $media = Join-Path $TestDrive "crash-no-segments-$Model.mkv"
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja"}'
+            $State['ExitCode'] = $script:PurfviewCrashExitCode
+        }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja } |
+            Should -Throw '*segments*'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
+    }
+
+    It 'récupère <Model> après 0xC0000409 si le JSON natif est exploitable' -TestCases @(
+        @{ Model = 'large-v3-turbo' }
+        @{ Model = 'large-v3' }
+    ) {
+        param($Model)
+        $work = Join-Path $TestDrive "crash-recover-$Model"
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value $script:RecoverableNativeJson
+            $State['ExitCode'] = $script:PurfviewCrashExitCode
+        }
+        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet
+        $got.engine | Should -Be 'faster-whisper'
+        $got.model | Should -Be $Model
+        $got.language | Should -Be 'ja'
+        $got.languageSource | Should -Be 'detected'
+        $got.audioTrack | Should -Be 1
+        $got.segments.Count | Should -Be 1
+        $got.segments[0].text | Should -Be 'テスト'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 1 -ParameterFilter {
+            $Force -and
+            $Text -match 'faster-whisper-xxl' -and
+            $Text -match "\(modèle $([regex]::Escape($Model))\)" -and
+            $Text -match '-1073740791' -and
+            $Text -match '0xC0000409' -and
+            $Text -match 'JSON natif exploitable et normalisation Tetram terminée malgré le crash'
+        }
+        @(Get-ChildItem -LiteralPath $work -Filter '*.json' -File).Count | Should -Be 0
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        Test-Path -LiteralPath $script:SeenArguments[$outIndex + 1] | Should -BeFalse
+    }
+
+    It 'force la langue sur une récupération <Model> comme sur le chemin de succès' -TestCases @(
+        @{ Model = 'large-v3-turbo' }
+        @{ Model = 'large-v3' }
+    ) {
+        param($Model)
+        $media = Join-Path $TestDrive "crash-forced-lang-$Model.mkv"
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value $script:RecoverableNativeJson
+            $State['ExitCode'] = $script:PurfviewCrashExitCode
+        }
+        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja
+        $got.language | Should -Be 'ja'
+        $got.languageSource | Should -Be 'forced'
+    }
+
+    It 'sous -WhatIf, n''applique aucune récupération <Model> et ne crée pas le temporaire' -TestCases @(
+        @{ Model = 'large-v3-turbo' }
+        @{ Model = 'large-v3' }
+    ) {
+        param($Model)
+        $media = Join-Path $TestDrive "whatif-crash-$Model.mkv"
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript New-WhisperTempDirectory { throw 'ne doit pas créer TEMP' }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+        }
+        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja -WhatIf
+        $got | Should -BeNullOrEmpty
+        Should -Invoke -ModuleName Tetram.Media.Transcript New-WhisperTempDirectory -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        Test-Path -LiteralPath $script:SeenArguments[$outIndex + 1] | Should -BeFalse
+    }
+
+    It 'propage une exception d''exécution du binaire' {
+        $media = Join-Path $TestDrive 'invoke-throw.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper { throw 'accès refusé' }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v2 -Cmdlet $script:FakeCmdlet } | Should -Throw '*accès refusé*'
+    }
+
+    It 'retourne le transcript Tetram sans publier de sidecar à côté du média' {
+        $work = Join-Path $TestDrive 'success'
+        New-Item -ItemType Directory -Path $work -Force | Out-Null
+        $media = Join-Path $work 'Episode.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $State['ExitCode'] = 0
+        }
+        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -UseLanguage ja
+        $got.engine | Should -Be 'faster-whisper'
+        $got.model | Should -Be 'large-v3'
+        $got.language | Should -Be 'ja'
+        $got.languageSource | Should -Be 'forced'
+        $got.audioTrack | Should -Be 1
+        @(Get-ChildItem -LiteralPath $work -Filter '*.json' -File).Count | Should -Be 0
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        Test-Path -LiteralPath $script:SeenArguments[$outIndex + 1] | Should -BeFalse
+    }
+
+    It 'propage -AudioTrack 2 jusqu''à --ff_track et audioTrack' {
+        $media = Join-Path $TestDrive 'track2.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $State['ExitCode'] = 0
+        }
+        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -AudioTrack 2 -UseLanguage ja
+        $ff = [array]::IndexOf(@($script:SeenArguments), '--ff_track')
+        $script:SeenArguments[$ff + 1] | Should -Be '2'
+        $got.audioTrack | Should -Be 2
+    }
+
+    It 'lève si le JSON natif est ambigu' {
+        $media = Join-Path $TestDrive 'ambiguous.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            $outDir = $Arguments[$outIndex + 1]
+            Set-Content -LiteralPath (Join-Path $outDir 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            Set-Content -LiteralPath (Join-Path $outDir 'Other.en.json') -Value '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"y"}]}'
+            $State['ExitCode'] = 0
+        }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -UseLanguage ja } |
+            Should -Throw '*Résultat natif ambigu*'
+    }
+
+    It 'reprend kotoba-v2 comme nom de modèle dans le transcript' {
+        $media = Join-Path $TestDrive 'kotoba.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
+            $State['ExitCode'] = 0
+        }
+        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model kotoba-v2 -Cmdlet $script:FakeCmdlet -UseLanguage ja
+        $got.model | Should -Be 'kotoba-v2'
+        $got.model | Should -Not -Match 'ctranslate'
+    }
+
+    It 'reprend la langue détectée du JSON natif sans -UseLanguage' {
+        $media = Join-Path $TestDrive 'detected.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.en.json') -Value '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"hi"}]}'
+            $State['ExitCode'] = 0
+        }
+        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet
+        $got.language | Should -Be 'en'
+        $got.languageSource | Should -Be 'detected'
+    }
+
+    It 'lève si le JSON natif est invalide et nettoie le temporaire' {
+        $media = Join-Path $TestDrive 'invalid.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenArguments = $Arguments
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value 'not-json'
+            $State['ExitCode'] = 0
+        }
+        { Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -UseLanguage ja } | Should -Throw
+        $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
+        Test-Path -LiteralPath $script:SeenArguments[$outIndex + 1] | Should -BeFalse
     }
 }

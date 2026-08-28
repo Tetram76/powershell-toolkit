@@ -50,35 +50,6 @@ function Get-WhisperArguments {
     return $whisperArgs
 }
 
-function Resolve-WhisperMediaFile {
-    [CmdletBinding()]
-    [OutputType([string])]
-    param(
-        [Parameter(Mandatory)] [string] $LiteralPath
-    )
-
-    # -LiteralPath : * / ? / [ ne sont pas des globs. Purfview les traiterait comme un lot.
-    $item = $null
-    try {
-        $item = Get-Item -LiteralPath $LiteralPath -ErrorAction Stop
-    }
-    catch {
-        throw "LiteralPath doit désigner un fichier unique existant : '$LiteralPath'"
-    }
-
-    if ($item.PSIsContainer) {
-        throw "LiteralPath doit désigner un fichier, pas un dossier : '$LiteralPath'"
-    }
-
-    # Purfview lit ces extensions comme une liste de médias, pas comme une source unique.
-    $ext = $item.Extension
-    if ($ext -in @('.lst', '.m3u', '.m3u8', '.txt')) {
-        throw "LiteralPath ne doit pas être un fichier-liste : '$LiteralPath'"
-    }
-
-    return $item.FullName
-}
-
 function Get-WhisperPath {
     [CmdletBinding()]
     [OutputType([string])]
@@ -347,6 +318,7 @@ function Invoke-WhisperTranscript {
         [switch] $WhatIf
     )
 
+    # Purfview lit ces extensions comme une liste de médias, pas comme une source unique.
     $ext = [IO.Path]::GetExtension($MediaPath)
     if ($ext -in @('.lst', '.m3u', '.m3u8', '.txt')) {
         throw "LiteralPath ne doit pas être un fichier-liste : '$MediaPath'"
