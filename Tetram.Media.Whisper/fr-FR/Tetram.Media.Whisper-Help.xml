@@ -10,7 +10,7 @@
       <command:noun>MediaTranscript</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>`Get-MediaTranscript` traite exactement un média, une piste audio et un modèle par invocation. Elle produit uniquement un JSON Tetram canonique à côté du média. Le JSON natif Faster-Whisper est un artefact temporaire : il est écrit dans un dossier unique sous le répertoire temporaire système, lu, normalisé, puis ce dossier est supprimé. Le chemin passé à `-LiteralPath` est pris au pied de la lettre : ni masque, ni dossier à parcourir, ni fichier-liste. La commande n'émet rien dans le pipeline.
+      <maml:para>`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation Faster-Whisper distincte, puis un JSON Tetram canonique à côté du média. Le JSON natif Faster-Whisper est un artefact temporaire : il est écrit dans un dossier unique sous le répertoire temporaire système, lu, normalisé, puis ce dossier est supprimé. Le chemin passé à `-LiteralPath` est pris au pied de la lettre : ni masque, ni dossier à parcourir, ni fichier-liste. La commande n'émet rien dans le pipeline.
 
 Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.&lt;langue&gt;.&lt;model&gt;.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.</maml:para>
     </maml:description>
@@ -42,9 +42,9 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
             <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
           </command:parameterValueGroup>
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
           <dev:type>
-            <maml:name>System.String</maml:name>
+            <maml:name>System.String[]</maml:name>
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
@@ -112,7 +112,7 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Model</maml:name>
         <maml:description>
-          <maml:para>Modèle Faster-Whisper, défaut `large-v2`. `kotoba-v2` est un modèle japonais custom pour Faster-Whisper/Purfview : il doit être installé séparément dans la distribution Purfview (le module ne le télécharge pas). `Get-MediaTranscript` lui applique automatiquement les options d'inférence compatibles. `-UseLanguage ja` reste recommandé pour ce scénario.</maml:para>
+          <maml:para>Modèle Faster-Whisper, défaut `large-v2`. Plusieurs valeurs : une ligne de commande par modèle. `kotoba-v2` est un modèle japonais custom pour Faster-Whisper/Purfview : il doit être installé séparément dans la distribution Purfview (le module ne le télécharge pas). `Get-MediaTranscript` lui applique automatiquement les options d'inférence compatibles. `-UseLanguage ja` reste recommandé pour ce scénario.</maml:para>
         </maml:description>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">large-v2</command:parameterValue>
@@ -120,9 +120,9 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
           <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
         </command:parameterValueGroup>
-        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
         <dev:type>
-          <maml:name>System.String</maml:name>
+          <maml:name>System.String[]</maml:name>
         </dev:type>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
@@ -159,7 +159,7 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline.</maml:para>
+        <maml:para>Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs, chacune produisant sa propre ligne de commande et son sidecar ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline.</maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -214,6 +214,14 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
         <maml:introduction></maml:introduction>
         <dev:code>Get-MediaTranscript -LiteralPath 'D:\Films\film.mkv' -Model kotoba-v2 -UseLanguage ja</dev:code>
         <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 8: Enchaîner plusieurs modèles ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model large-v3, kotoba-v2 -UseLanguage ja</dev:code>
+        <dev:remarks>
+          <maml:para>Produit `Episode.track 1.ja.large-v3.json` puis `Episode.track 1.ja.kotoba-v2.json`, chacune via sa propre ligne de commande Faster-Whisper.</maml:para>
+        </dev:remarks>
       </command:example>
     </command:examples>
     <command:relatedLinks>
