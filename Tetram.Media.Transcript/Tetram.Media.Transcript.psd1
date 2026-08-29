@@ -20,7 +20,7 @@
         PSData = @{
             Tags = @('transcript', 'whisper', 'sherpa-onnx', 'transcription', 'subtitle', 'media', 'ps7')
             ReleaseNotes = @'
-- 1.0.0 : Get-MediaTranscript (pilote faster-whisper-xxl, jeux Path/LiteralPath/Mixed, WhatIf).
+- 1.0.0 : Get-MediaTranscript (LiteralPath unique, WhatIf/Confirm).
 - Routage local Faster-Whisper et Sherpa-ONNX selon le modèle ; plus de -WhisperPath public.
 '@
         }
