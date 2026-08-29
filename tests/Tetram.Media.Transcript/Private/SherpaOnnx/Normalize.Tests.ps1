@@ -95,6 +95,24 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
         }
     }
 
+    It 'arrondit les timestamps token à 3 décimales pour éviter le bruit binaire du double' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $intervals = @([pscustomobject]@{ start = 0.2; end = 1.0 })
+            $asr = @([pscustomobject]@{
+                    text         = 'x'
+                    tokens       = @('t')
+                    timestamps   = @(0.0)
+                    durations    = @()
+                    ys_log_probs = @()
+                })
+            $got = ConvertFrom-SherpaOnnxTranscript -Intervals $intervals -AsrResults $asr -Model 'reazon-k2-v2' -TimelineOffset 0.1
+            $got.segments[0].diagnostics.timestamps | Should -Be @(0.3)
+            $json = ConvertTo-Json -InputObject $got.segments[0].diagnostics.timestamps -Compress
+            $json | Should -Not -Match '0000000'
+            $json | Should -Not -Match '9999999'
+        }
+    }
+
     It 'omet un résultat ASR au texte vide sans casser l''association des suivants' {
         InModuleScope 'Tetram.Media.Transcript' {
             $intervals = @(

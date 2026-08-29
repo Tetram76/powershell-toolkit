@@ -63,10 +63,10 @@ function ConvertFrom-SherpaOnnxTranscript {
 
         $timestamps = Get-SherpaOnnxResultValues -Result $asr -Name 'timestamps'
         if ($timestamps.Count -gt 0) {
-            # Recalage depuis vadStart de CE segment, jamais depuis la somme des chunks précédents.
+            # Recalage depuis vadStart de CE segment ; Round 3 : Sherpa n'émet que 2 décimales, l'addition double réintroduit du bruit.
             $diagnostics['timestamps'] = @(
                 foreach ($local in $timestamps) {
-                    $TimelineOffset + [double]$interval.start + [double]$local
+                    [math]::Round($TimelineOffset + [double]$interval.start + [double]$local, 3)
                 }
             )
         }
