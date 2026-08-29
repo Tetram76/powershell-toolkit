@@ -13,20 +13,20 @@ title: Get-MediaTranscript
 
 ## SYNOPSIS
 
-Transcrit une piste audio d'un fichier média avec faster-whisper.
+Transcrit une piste audio d'un fichier média.
 
 ## SYNTAX
 
 ```
 Get-MediaTranscript [-LiteralPath] <string> [-AudioTrack <int>] [-Model <string[]>]
- [-UseLanguage <string>] [-WhisperPath <string>] [-WhatIf] [-Confirm]
+ [-UseLanguage <string>] [-WhatIf] [-Confirm]
 ```
 
 ## ALIASES
 
 ## DESCRIPTION
 
-`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation Faster-Whisper distincte, puis un JSON Tetram canonique à côté du média. Le JSON natif Faster-Whisper est un artefact temporaire : il est écrit dans un dossier unique sous le répertoire temporaire système, lu, normalisé, puis ce dossier est supprimé. `-LiteralPath` doit désigner un fichier unique existant : un masque, un dossier ou un fichier-liste est refusé avant toute invocation Faster-Whisper. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
+`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation distincte du moteur associé à ce modèle, puis un JSON Tetram canonique à côté du média. L'appelant choisit un ou plusieurs modèles ; il ne choisit pas le moteur. Les artefacts natifs (JSON Faster-Whisper, WAV et stdout Sherpa-ONNX) sont temporaires : ils sont écrits sous le répertoire temporaire système, lus, normalisés, puis supprimés. `-LiteralPath` doit désigner un fichier unique existant : un masque, un dossier ou un fichier-liste est refusé avant toute invocation native. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
 
 Le fichier durable suit la convention `<media-base>.track <trackid>.<langue>.<model>.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.
 
@@ -90,7 +90,15 @@ Get-MediaTranscript -LiteralPath 'D:\Films\film.mkv' -Model kotoba-v2 -UseLangua
 Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model large-v3, kotoba-v2 -UseLanguage ja
 ```
 
-Produit `Episode.track 1.ja.large-v3.json` puis `Episode.track 1.ja.kotoba-v2.json`, chacune via sa propre ligne de commande Faster-Whisper.
+Produit `Episode.track 1.ja.large-v3.json` puis `Episode.track 1.ja.kotoba-v2.json`, chacune via sa propre invocation.
+
+### Example 9: Mélanger Faster-Whisper et Sherpa-ONNX
+
+```powershell
+Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model large-v3, reazon-k2-v2 -UseLanguage ja
+```
+
+Chaque modèle est routé vers son moteur (Faster-Whisper ou Sherpa-ONNX) et produit son propre sidecar.
 
 ## PARAMETERS
 
@@ -117,7 +125,7 @@ HelpMessage: ''
 
 ### -Confirm
 
-La ligne de commande s'affiche ; une confirmation est demandée avant d'exécuter faster-whisper-xxl (le binaire tourne si on confirme).
+La ligne de commande s'affiche ; une confirmation est demandée avant d'exécuter le binaire du moteur (il tourne si on confirme).
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -139,7 +147,7 @@ HelpMessage: ''
 
 ### -LiteralPath
 
-Chemin littéral d'un fichier média unique existant. Les caractères spéciaux PowerShell (`*`, `?`, `[`) font partie du nom ; ils ne sont pas interprétés comme un masque. Un chemin qui n'est pas un fichier (masque, dossier, fichier-liste Purfview) est refusé avant l'invocation native ; le chemin concret de ce fichier est ensuite transmis au backend.
+Chemin littéral d'un fichier média unique existant. Les caractères spéciaux PowerShell (`*`, `?`, `[`) font partie du nom ; ils ne sont pas interprétés comme un masque. Un chemin qui n'est pas un fichier (masque, dossier, fichier-liste) est refusé avant l'invocation native ; le chemin concret de ce fichier est ensuite transmis au backend.
 
 ```yaml
 Type: System.String
@@ -161,7 +169,7 @@ HelpMessage: ''
 
 ### -Model
 
-Modèle Faster-Whisper, défaut `large-v2`. Plusieurs valeurs : une ligne de commande par modèle. `kotoba-v2` est un modèle japonais custom pour Faster-Whisper/Purfview : il doit être installé séparément dans la distribution Purfview (le module ne le télécharge pas). `Get-MediaTranscript` lui applique automatiquement les options d'inférence compatibles. `-UseLanguage ja` reste recommandé pour ce scénario.
+Modèle de transcription, défaut `large-v2`. Plusieurs valeurs : une invocation par modèle, éventuellement sur des moteurs différents. `large-v2`, `large-v3`, `large-v3-turbo` et `kotoba-v2` passent par Faster-Whisper / Purfview. `reazon-k2-v2` est un modèle japonais provisoire exécuté localement via Sherpa-ONNX ; il sert à valider le routage, pas un choix ASR définitif. Les binaires et poids doivent déjà être présents localement : la commande ne télécharge rien. `kotoba-v2` doit être installé séparément dans la distribution Purfview. `-UseLanguage ja` est accepté pour `reazon-k2-v2` ; une autre langue est refusée par le backend Sherpa.
 
 ```yaml
 Type: System.String[]
@@ -181,12 +189,13 @@ AcceptedValues:
 - large-v3-turbo
 - large-v3
 - kotoba-v2
+- reazon-k2-v2
 HelpMessage: ''
 ```
 
 ### -UseLanguage
 
-Code ISO de la langue. Absent, whisper la détecte.
+Code ISO de la langue. Absent, Faster-Whisper la détecte ; pour `reazon-k2-v2` le japonais est fourni par le modèle.
 
 ```yaml
 Type: System.String
@@ -227,27 +236,6 @@ AcceptedValues: []
 HelpMessage: ''
 ```
 
-### -WhisperPath
-
-Chemin d'un `faster-whisper-xxl.exe` hors du dossier du module.
-
-```yaml
-Type: System.String
-DefaultValue: ''
-SupportsWildcards: false
-Aliases: []
-ParameterSets:
-- Name: (All)
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-DontShow: false
-AcceptedValues: []
-HelpMessage: ''
-```
-
 ### CommonParameters
 
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable,
@@ -261,6 +249,6 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs, chacune produisant sa propre ligne de commande et son sidecar ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline.
+Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs, chacune produisant son sidecar via le moteur associé ; les distributions Purfview et Sherpa-ONNX se posent respectivement dans `Purfview-Whisper-Faster` et `SherpaOnnx`, dossiers non versionnés hors README ; jamais de téléchargement automatique ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline.
 
 ## RELATED LINKS

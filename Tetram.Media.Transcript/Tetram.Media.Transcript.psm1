@@ -3,7 +3,6 @@ Set-StrictMode -Version 3.0
 Import-Module -Name (Join-Path $PSScriptRoot '..' 'Tetram.Common') -Force
 
 # Dot-source plutôt que NestedModules : les fonctions de Tetram.Common du scope parent restent visibles.
-. (Join-Path $PSScriptRoot 'Private' 'Whisper.ps1')
 . (Join-Path $PSScriptRoot 'Private' 'Transcript.ps1')
 
 function Get-MediaTranscript {
@@ -19,7 +18,7 @@ function Get-MediaTranscript {
         [ValidateRange(1, [int]::MaxValue)]
         [int] $AudioTrack = 1,
 
-        [ValidateSet('large-v2', 'large-v3-turbo', 'large-v3', 'kotoba-v2')]
+        [ValidateSet('large-v2', 'large-v3-turbo', 'large-v3', 'kotoba-v2', 'reazon-k2-v2')]
         [string[]] $Model = 'large-v2',
 
         [ValidateSet(
@@ -31,9 +30,7 @@ function Get-MediaTranscript {
                 'sr', 'su', 'sv', 'sw', 'ta', 'te', 'tg', 'th', 'tk', 'tl', 'tr', 'tt', 'uk', 'ur', 'uz', 'vi',
                 'yi', 'yo', 'yue', 'zh'
         )]
-        [string] $UseLanguage,
-
-        [string] $WhisperPath
+        [string] $UseLanguage
     )
 
     # Contrat public : aucune exception vers l'appelant.
@@ -47,7 +44,6 @@ function Get-MediaTranscript {
                     -Model $currentModel `
                     -AudioTrack $AudioTrack `
                     -UseLanguage $UseLanguage `
-                    -WhisperPath $WhisperPath `
                     -Cmdlet $PSCmdlet `
                     -WhatIf:$WhatIfPreference
 

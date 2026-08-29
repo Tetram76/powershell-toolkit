@@ -4,13 +4,13 @@
     <command:details>
       <command:name>Get-MediaTranscript</command:name>
       <maml:description>
-        <maml:para>Transcrit une piste audio d'un fichier média avec faster-whisper.</maml:para>
+        <maml:para>Transcrit une piste audio d'un fichier média.</maml:para>
       </maml:description>
       <command:verb>Get</command:verb>
       <command:noun>MediaTranscript</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation Faster-Whisper distincte, puis un JSON Tetram canonique à côté du média. Le JSON natif Faster-Whisper est un artefact temporaire : il est écrit dans un dossier unique sous le répertoire temporaire système, lu, normalisé, puis ce dossier est supprimé. `-LiteralPath` doit désigner un fichier unique existant : un masque, un dossier ou un fichier-liste est refusé avant toute invocation Faster-Whisper. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
+      <maml:para>`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation distincte du moteur associé à ce modèle, puis un JSON Tetram canonique à côté du média. L'appelant choisit un ou plusieurs modèles ; il ne choisit pas le moteur. Les artefacts natifs (JSON Faster-Whisper, WAV et stdout Sherpa-ONNX) sont temporaires : ils sont écrits sous le répertoire temporaire système, lus, normalisés, puis supprimés. `-LiteralPath` doit désigner un fichier unique existant : un masque, un dossier ou un fichier-liste est refusé avant toute invocation native. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
 
 Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.&lt;langue&gt;.&lt;model&gt;.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.</maml:para>
     </maml:description>
@@ -41,6 +41,7 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
             <command:parameterValue required="false" variableLength="false">large-v3-turbo</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">reazon-k2-v2</command:parameterValue>
           </command:parameterValueGroup>
           <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
           <dev:type>
@@ -49,14 +50,6 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>UseLanguage</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>WhisperPath</maml:name>
           <maml:description />
           <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
           <dev:type>
@@ -93,7 +86,7 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="cf">
         <maml:name>Confirm</maml:name>
         <maml:description>
-          <maml:para>La ligne de commande s'affiche ; une confirmation est demandée avant d'exécuter faster-whisper-xxl (le binaire tourne si on confirme).</maml:para>
+          <maml:para>La ligne de commande s'affiche ; une confirmation est demandée avant d'exécuter le binaire du moteur (il tourne si on confirme).</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -102,7 +95,7 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="PSPath">
         <maml:name>LiteralPath</maml:name>
         <maml:description>
-          <maml:para>Chemin littéral d'un fichier média unique existant. Les caractères spéciaux PowerShell (`*`, `?`, `[`) font partie du nom ; ils ne sont pas interprétés comme un masque. Un chemin qui n'est pas un fichier (masque, dossier, fichier-liste Purfview) est refusé avant l'invocation native ; le chemin concret de ce fichier est ensuite transmis au backend.</maml:para>
+          <maml:para>Chemin littéral d'un fichier média unique existant. Les caractères spéciaux PowerShell (`*`, `?`, `[`) font partie du nom ; ils ne sont pas interprétés comme un masque. Un chemin qui n'est pas un fichier (masque, dossier, fichier-liste) est refusé avant l'invocation native ; le chemin concret de ce fichier est ensuite transmis au backend.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -112,13 +105,14 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Model</maml:name>
         <maml:description>
-          <maml:para>Modèle Faster-Whisper, défaut `large-v2`. Plusieurs valeurs : une ligne de commande par modèle. `kotoba-v2` est un modèle japonais custom pour Faster-Whisper/Purfview : il doit être installé séparément dans la distribution Purfview (le module ne le télécharge pas). `Get-MediaTranscript` lui applique automatiquement les options d'inférence compatibles. `-UseLanguage ja` reste recommandé pour ce scénario.</maml:para>
+          <maml:para>Modèle de transcription, défaut `large-v2`. Plusieurs valeurs : une invocation par modèle, éventuellement sur des moteurs différents. `large-v2`, `large-v3`, `large-v3-turbo` et `kotoba-v2` passent par Faster-Whisper / Purfview. `reazon-k2-v2` est un modèle japonais provisoire exécuté localement via Sherpa-ONNX ; il sert à valider le routage, pas un choix ASR définitif. Les binaires et poids doivent déjà être présents localement : la commande ne télécharge rien. `kotoba-v2` doit être installé séparément dans la distribution Purfview. `-UseLanguage ja` est accepté pour `reazon-k2-v2` ; une autre langue est refusée par le backend Sherpa.</maml:para>
         </maml:description>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">large-v2</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">large-v3-turbo</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">reazon-k2-v2</command:parameterValue>
         </command:parameterValueGroup>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
         <dev:type>
@@ -128,7 +122,7 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>UseLanguage</maml:name>
         <maml:description>
-          <maml:para>Code ISO de la langue. Absent, whisper la détecte.</maml:para>
+          <maml:para>Code ISO de la langue. Absent, Faster-Whisper la détecte ; pour `reazon-k2-v2` le japonais est fourni par le modèle.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -144,22 +138,12 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
         </dev:type>
       </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
-        <maml:name>WhisperPath</maml:name>
-        <maml:description>
-          <maml:para>Chemin d'un `faster-whisper-xxl.exe` hors du dossier du module.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
-        <dev:type>
-          <maml:name>System.String</maml:name>
-        </dev:type>
-      </command:parameter>
     </command:parameters>
     <command:inputTypes />
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs, chacune produisant sa propre ligne de commande et son sidecar ; la distribution Purfview doit être posée dans `Purfview-Whisper-Faster`, dossier non versionné ; les modèles Whisper standard sont téléchargés au premier usage (premier appel long) ; `kotoba-v2` doit déjà être présent dans cette distribution ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline.</maml:para>
+        <maml:para>Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs, chacune produisant son sidecar via le moteur associé ; les distributions Purfview et Sherpa-ONNX se posent respectivement dans `Purfview-Whisper-Faster` et `SherpaOnnx`, dossiers non versionnés hors README ; jamais de téléchargement automatique ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline.</maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -220,7 +204,15 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
         <maml:introduction></maml:introduction>
         <dev:code>Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model large-v3, kotoba-v2 -UseLanguage ja</dev:code>
         <dev:remarks>
-          <maml:para>Produit `Episode.track 1.ja.large-v3.json` puis `Episode.track 1.ja.kotoba-v2.json`, chacune via sa propre ligne de commande Faster-Whisper.</maml:para>
+          <maml:para>Produit `Episode.track 1.ja.large-v3.json` puis `Episode.track 1.ja.kotoba-v2.json`, chacune via sa propre invocation.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 9: Mélanger Faster-Whisper et Sherpa-ONNX ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model large-v3, reazon-k2-v2 -UseLanguage ja</dev:code>
+        <dev:remarks>
+          <maml:para>Chaque modèle est routé vers son moteur (Faster-Whisper ou Sherpa-ONNX) et produit son propre sidecar.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

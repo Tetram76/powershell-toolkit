@@ -1,5 +1,8 @@
 Set-StrictMode -Version 3.0
 
+# $PSScriptRoot de ce fichier (Private/), pas celui du psm1 : le dispatcher retrouve les backends.
+$script:TranscriptPrivateRoot = $PSScriptRoot
+
 function Resolve-TranscriptMediaFile {
     [CmdletBinding()]
     [OutputType([string])]
@@ -92,6 +95,9 @@ function Get-TranscriptEngineName {
         { $_ -in @('large-v2', 'large-v3', 'large-v3-turbo', 'kotoba-v2') } {
             return 'Whisper'
         }
+        'reazon-k2-v2' {
+            return 'SherpaOnnx'
+        }
         default {
             throw "Aucun moteur de transcription pour le modèle '$Model'."
         }
@@ -106,17 +112,27 @@ function Invoke-TranscriptBackend {
         [Parameter(Mandatory)] $Cmdlet,
         [int] $AudioTrack = 1,
         [string] $UseLanguage,
-        [string] $WhisperPath,
         [switch] $WhatIf
     )
 
     $engine = Get-TranscriptEngineName -Model $Model
     switch ($engine) {
         'Whisper' {
-            return Invoke-WhisperTranscript -MediaPath $MediaPath -Model $Model -AudioTrack $AudioTrack -UseLanguage $UseLanguage -WhisperPath $WhisperPath -Cmdlet $Cmdlet -WhatIf:$WhatIf
+            . (Join-Path $script:TranscriptPrivateRoot 'Whisper.ps1')
+        }
+        'SherpaOnnx' {
+            . (Join-Path $script:TranscriptPrivateRoot 'SherpaOnnx.ps1')
         }
         default {
             throw "Moteur de transcription non implémenté : $engine"
         }
     }
+
+    return Invoke-ProviderTranscript `
+        -MediaPath $MediaPath `
+        -Model $Model `
+        -AudioTrack $AudioTrack `
+        -UseLanguage $UseLanguage `
+        -Cmdlet $Cmdlet `
+        -WhatIf:$WhatIf
 }
