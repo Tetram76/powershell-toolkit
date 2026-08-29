@@ -89,14 +89,15 @@ Describe 'Get-SherpaOnnxModelFiles' {
     It 'trouve tokens/encoder/decoder/joiner sous le dossier local' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
-            $modelDir = Join-Path $Work 'reazon-k2-v2'
+            $root = Join-Path $Work 'fp32-only'
+            $modelDir = Join-Path $root 'reazon-k2-v2'
             New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
             foreach ($name in @('tokens.txt', 'encoder-epoch-99-avg-1.onnx', 'decoder-epoch-99-avg-1.onnx', 'joiner-epoch-99-avg-1.onnx')) {
                 Set-Content -LiteralPath (Join-Path $modelDir $name) -Value 'stub'
             }
             $saved = $script:SherpaOnnxRoot
             try {
-                $script:SherpaOnnxRoot = $Work
+                $script:SherpaOnnxRoot = $root
                 $got = Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2'
                 $got.Tokens | Should -Be (Join-Path $modelDir 'tokens.txt')
                 $got.Encoder | Should -Be (Join-Path $modelDir 'encoder-epoch-99-avg-1.onnx')
@@ -109,16 +110,18 @@ Describe 'Get-SherpaOnnxModelFiles' {
         }
     }
 
-    It 'préfère les poids int8 quand encoder et joiner existent en double' {
+    It 'suit la recette Reazon INT8 : encoder/joiner int8, decoder FP32' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
-            $modelDir = Join-Path $Work 'reazon-k2-v2'
+            $root = Join-Path $Work 'reazon-int8-recipe'
+            $modelDir = Join-Path $root 'reazon-k2-v2'
             New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
             foreach ($name in @(
                     'tokens.txt',
                     'encoder-epoch-99-avg-1.onnx',
                     'encoder-epoch-99-avg-1.int8.onnx',
                     'decoder-epoch-99-avg-1.onnx',
+                    'decoder-epoch-99-avg-1.int8.onnx',
                     'joiner-epoch-99-avg-1.onnx',
                     'joiner-epoch-99-avg-1.int8.onnx'
                 )) {
@@ -126,10 +129,37 @@ Describe 'Get-SherpaOnnxModelFiles' {
             }
             $saved = $script:SherpaOnnxRoot
             try {
-                $script:SherpaOnnxRoot = $Work
+                $script:SherpaOnnxRoot = $root
                 $got = Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2'
                 $got.Encoder | Should -Be (Join-Path $modelDir 'encoder-epoch-99-avg-1.int8.onnx')
+                $got.Decoder | Should -Be (Join-Path $modelDir 'decoder-epoch-99-avg-1.onnx')
                 $got.Joiner | Should -Be (Join-Path $modelDir 'joiner-epoch-99-avg-1.int8.onnx')
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'prend le decoder int8 seulement s''il n''y a pas de FP32' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $root = Join-Path $Work 'int8-decoder-only'
+            $modelDir = Join-Path $root 'reazon-k2-v2'
+            New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
+            foreach ($name in @(
+                    'tokens.txt',
+                    'encoder-epoch-99-avg-1.int8.onnx',
+                    'decoder-epoch-99-avg-1.int8.onnx',
+                    'joiner-epoch-99-avg-1.int8.onnx'
+                )) {
+                Set-Content -LiteralPath (Join-Path $modelDir $name) -Value 'stub'
+            }
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $root
+                $got = Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2'
+                $got.Decoder | Should -Be (Join-Path $modelDir 'decoder-epoch-99-avg-1.int8.onnx')
             }
             finally {
                 $script:SherpaOnnxRoot = $saved
@@ -204,29 +234,40 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
             $got.segments[0].text | Should -Be 'こんにちは'
             $got.segments[0].start | Should -Be 0.08
             $got.segments[0].end | Should -Be 0.56
-            $got.segments[0].words.Count | Should -Be 3
-            $got.segments[0].words[0].text | Should -Be 'こん'
-            $got.segments[0].words[0].start | Should -Be 0.08
+            $got.segments[0].PSObject.Properties.Name | Should -Not -Contain 'words'
+            $got.segments[0].diagnostics.tokens | Should -Be @('こん', 'に', 'ちは')
+            $got.segments[0].diagnostics.timestamps | Should -Be @(0.08, 0.32, 0.56)
             $got.segments[0].diagnostics.ys_log_probs.Count | Should -Be 3
         }
     }
 
-    It 'accepte UseLanguage ja comme forcé' {
+    It 'accepte UseLanguage ja sans forcer une langue que le moteur n''expose pas' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaJson } {
             param($Native)
             $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -UseLanguage 'ja'
             $got.language | Should -Be 'ja'
-            $got.languageSource | Should -Be 'forced'
+            $got.languageSource | Should -Be 'model'
         }
     }
 
-    It 'conserve les timestamps token-level et les durées natives' {
+    It 'conserve les timestamps token-level et les durées natives sous diagnostics' {
         InModuleScope 'Tetram.Media.Transcript' {
             $native = '{"lang":"","emotion":"","event":"","text":"ab","timestamps":[0.10, 0.40],"durations":[0.30, 0.50],"tokens":["a","b"],"ys_log_probs":[],"words":[]}'
             $got = ConvertFrom-SherpaOnnxTranscript -InputObject $native -Model 'reazon-k2-v2'
-            $got.segments[0].words[0].end | Should -Be 0.40
-            $got.segments[0].words[1].end | Should -Be 0.90
+            $got.segments[0].PSObject.Properties.Name | Should -Not -Contain 'words'
+            $got.segments[0].diagnostics.timestamps | Should -Be @(0.10, 0.40)
+            $got.segments[0].diagnostics.durations | Should -Be @(0.30, 0.50)
             $got.segments[0].end | Should -Be 0.90
+        }
+    }
+
+    It 'décale les timestamps sur la timeline du média original' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaJson } {
+            param($Native)
+            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -TimelineOffset 1.25
+            $got.segments[0].start | Should -Be 1.33
+            $got.segments[0].end | Should -Be 1.81
+            $got.segments[0].diagnostics.timestamps | Should -Be @(1.33, 1.57, 1.81)
         }
     }
 
@@ -236,6 +277,28 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
             $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2'
             $got.PSObject.Properties.Name | Should -Not -Contain 'confidence'
             $got.segments[0].PSObject.Properties.Name | Should -Not -Contain 'avg_logprob'
+        }
+    }
+}
+
+Describe 'Get-SherpaOnnxTimelineOffset' {
+    It 'lit le start_time du flux audio demandé' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            Mock Invoke-SherpaOnnxFfprobe {
+                param($Arguments)
+                $script:SeenFfprobe = $Arguments
+                '1.250000'
+            }
+            Get-SherpaOnnxTimelineOffset -MediaPath 'film.mkv' -AudioTrack 2 | Should -Be 1.25
+            $script:SeenFfprobe | Should -Contain 'a:1'
+            $script:SeenFfprobe | Should -Contain 'stream=start_time'
+        }
+    }
+
+    It 'retourne 0 si ffprobe n''a pas de start_time' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            Mock Invoke-SherpaOnnxFfprobe { 'N/A' }
+            Get-SherpaOnnxTimelineOffset -MediaPath 'film.mkv' -AudioTrack 1 | Should -Be 0
         }
     }
 }
@@ -254,6 +317,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             }
         }
         Mock -ModuleName Tetram.Media.Transcript Get-FFmpegPath { 'ffmpeg.exe' }
+        Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset { 0 }
         $script:SeenFfmpeg = $null
         $script:SeenSherpa = $null
         $script:SeenWav = $null
@@ -308,6 +372,34 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         $got.model | Should -Be 'reazon-k2-v2'
         $got.audioTrack | Should -Be 2
         Test-Path -LiteralPath $script:SeenWav | Should -BeFalse
+    }
+
+    It 'applique l''offset de piste à la timeline du média' {
+        $media = Join-Path $TestDrive 'offset.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset { 10 }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-FFmpeg {
+            param($Arguments)
+            Set-Content -LiteralPath $Arguments[-1] -Value 'RIFF'
+            return 0
+        }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $State['ExitCode'] = 0
+            $State['Stdout'] = $script:NativeSherpaJson
+        }
+
+        $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            Media  = $media
+            Cmdlet = $script:FakeCmdlet
+        } {
+            param($Media, $Cmdlet)
+            Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet
+        }
+
+        $got.segments[0].start | Should -Be 10.08
+        $got.segments[0].end | Should -Be 10.56
+        $got.segments[0].diagnostics.timestamps | Should -Be @(10.08, 10.32, 10.56)
     }
 
     It 'nettoie le temporaire si FFmpeg échoue' {
@@ -374,6 +466,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         }
         $got | Should -BeNullOrEmpty
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 1
         $script:SeenSherpa[-1] | Should -Match '\.wav$'
         Test-Path -LiteralPath $script:SeenSherpa[-1] | Should -BeFalse
