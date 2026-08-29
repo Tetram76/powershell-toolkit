@@ -12,16 +12,20 @@ Ce modèle sert à valider le routage vers Sherpa-ONNX. Ce n'est pas le résulta
 
 Si l'exécutable n'est pas ici, le backend cherche `sherpa-onnx-offline` dans le `PATH`.
 
-### Modèle provisoire `reazon-k2-v2`
+### Modèles (`models/<nom>`)
 
-Déposer dans **un seul** sous-dossier dont le nom contient `reazon` (par exemple `reazon-k2-v2/` ou `sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01/`) les fichiers :
+Chaque `-Model` Sherpa correspond à **exactement** `models/<nom>/`. Pour `reazon-k2-v2` :
+
+`models/reazon-k2-v2/`
+
+y déposer :
 
 - `tokens.txt`
 - `encoder*.onnx` (INT8 préféré s'il existe aussi en FP32)
 - `decoder*.onnx` (FP32 préféré : la recette INT8 Reazon documentée est encoder INT8 + decoder FP32 + joiner INT8)
 - `joiner*.onnx` (INT8 préféré s'il existe aussi en FP32)
 
-Zéro dossier Reazon, un dossier Reazon incomplet, ou plusieurs dossiers Reazon complets : le backend lève une erreur. Un autre Zipformer présent dans ce dossier n'est jamais utilisé à la place.
+Un dossier homonyme à la racine de `SherpaOnnx/` ou un autre sous-dossier de `models/` n'est pas utilisé. Dossier absent ou fichiers incomplets : le backend lève une erreur.
 
 Les binaires, DLL et poids tiers ne sont **pas** versionnés.
 
@@ -35,10 +39,10 @@ Une fois la distribution et les poids posés, valider **exactement** les fichier
 
 ```text
 sherpa-onnx-offline.exe ^
-  --tokens=<dossier-modele>\tokens.txt ^
-  --encoder=<dossier-modele>\encoder-epoch-99-avg-1.int8.onnx ^
-  --decoder=<dossier-modele>\decoder-epoch-99-avg-1.onnx ^
-  --joiner=<dossier-modele>\joiner-epoch-99-avg-1.int8.onnx ^
+  --tokens=models\reazon-k2-v2\tokens.txt ^
+  --encoder=models\reazon-k2-v2\encoder-epoch-99-avg-1.int8.onnx ^
+  --decoder=models\reazon-k2-v2\decoder-epoch-99-avg-1.onnx ^
+  --joiner=models\reazon-k2-v2\joiner-epoch-99-avg-1.int8.onnx ^
   --num-threads=1 ^
   <wav-japonais>.wav
 ```
