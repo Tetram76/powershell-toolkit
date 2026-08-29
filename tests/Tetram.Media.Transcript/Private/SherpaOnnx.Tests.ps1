@@ -19,6 +19,12 @@ BeforeAll {
     $script:NativeSherpaVadStdout = "0.080 -- 1.320: こんにちは`n2.560 -- 4.800: どうしたの"
     $script:FakeCmdlet = [PSCustomObject]@{}
     $script:FakeCmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $true }
+
+    function New-SherpaTestResult {
+        @{
+            Transcripts = [System.Collections.Generic.List[object]]::new()
+        }
+    }
 }
 
 AfterAll {
@@ -680,7 +686,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             Cmdlet = $script:FakeCmdlet
         } {
             param($Media, $Cmdlet)
-            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -UseLanguage 'en' -Cmdlet $Cmdlet } |
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -UseLanguage 'en' -Cmdlet $Cmdlet -Result $result } |
                 Should -Throw '*incompatible*'
         }
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
@@ -714,13 +721,16 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         }
 
         $script:ShownWavs = @()
-        $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
-            Media  = $media
-            Cmdlet = $script:FakeCmdlet
-        } {
-            param($Media, $Cmdlet)
-            Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -AudioTrack 2 -Cmdlet $Cmdlet
-        }
+        $result = New-SherpaTestResult
+        $stream = @(InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+                Media  = $media
+                Cmdlet = $script:FakeCmdlet
+                Result = $result
+            } {
+                param($Media, $Cmdlet, $Result)
+                Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -AudioTrack 2 -Cmdlet $Cmdlet -Result $Result
+            })
+        $got = @($result.Transcripts)
 
         $mapAt = [array]::IndexOf(@($script:SeenFfmpeg), '-map')
         $script:SeenFfmpeg[$mapAt + 1] | Should -Be '0:a:1'
@@ -734,6 +744,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         ($script:SeenSherpaCalls[0] -join ' ') | Should -Not -Match '--num-threads'
         ($script:SeenSherpaCalls[1] -join ' ') | Should -Not -Match '--num-threads'
         $script:ShownWavs | Should -Be @($script:SeenWav, $script:SeenWav, $script:SeenWav)
+        $stream | Should -BeNullOrEmpty
         $got.Count | Should -Be 2
         $got[0].engine | Should -Be 'sherpa-onnx'
         $got[0].model | Should -Be 'reazon-k2-v2'
@@ -768,14 +779,18 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             $State['Stdout'] = $script:NativeSherpaVadStdout
         }
 
-        $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
-            Media  = $media
-            Cmdlet = $script:FakeCmdlet
-        } {
-            param($Media, $Cmdlet)
-            Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet
-        }
+        $result = New-SherpaTestResult
+        $stream = @(InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+                Media  = $media
+                Cmdlet = $script:FakeCmdlet
+                Result = $result
+            } {
+                param($Media, $Cmdlet, $Result)
+                Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $Result
+            })
 
+        $stream | Should -BeNullOrEmpty
+        $got = @($result.Transcripts)
         $got.Count | Should -Be 2
         $got[0].model | Should -Be 'reazon-k2-v2'
         $got[0].vad | Should -Be 'silero'
@@ -798,14 +813,17 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $false }
         Mock -ModuleName Tetram.Media.Transcript Invoke-FFmpeg { throw 'ne doit pas tourner' }
         Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx { throw 'ne doit pas tourner' }
+        $result = New-SherpaTestResult
         $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
             Media  = $media
             Cmdlet = $cmdlet
+            Result = $result
         } {
-            param($Media, $Cmdlet)
-            Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet
+            param($Media, $Cmdlet, $Result)
+            Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $Result
         }
         $got | Should -BeNullOrEmpty
+        $result.Transcripts | Should -HaveCount 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 0
@@ -825,7 +843,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             Cmdlet = $script:FakeCmdlet
         } {
             param($Media, $Cmdlet)
-            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet } |
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $result } |
                 Should -Throw '*FFmpeg*'
         }
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 0
@@ -851,7 +870,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             Cmdlet = $script:FakeCmdlet
         } {
             param($Media, $Cmdlet)
-            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet } |
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $result } |
                 Should -Throw '*segment*'
         }
     }
@@ -875,7 +895,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             Cmdlet = $script:FakeCmdlet
         } {
             param($Media, $Cmdlet)
-            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet } |
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $result } |
                 Should -Throw '*sherpa-onnx-vad-with-offline-asr a échoué (code 2)*'
         }
         Test-Path -LiteralPath (Split-Path -Parent $script:SeenWav) | Should -BeFalse
@@ -886,14 +907,17 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         Set-Content -LiteralPath $media -Value 'x'
         Mock -ModuleName Tetram.Media.Transcript Invoke-FFmpeg { throw 'ne doit pas tourner' }
         Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx { throw 'ne doit pas tourner' }
+        $result = New-SherpaTestResult
         $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
             Media  = $media
             Cmdlet = $script:FakeCmdlet
+            Result = $result
         } {
-            param($Media, $Cmdlet)
-            Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -WhatIf
+            param($Media, $Cmdlet, $Result)
+            Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $Result -WhatIf
         }
         $got | Should -BeNullOrEmpty
+        $result.Transcripts | Should -HaveCount 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 0
@@ -915,7 +939,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             Cmdlet = $script:FakeCmdlet
         } {
             param($Media, $Cmdlet)
-            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet } |
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $result } |
                 Should -Throw '*ten-vad.onnx*'
         }
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
@@ -935,7 +960,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             Cmdlet = $script:FakeCmdlet
         } {
             param($Media, $Cmdlet)
-            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet } |
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $result } |
                 Should -Throw '*silero_vad.onnx*'
         }
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
@@ -951,7 +977,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             Cmdlet = $script:FakeCmdlet
         } {
             param($Media, $Cmdlet)
-            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet } |
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $result } |
                 Should -Throw '*sherpa-onnx-offline*'
         }
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0

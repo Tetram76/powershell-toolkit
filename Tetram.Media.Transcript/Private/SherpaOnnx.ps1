@@ -427,6 +427,7 @@ function Invoke-SherpaOnnxTranscript {
         [Parameter(Mandatory)] [string] $MediaPath,
         [Parameter(Mandatory)] [string] $Model,
         [Parameter(Mandatory)] $Cmdlet,
+        [Parameter(Mandatory)] $Result,
         [int] $AudioTrack = 1,
         [string] $UseLanguage,
         [string] $SherpaOnnxPath,
@@ -490,13 +491,14 @@ function Invoke-SherpaOnnxTranscript {
                 throw "Aucun segment de transcription produit par sherpa-onnx-vad-with-offline-asr pour '$MediaPath' (modèle $Model, vad $($run.Vad))."
             }
 
-            ConvertFrom-SherpaOnnxTranscript `
+            $transcript = ConvertFrom-SherpaOnnxTranscript `
                 -InputObject $state['Stdout'] `
                 -Model $Model `
                 -Vad $run.Vad `
                 -UseLanguage $UseLanguage `
                 -AudioTrack $AudioTrack `
                 -TimelineOffset $timelineOffset
+            [void]$Result.Transcripts.Add($transcript)
         }
     }
     finally {
@@ -510,10 +512,11 @@ function Invoke-ProviderTranscript {
         [Parameter(Mandatory)] [string] $MediaPath,
         [Parameter(Mandatory)] [string] $Model,
         [Parameter(Mandatory)] $Cmdlet,
+        [Parameter(Mandatory)] $Result,
         [int] $AudioTrack = 1,
         [string] $UseLanguage,
         [switch] $WhatIf
     )
 
-    Invoke-SherpaOnnxTranscript -MediaPath $MediaPath -Model $Model -Cmdlet $Cmdlet -AudioTrack $AudioTrack -UseLanguage $UseLanguage -WhatIf:$WhatIf
+    Invoke-SherpaOnnxTranscript -MediaPath $MediaPath -Model $Model -Cmdlet $Cmdlet -AudioTrack $AudioTrack -UseLanguage $UseLanguage -Result $Result -WhatIf:$WhatIf
 }

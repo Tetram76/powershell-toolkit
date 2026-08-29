@@ -312,6 +312,7 @@ function Invoke-WhisperTranscript {
         [Parameter(Mandatory)] [string] $MediaPath,
         [Parameter(Mandatory)] [string] $Model,
         [Parameter(Mandatory)] $Cmdlet,
+        [Parameter(Mandatory)] $Result,
         [int] $AudioTrack = 1,
         [string] $UseLanguage,
         [string] $WhisperPath,
@@ -365,7 +366,7 @@ function Invoke-WhisperTranscript {
             Write-InfoLog -Force -Text "faster-whisper-xxl s'est terminé avec le code -1073740791 (0xC0000409) sur '$MediaPath' (modèle $Model) ; JSON natif exploitable et normalisation Tetram terminée malgré le crash."
         }
 
-        return $transcript
+        [void]$Result.Transcripts.Add($transcript)
     }
     finally {
         Remove-WhisperTempDirectory -Path $outputDir
@@ -378,10 +379,11 @@ function Invoke-ProviderTranscript {
         [Parameter(Mandatory)] [string] $MediaPath,
         [Parameter(Mandatory)] [string] $Model,
         [Parameter(Mandatory)] $Cmdlet,
+        [Parameter(Mandatory)] $Result,
         [int] $AudioTrack = 1,
         [string] $UseLanguage,
         [switch] $WhatIf
     )
 
-    Invoke-WhisperTranscript -MediaPath $MediaPath -Model $Model -Cmdlet $Cmdlet -AudioTrack $AudioTrack -UseLanguage $UseLanguage -WhatIf:$WhatIf
+    Invoke-WhisperTranscript -MediaPath $MediaPath -Model $Model -Cmdlet $Cmdlet -AudioTrack $AudioTrack -UseLanguage $UseLanguage -Result $Result -WhatIf:$WhatIf
 }
