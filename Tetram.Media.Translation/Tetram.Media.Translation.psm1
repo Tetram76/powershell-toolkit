@@ -6,7 +6,7 @@ Set-StrictMode -Version 3.0
     Import-Module -Name (Join-Path $PSScriptRoot '..' $_) -Force
 }
 
-. (Join-Path $PSScriptRoot 'Private' 'CompactWhisper.ps1')
+. (Join-Path $PSScriptRoot 'Private' 'CompactTranscript.ps1')
 . (Join-Path $PSScriptRoot 'Private' 'Merge.ps1')
 . (Join-Path $PSScriptRoot 'Private' 'Llm.ps1')
 
@@ -27,14 +27,14 @@ function ConvertTo-SecondarySourcePromptPart {
         }
 
         try {
-            $compactJson = ConvertTo-CompactWhisperJson -InputObject $whisper
+            $compactJson = ConvertTo-CompactTranscriptJson -InputObject $whisper
         }
         catch {
             throw "La source secondaire n'a pas la structure Tetram attendue : $Path"
         }
 
         return @"
-===== SOURCE LINGUISTIQUE $Index — TRANSCRIPTION WHISPER JSON =====
+===== SOURCE LINGUISTIQUE $Index — TRANSCRIPTION AUTOMATIQUE JSON =====
 $compactJson
 ===== FIN SOURCE LINGUISTIQUE $Index =====
 "@

@@ -383,6 +383,7 @@ function ConvertFrom-SherpaOnnxTranscript {
     param(
         [Parameter(Mandatory)] $InputObject,
         [Parameter(Mandatory)] [string] $Model,
+        [string] $Vad,
         [string] $UseLanguage,
         [int] $AudioTrack = 1,
         [double] $TimelineOffset = 0
@@ -406,14 +407,18 @@ function ConvertFrom-SherpaOnnxTranscript {
         throw "Aucun segment de transcription exploitable dans la sortie Sherpa-ONNX."
     }
 
-    return [pscustomobject][ordered]@{
+    $root = [ordered]@{
         engine         = 'sherpa-onnx'
         model          = $Model
-        language       = $language
-        languageSource = $languageSource
-        audioTrack     = $AudioTrack
-        segments       = @($segments.ToArray())
     }
+    if (-not [string]::IsNullOrWhiteSpace($Vad)) {
+        $root['vad'] = $Vad
+    }
+    $root['language'] = $language
+    $root['languageSource'] = $languageSource
+    $root['audioTrack'] = $AudioTrack
+    $root['segments'] = @($segments.ToArray())
+    return [pscustomobject]$root
 }
 
 function Invoke-SherpaOnnxTranscript {
@@ -469,8 +474,8 @@ function Invoke-SherpaOnnxTranscript {
         ConvertTo-SherpaOnnxWav -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
 
         foreach ($run in @(
-                [pscustomobject]@{ Arguments = $sileroArgs; Model = "$Model+silero" }
-                [pscustomobject]@{ Arguments = $tenArgs; Model = "$Model+ten" }
+                [pscustomobject]@{ Arguments = $sileroArgs; Vad = 'silero' }
+                [pscustomobject]@{ Arguments = $tenArgs; Vad = 'ten' }
             )) {
             $state = @{ ExitCode = $null; Stdout = $null }
             Invoke-SherpaOnnx -Exe $exe -Arguments $run.Arguments -State $state
@@ -479,15 +484,16 @@ function Invoke-SherpaOnnxTranscript {
                 return
             }
             if ($state['ExitCode'] -ne 0) {
-                throw "sherpa-onnx-vad-with-offline-asr a échoué (code $($state['ExitCode'])) sur '$MediaPath' (modèle $($run.Model))."
+                throw "sherpa-onnx-vad-with-offline-asr a échoué (code $($state['ExitCode'])) sur '$MediaPath' (modèle $Model, vad $($run.Vad))."
             }
             if ([string]::IsNullOrWhiteSpace($state['Stdout'])) {
-                throw "Aucun segment de transcription produit par sherpa-onnx-vad-with-offline-asr pour '$MediaPath' (modèle $($run.Model))."
+                throw "Aucun segment de transcription produit par sherpa-onnx-vad-with-offline-asr pour '$MediaPath' (modèle $Model, vad $($run.Vad))."
             }
 
             ConvertFrom-SherpaOnnxTranscript `
                 -InputObject $state['Stdout'] `
-                -Model $run.Model `
+                -Model $Model `
+                -Vad $run.Vad `
                 -UseLanguage $UseLanguage `
                 -AudioTrack $AudioTrack `
                 -TimelineOffset $timelineOffset

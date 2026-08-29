@@ -84,10 +84,10 @@ BeforeAll {
         return $part[0]
     }
 
-    function script:Get-SecondaryWhisperJsonFromPrompt($Request) {
-        $part = Get-PromptPartByMarker $Request 'TRANSCRIPTION WHISPER JSON'
-        if ($part -notmatch '(?s)===== SOURCE LINGUISTIQUE \d+ — TRANSCRIPTION WHISPER JSON =====\r?\n(.+)\r?\n===== FIN SOURCE LINGUISTIQUE \d+ =====') {
-            throw 'JSON Whisper compact introuvable dans le prompt'
+    function script:Get-SecondaryTranscriptJsonFromPrompt($Request, [string] $Marker = 'TRANSCRIPTION AUTOMATIQUE JSON') {
+        $part = Get-PromptPartByMarker $Request $Marker
+        if ($part -notmatch '(?s)===== SOURCE LINGUISTIQUE \d+ — TRANSCRIPTION AUTOMATIQUE JSON =====\r?\n(.+)\r?\n===== FIN SOURCE LINGUISTIQUE \d+ =====') {
+            throw 'JSON de transcription compact introuvable dans le prompt'
         }
         return $Matches[1].Trim()
     }
@@ -152,6 +152,11 @@ Describe 'Tetram.Media.Translation manifest' {
         $prompt | Should -Match 'JSON compact par segments'
         $prompt | Should -Match 'avg_logprob'
         $prompt | Should -Match 'no_speech_prob'
+        $prompt | Should -Match 'même modèle ASR'
+        $prompt | Should -Match 'deux votes ASR indépendants'
+        $prompt | Should -Match 'pas un signal négatif'
+        $prompt | Should -Match 'plus indépendante'
+        $prompt | Should -Match 'preuve automatique d''absence'
         $prompt | Should -Not -Match 'Déterminer le sens avant de traduire'
         $prompt | Should -Not -Match 'SOURCE PRINCIPALE'
         $prompt | Should -Not -Match 'JSON brut'
@@ -411,17 +416,20 @@ Describe 'ConvertTo-FrenchSubtitle' {
 
         ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $whisperPath
 
-        $part = Get-PromptPartByMarker $script:LastGeminiBody 'TRANSCRIPTION WHISPER JSON'
-        $part | Should -Match '===== SOURCE LINGUISTIQUE 2 — TRANSCRIPTION WHISPER JSON ====='
+        $part = Get-PromptPartByMarker $script:LastGeminiBody 'TRANSCRIPTION AUTOMATIQUE JSON'
+        $part | Should -Match '===== SOURCE LINGUISTIQUE 2 — TRANSCRIPTION AUTOMATIQUE JSON ====='
         $part | Should -Match '===== FIN SOURCE LINGUISTIQUE 2 ====='
         $part | Should -Not -Match '"cueId"'
         Get-StructuringSourcePart $script:LastGeminiBody | Should -Match '===== SOURCE LINGUISTIQUE 1 — SOUS-TITRE STRUCTURANT ====='
         $part.Contains($whisperJson) | Should -BeFalse
 
-        $compact = Get-SecondaryWhisperJsonFromPrompt $script:LastGeminiBody
+        $compact = Get-SecondaryTranscriptJsonFromPrompt $script:LastGeminiBody
         { ConvertFrom-Json -InputObject $compact -ErrorAction Stop } | Should -Not -Throw
         $compact | Should -Not -Match '[\r\n]'
         $got = ConvertFrom-Json -InputObject $compact
+        $got.engine | Should -Be 'faster-whisper'
+        $got.model | Should -Be 'large-v3'
+        $got.PSObject.Properties.Name | Should -Not -Contain 'vad'
         $got.language | Should -Be 'ja'
         @($got.segments).Count | Should -Be 1
         $segment = @($got.segments)[0]
@@ -432,8 +440,6 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $segment.avg_logprob | Should -Be -0.42
         $segment.compression_ratio | Should -Be 1.31
         $segment.no_speech_prob | Should -Be 0.02
-        $got.PSObject.Properties['engine'] | Should -BeNullOrEmpty
-        $got.PSObject.Properties['model'] | Should -BeNullOrEmpty
         $got.PSObject.Properties['languageSource'] | Should -BeNullOrEmpty
         $got.PSObject.Properties['audioTrack'] | Should -BeNullOrEmpty
         $segment.PSObject.Properties['diagnostics'] | Should -BeNullOrEmpty
@@ -442,8 +448,6 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $part | Should -Not -Match '"diagnostics"'
         $part | Should -Not -Match '"tokens"'
         $part | Should -Not -Match '"words"'
-        $part | Should -Not -Match '"engine"'
-        $part | Should -Not -Match '"model"'
         $part | Should -Not -Match '"audioTrack"'
         $part | Should -Not -Match '"languageSource"'
         $part | Should -Not -Match 'drop me'
@@ -507,7 +511,7 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $joined | Should -Match '===== GABARIT TECHNIQUE FINAL ====='
         $joined | Should -Match '===== SOURCE LINGUISTIQUE 1 — SOUS-TITRE STRUCTURANT ====='
         $joined | Should -Match '===== SOURCE LINGUISTIQUE 2 — SOUS-TITRE ====='
-        $joined | Should -Match '===== SOURCE LINGUISTIQUE 3 — TRANSCRIPTION WHISPER JSON ====='
+        $joined | Should -Match '===== SOURCE LINGUISTIQUE 3 — TRANSCRIPTION AUTOMATIQUE JSON ====='
         $joined | Should -Match '===== SOURCE LINGUISTIQUE 4 — SOUS-TITRE ====='
         $joined | Should -Not -Match 'SOURCE PRINCIPALE'
         $joined | Should -Not -Match '===== SOURCE SECONDAIRE'
@@ -518,16 +522,99 @@ Describe 'ConvertTo-FrenchSubtitle' {
             Where-Object { $_ -match '(?m)^===== SOURCE LINGUISTIQUE' } |
             ForEach-Object { $_ | Should -Not -Match '"cueId"' }
         $joined | Should -Match 'Alt SRT'
-        $whisperCompact = Get-SecondaryWhisperJsonFromPrompt $script:LastGeminiBody
+        $whisperCompact = Get-SecondaryTranscriptJsonFromPrompt $script:LastGeminiBody
         $whisperGot = ConvertFrom-Json -InputObject $whisperCompact
         @($whisperGot.segments).Count | Should -Be 0
-        $whisperGot.PSObject.Properties['engine'] | Should -BeNullOrEmpty
-        $whisperGot.PSObject.Properties['model'] | Should -BeNullOrEmpty
-        $whisperCompact | Should -Not -Match '"engine"'
-        $whisperCompact | Should -Not -Match '"model"'
+        $whisperGot.engine | Should -Be 'faster-whisper'
+        $whisperGot.model | Should -Be 'large-v3-turbo'
+        $whisperGot.PSObject.Properties.Name | Should -Not -Contain 'vad'
         $whisperCompact | Should -Not -Match '"languageSource"'
         $whisperCompact | Should -Not -Match '"audioTrack"'
         $joined | Should -Match 'Alt ASS'
+    }
+
+    It 'envoie sous-titre, Whisper et les deux VAD Reazon comme transcriptions automatiques' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $altSrt = Join-Path $script:Work 'episode.alt.srt'
+        $whisperPath = Join-Path $script:Work 'episode.track 1.ja.large-v2.json'
+        $sileroPath = Join-Path $script:Work 'episode.track 1.ja.reazon-k2-v2.silero.json'
+        $tenPath = Join-Path $script:Work 'episode.track 1.ja.reazon-k2-v2.ten.json'
+        $whisperJson = '{"engine":"faster-whisper","model":"large-v2","language":"ja","languageSource":"forced","audioTrack":1,"segments":[{"start":1.0,"end":2.0,"text":"whisper"}]}'
+        $sileroJson = '{"engine":"sherpa-onnx","model":"reazon-k2-v2","vad":"silero","language":"ja","languageSource":"model","audioTrack":1,"segments":[{"start":1.0,"end":2.0,"text":"silero"}]}'
+        $tenJson = '{"engine":"sherpa-onnx","model":"reazon-k2-v2","vad":"ten","language":"ja","languageSource":"model","audioTrack":1,"segments":[{"start":1.1,"end":2.1,"text":"ten"}]}'
+        Set-Content -LiteralPath $altSrt -Value "1`n00:00:10,000 --> 00:00:11,000`nAlt SRT`n" -Encoding utf8
+        Set-Content -LiteralPath $whisperPath -Value $whisperJson -Encoding utf8NoBOM -NoNewline
+        Set-Content -LiteralPath $sileroPath -Value $sileroJson -Encoding utf8NoBOM -NoNewline
+        Set-Content -LiteralPath $tenPath -Value $tenJson -Encoding utf8NoBOM -NoNewline
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
+            }
+        }
+
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath @($altSrt, $whisperPath, $sileroPath, $tenPath)
+
+        $texts = Get-GeminiPromptText $script:LastGeminiBody
+        $joined = $texts -join "`n"
+        $joined | Should -Match '===== SOURCE LINGUISTIQUE 2 — SOUS-TITRE ====='
+        $joined | Should -Match '===== SOURCE LINGUISTIQUE 3 — TRANSCRIPTION AUTOMATIQUE JSON ====='
+        $joined | Should -Match '===== SOURCE LINGUISTIQUE 4 — TRANSCRIPTION AUTOMATIQUE JSON ====='
+        $joined | Should -Match '===== SOURCE LINGUISTIQUE 5 — TRANSCRIPTION AUTOMATIQUE JSON ====='
+        $joined | Should -Not -Match 'TRANSCRIPTION WHISPER JSON'
+        $joined.IndexOf('SOURCE LINGUISTIQUE 2') | Should -BeLessThan $joined.IndexOf('SOURCE LINGUISTIQUE 3')
+        $joined.IndexOf('SOURCE LINGUISTIQUE 3') | Should -BeLessThan $joined.IndexOf('SOURCE LINGUISTIQUE 4')
+        $joined.IndexOf('SOURCE LINGUISTIQUE 4') | Should -BeLessThan $joined.IndexOf('SOURCE LINGUISTIQUE 5')
+
+        $autoParts = @(
+            Get-GeminiPromptText $script:LastGeminiBody |
+                Where-Object { $_ -match 'TRANSCRIPTION AUTOMATIQUE JSON' }
+        )
+        $autoParts.Count | Should -Be 3
+        $compacts = @(
+            $autoParts | ForEach-Object {
+                if ($_ -notmatch '(?s)===== SOURCE LINGUISTIQUE \d+ — TRANSCRIPTION AUTOMATIQUE JSON =====\r?\n(.+)\r?\n===== FIN SOURCE LINGUISTIQUE \d+ =====') {
+                    throw 'JSON compact introuvable'
+                }
+                ConvertFrom-Json -InputObject $Matches[1].Trim()
+            }
+        )
+        $compacts[0].engine | Should -Be 'faster-whisper'
+        $compacts[0].model | Should -Be 'large-v2'
+        $compacts[0].PSObject.Properties.Name | Should -Not -Contain 'vad'
+        $compacts[1].engine | Should -Be 'sherpa-onnx'
+        $compacts[1].model | Should -Be 'reazon-k2-v2'
+        $compacts[1].vad | Should -Be 'silero'
+        $compacts[2].engine | Should -Be 'sherpa-onnx'
+        $compacts[2].model | Should -Be 'reazon-k2-v2'
+        $compacts[2].vad | Should -Be 'ten'
+        $compacts[1].segments[0].PSObject.Properties.Name | Should -Not -Contain 'avg_logprob'
+    }
+
+    It 'refuse un engine inconnu avant tout appel réseau' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $badJson = Join-Path $script:Work 'unknown-engine.json'
+        Set-Content -LiteralPath $badJson -Value '{"engine":"unknown-engine","model":"x","language":"ja","languageSource":"forced","audioTrack":1,"segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            throw 'Gemini ne devait pas être appelé'
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $badJson } |
+            Should -Throw -ExpectedMessage '*Tetram*'
+        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
+    }
+
+    It 'refuse un JSON Sherpa sans vad avant tout appel réseau' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $badJson = Join-Path $script:Work 'reazon-sans-vad.json'
+        Set-Content -LiteralPath $badJson -Value '{"engine":"sherpa-onnx","model":"reazon-k2-v2","language":"ja","languageSource":"model","audioTrack":1,"segments":[{"start":1.0,"end":2.0,"text":"x"}]}' -Encoding utf8
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            throw 'Gemini ne devait pas être appelé'
+        }
+
+        { ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $badJson } |
+            Should -Throw -ExpectedMessage '*Tetram*'
+        Should -Invoke -ModuleName Tetram.Media.Translation Invoke-RestMethod -Times 0
     }
 
     It 'refuse un JSON secondaire invalide avant tout appel réseau' {
