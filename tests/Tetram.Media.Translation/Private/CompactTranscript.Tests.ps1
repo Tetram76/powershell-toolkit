@@ -263,6 +263,44 @@ Describe 'ConvertTo-CompactTranscriptJson' {
         $compact | Should -Not -Match '"tokens"'
     }
 
+    It 'ôte les diagnostics Sherpa riches du compact Gemini' {
+        $segment = @(
+            '"start":12.34,"end":15.67,"text":"reazon silero",'
+            '"diagnostics":{'
+            '"tokens":["こん","にちは"],'
+            '"timestamps":[12.50,12.82],'
+            '"ys_log_probs":[-0.12,-0.08],'
+            '"lang":"ja",'
+            '"emotion":"happy",'
+            '"event":"Speech"'
+            '}'
+        ) -join ''
+        $json = script:Get-MinimalTetramJson -Engine 'sherpa-onnx' -Model 'reazon-k2-v2' -Vad 'silero' -SegmentBody $segment
+        $compact = Invoke-CompactTranscriptJson -InputObject $json
+        $got = ConvertFrom-Json -InputObject $compact
+        $row = @($got.segments)[0]
+
+        $got.engine | Should -Be 'sherpa-onnx'
+        $got.model | Should -Be 'reazon-k2-v2'
+        $got.vad | Should -Be 'silero'
+        $got.language | Should -Be 'ja'
+        $row.start | Should -Be 12.34
+        $row.end | Should -Be 15.67
+        $row.text | Should -Be 'reazon silero'
+        $row.PSObject.Properties['diagnostics'] | Should -BeNullOrEmpty
+        $row.PSObject.Properties['tokens'] | Should -BeNullOrEmpty
+        $row.PSObject.Properties['timestamps'] | Should -BeNullOrEmpty
+        $row.PSObject.Properties['ys_log_probs'] | Should -BeNullOrEmpty
+        $row.PSObject.Properties['lang'] | Should -BeNullOrEmpty
+        $row.PSObject.Properties['emotion'] | Should -BeNullOrEmpty
+        $row.PSObject.Properties['event'] | Should -BeNullOrEmpty
+        $compact | Should -Not -Match '"diagnostics"'
+        $compact | Should -Not -Match '"tokens"'
+        $compact | Should -Not -Match '"ys_log_probs"'
+        $compact | Should -Not -Match '"emotion"'
+        $compact | Should -Not -Match '"event"'
+    }
+
     It 'lève si un JSON Whisper legacy à diagnostics plats est fourni' {
         { Invoke-CompactTranscriptJson -InputObject $script:LegacyWhisperJson } |
             Should -Throw '*Tetram*'
