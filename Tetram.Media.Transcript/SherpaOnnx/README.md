@@ -2,6 +2,8 @@
 
 Ce dossier accueille la distribution Windows locale de [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) utilisée par `Get-MediaTranscript` pour le modèle provisoire `reazon-k2-v2`.
 
+Préférer un package `win-x64-shared-MT-Release-no-tts`. Utiliser le contenu du dossier `bin` du package.
+
 Ce modèle sert à valider le routage vers Sherpa-ONNX. Ce n'est pas le résultat d'un benchmark ASR.
 
 ## Contenu attendu
