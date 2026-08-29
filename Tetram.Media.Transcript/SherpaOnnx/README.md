@@ -17,9 +17,9 @@ Si l'exécutable n'est pas ici, le backend cherche `sherpa-onnx-offline` dans le
 Déposer dans un sous-dossier (par exemple `reazon-k2-v2/` ou `sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01/`) les fichiers :
 
 - `tokens.txt`
-- `encoder*.onnx` (les poids `*.int8.onnx` sont préférés s'ils sont présents)
-- `decoder*.onnx`
-- `joiner*.onnx` (idem `*.int8.onnx`)
+- `encoder*.onnx` (INT8 préféré s'il existe aussi en FP32)
+- `decoder*.onnx` (FP32 préféré : la recette INT8 Reazon documentée est encoder INT8 + decoder FP32 + joiner INT8)
+- `joiner*.onnx` (INT8 préféré s'il existe aussi en FP32)
 
 Les binaires, DLL et poids tiers ne sont **pas** versionnés.
 

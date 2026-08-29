@@ -43,7 +43,8 @@ function Select-SherpaOnnxOnnxFile {
     [OutputType([string])]
     param(
         [Parameter(Mandatory)] [string] $Directory,
-        [Parameter(Mandatory)] [string] $Prefix
+        [Parameter(Mandatory)] [string] $Prefix,
+        [switch] $PreferInt8
     )
 
     $files = @(Get-ChildItem -LiteralPath $Directory -File -ErrorAction SilentlyContinue |
@@ -53,11 +54,19 @@ function Select-SherpaOnnxOnnxFile {
     }
 
     $int8 = @($files | Where-Object { $_.Name -like '*.int8.onnx' })
-    if ($int8.Count -gt 0) {
-        return $int8[0].FullName
+    $fp32 = @($files | Where-Object { $_.Name -notlike '*.int8.onnx' })
+
+    # Recette Reazon INT8 documentée : encoder/joiner int8, decoder FP32.
+    if ($PreferInt8) {
+        if ($int8.Count -gt 0) { return $int8[0].FullName }
+        if ($fp32.Count -gt 0) { return $fp32[0].FullName }
+    }
+    else {
+        if ($fp32.Count -gt 0) { return $fp32[0].FullName }
+        if ($int8.Count -gt 0) { return $int8[0].FullName }
     }
 
-    return $files[0].FullName
+    return $null
 }
 
 function Get-SherpaOnnxModelFiles {
@@ -86,9 +95,9 @@ function Get-SherpaOnnxModelFiles {
 
     foreach ($tokens in $preferred) {
         $dir = $tokens.DirectoryName
-        $encoder = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'encoder'
+        $encoder = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'encoder' -PreferInt8
         $decoder = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'decoder'
-        $joiner = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'joiner'
+        $joiner = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'joiner' -PreferInt8
         if ($encoder -and $decoder -and $joiner) {
             return [pscustomobject]@{
                 Tokens  = $tokens.FullName
@@ -180,6 +189,56 @@ function Assert-SherpaOnnxLanguage {
     }
 }
 
+function Invoke-SherpaOnnxFfprobe {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string[]] $Arguments
+    )
+
+    $exe = Get-FfprobePath
+    $output = & $exe @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "ffprobe a échoué (code $LASTEXITCODE) : $($Arguments[-1])"
+    }
+    return $output
+}
+
+function Get-SherpaOnnxTimelineOffset {
+    [CmdletBinding()]
+    [OutputType([double])]
+    param(
+        [Parameter(Mandatory)] [string] $MediaPath,
+        [Parameter(Mandatory)] [int] $AudioTrack
+    )
+
+    # L'extraction WAV remet la piste à t=0 ; start_time replace les timestamps sur la timeline du média.
+    $probeArgs = @(
+        '-v', 'error'
+        '-select_streams', "a:$($AudioTrack - 1)"
+        '-show_entries', 'stream=start_time'
+        '-of', 'csv=p=0'
+        $MediaPath
+    )
+    $raw = Invoke-SherpaOnnxFfprobe -Arguments $probeArgs
+    $text = ((@($raw) | ForEach-Object { "$_" }) -join '').Trim()
+    if ([string]::IsNullOrWhiteSpace($text) -or $text -eq 'N/A') {
+        return 0
+    }
+
+    $value = 0.0
+    if (-not [double]::TryParse(
+            $text,
+            [Globalization.NumberStyles]::Float,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [ref]$value)) {
+        return 0
+    }
+    if ($value -lt 0) {
+        return 0
+    }
+    return $value
+}
+
 function ConvertTo-SherpaOnnxWav {
     [CmdletBinding()]
     param(
@@ -231,7 +290,8 @@ function ConvertFrom-SherpaOnnxTranscript {
         [Parameter(Mandatory)] [string] $Model,
         [string] $UseLanguage,
         [int] $AudioTrack = 1,
-        [double] $WavDuration
+        [double] $WavDuration,
+        [double] $TimelineOffset = 0
     )
 
     Assert-SherpaOnnxLanguage -UseLanguage $UseLanguage
@@ -247,12 +307,9 @@ function ConvertFrom-SherpaOnnxTranscript {
         throw "La sortie native Sherpa-ONNX n'est pas un JSON exploitable."
     }
 
+    # Reazon est monolingue ja et ne reçoit pas --language : ja n'est pas une contrainte forcée.
     $language = 'ja'
     $languageSource = 'model'
-    if (-not [string]::IsNullOrWhiteSpace($UseLanguage)) {
-        $language = 'ja'
-        $languageSource = 'forced'
-    }
 
     $text = ''
     $textProp = $native.PSObject.Properties['text']
@@ -278,43 +335,26 @@ function ConvertFrom-SherpaOnnxTranscript {
         $tokens = @($tokProp.Value)
     }
 
-    $words = [System.Collections.Generic.List[object]]::new()
-    $count = [Math]::Min($tokens.Count, $timestamps.Count)
-    for ($i = 0; $i -lt $count; $i++) {
-        $start = [double]$timestamps[$i]
-        $end = $start
-        if ($i -lt $durations.Count -and $null -ne $durations[$i]) {
-            $end = $start + [double]$durations[$i]
-        }
-        elseif (($i + 1) -lt $timestamps.Count) {
-            $end = [double]$timestamps[$i + 1]
-        }
+    $shiftedTimestamps = @($timestamps | ForEach-Object { [double]$_ + $TimelineOffset })
 
-        $words.Add([pscustomobject][ordered]@{
-                text  = [string]$tokens[$i]
-                start = $start
-                end   = $end
-            })
-    }
-
-    $segStart = 0.0
-    $segEnd = 0.0
-    if ($words.Count -gt 0) {
-        $segStart = $words[0].start
-        $segEnd = $words[$words.Count - 1].end
+    $segStart = $TimelineOffset
+    $segEnd = $TimelineOffset
+    if ($shiftedTimestamps.Count -gt 0) {
+        $segStart = $shiftedTimestamps[0]
+        $lastIdx = $shiftedTimestamps.Count - 1
+        $segEnd = $shiftedTimestamps[$lastIdx]
+        if ($lastIdx -lt $durations.Count -and $null -ne $durations[$lastIdx]) {
+            $segEnd = $segEnd + [double]$durations[$lastIdx]
+        }
     }
     elseif ($PSBoundParameters.ContainsKey('WavDuration')) {
-        $segEnd = $WavDuration
+        $segEnd = $WavDuration + $TimelineOffset
     }
 
     $segment = [ordered]@{
         start = $segStart
         end   = $segEnd
         text  = $text
-    }
-
-    if ($words.Count -gt 0) {
-        $segment['words'] = [object[]]$words.ToArray()
     }
 
     $diagnostics = [ordered]@{}
@@ -327,6 +367,12 @@ function ConvertFrom-SherpaOnnxTranscript {
     }
     if ($tokens.Count -gt 0) {
         $diagnostics['tokens'] = $tokens
+    }
+    if ($shiftedTimestamps.Count -gt 0) {
+        $diagnostics['timestamps'] = $shiftedTimestamps
+    }
+    if ($durations.Count -gt 0) {
+        $diagnostics['durations'] = $durations
     }
     foreach ($name in @('lang', 'emotion', 'event')) {
         $p = $native.PSObject.Properties[$name]
@@ -366,11 +412,13 @@ function Invoke-SherpaOnnxTranscript {
     $modelFiles = Get-SherpaOnnxModelFiles -Model $Model
 
     $tempDir = $null
+    $timelineOffset = 0.0
     try {
         if ($WhatIf) {
             $wav = Join-Path ([IO.Path]::GetTempPath()) (([guid]::NewGuid().ToString()) + '.wav')
         }
         else {
+            $timelineOffset = Get-SherpaOnnxTimelineOffset -MediaPath $MediaPath -AudioTrack $AudioTrack
             $tempDir = New-SherpaOnnxTempDirectory
             $wav = Join-Path $tempDir 'audio.wav'
             ConvertTo-SherpaOnnxWav -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
@@ -401,7 +449,8 @@ function Invoke-SherpaOnnxTranscript {
             -InputObject $state['Stdout'] `
             -Model $Model `
             -UseLanguage $UseLanguage `
-            -AudioTrack $AudioTrack
+            -AudioTrack $AudioTrack `
+            -TimelineOffset $timelineOffset
     }
     finally {
         Remove-SherpaOnnxTempDirectory -Path $tempDir

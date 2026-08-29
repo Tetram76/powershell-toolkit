@@ -10,7 +10,7 @@
       <command:noun>MediaTranscript</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation distincte du moteur associé à ce modèle, puis un JSON Tetram canonique à côté du média. L'appelant choisit un ou plusieurs modèles ; il ne choisit pas le moteur. Les artefacts natifs (JSON Faster-Whisper, WAV et stdout Sherpa-ONNX) sont temporaires : ils sont écrits sous le répertoire temporaire système, lus, normalisés, puis supprimés. `-LiteralPath` doit désigner un fichier unique existant : un masque, un dossier ou un fichier-liste est refusé avant toute invocation native. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
+      <maml:para>`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation distincte du moteur associé à ce modèle, puis un JSON Tetram canonique à côté du média. L'appelant choisit un ou plusieurs modèles ; il ne choisit pas le moteur. Les artefacts natifs (JSON Faster-Whisper, WAV et stdout Sherpa-ONNX) sont temporaires : ils sont écrits sous le répertoire temporaire système, lus, normalisés, puis supprimés. `-LiteralPath` doit désigner un fichier unique existant : un masque ou un dossier est refusé par l'orchestrateur. Un fichier-liste existant (`.lst`, `.m3u`, …) est transmis au backend : Faster-Whisper / Purfview le refuse. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
 
 Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.&lt;langue&gt;.&lt;model&gt;.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.</maml:para>
     </maml:description>
@@ -95,7 +95,7 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="PSPath">
         <maml:name>LiteralPath</maml:name>
         <maml:description>
-          <maml:para>Chemin littéral d'un fichier média unique existant. Les caractères spéciaux PowerShell (`*`, `?`, `[`) font partie du nom ; ils ne sont pas interprétés comme un masque. Un chemin qui n'est pas un fichier (masque, dossier, fichier-liste) est refusé avant l'invocation native ; le chemin concret de ce fichier est ensuite transmis au backend.</maml:para>
+          <maml:para>Chemin littéral d'un fichier média unique existant. Les caractères spéciaux PowerShell (`*`, `?`, `[`) font partie du nom ; ils ne sont pas interprétés comme un masque. Un masque ou un dossier est refusé par l'orchestrateur. Un fichier-liste existant est transmis au backend (Purfview le refuse).</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -105,7 +105,7 @@ Le fichier durable suit la convention `&lt;media-base&gt;.track &lt;trackid&gt;.
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Model</maml:name>
         <maml:description>
-          <maml:para>Modèle de transcription, défaut `large-v2`. Plusieurs valeurs : une invocation par modèle, éventuellement sur des moteurs différents. `large-v2`, `large-v3`, `large-v3-turbo` et `kotoba-v2` passent par Faster-Whisper / Purfview. `reazon-k2-v2` est un modèle japonais provisoire exécuté localement via Sherpa-ONNX ; il sert à valider le routage, pas un choix ASR définitif. Les binaires et poids doivent déjà être présents localement : la commande ne télécharge rien. `kotoba-v2` doit être installé séparément dans la distribution Purfview. `-UseLanguage ja` est accepté pour `reazon-k2-v2` ; une autre langue est refusée par le backend Sherpa.</maml:para>
+          <maml:para>Modèle de transcription, défaut `large-v2`. Plusieurs valeurs : une invocation par modèle, éventuellement sur des moteurs différents. `large-v2`, `large-v3`, `large-v3-turbo` et `kotoba-v2` passent par Faster-Whisper / Purfview. `reazon-k2-v2` est un modèle japonais provisoire exécuté localement via Sherpa-ONNX ; il sert à valider le routage, pas un choix ASR définitif. Les binaires et poids doivent déjà être présents localement : la commande ne télécharge rien. `kotoba-v2` doit être installé séparément dans la distribution Purfview. `-UseLanguage ja` est accepté pour `reazon-k2-v2` sans forcer une langue : le moteur n'expose pas de paramètre de langue. Une autre langue est refusée par le backend Sherpa.</maml:para>
         </maml:description>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">large-v2</command:parameterValue>
