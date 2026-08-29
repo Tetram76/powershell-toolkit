@@ -224,8 +224,8 @@ Describe 'chargement paresseux des backends de transcription' {
             New-Item -ItemType Directory -Path $tempRoot | Out-Null
             Set-Content -LiteralPath (Join-Path $tempRoot 'Whisper.ps1') -Value @'
 function Invoke-ProviderTranscript {
-    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, [switch] $WhatIf)
-    [pscustomobject]@{ model = $Model; engine = 'faster-whisper' }
+    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $Result, [switch] $WhatIf)
+    [void]$Result.Transcripts.Add([pscustomobject]@{ model = $Model; engine = 'faster-whisper' })
 }
 '@ -Encoding utf8
             Set-Content -LiteralPath (Join-Path $tempRoot 'SherpaOnnx.ps1') -Value "throw 'Sherpa ne devait pas être chargé'" -Encoding utf8
@@ -236,7 +236,9 @@ function Invoke-ProviderTranscript {
             } {
                 param($TempRoot, $Cmdlet)
                 $script:TranscriptPrivateRoot = $TempRoot
-                Invoke-TranscriptBackend -MediaPath (Join-Path 'Videos' 'a.mkv') -Model 'large-v3' -Cmdlet $Cmdlet
+                $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+                Invoke-TranscriptBackend -MediaPath (Join-Path 'Videos' 'a.mkv') -Model 'large-v3' -Cmdlet $Cmdlet -Result $result
+                $result.Transcripts[0]
             }
 
             $got.model | Should -Be 'large-v3'
@@ -247,8 +249,8 @@ function Invoke-ProviderTranscript {
             New-Item -ItemType Directory -Path $tempRoot | Out-Null
             Set-Content -LiteralPath (Join-Path $tempRoot 'SherpaOnnx.ps1') -Value @'
 function Invoke-ProviderTranscript {
-    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, [switch] $WhatIf)
-    [pscustomobject]@{ model = $Model; engine = 'sherpa-onnx' }
+    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $Result, [switch] $WhatIf)
+    [void]$Result.Transcripts.Add([pscustomobject]@{ model = $Model; engine = 'sherpa-onnx' })
 }
 '@ -Encoding utf8
             Set-Content -LiteralPath (Join-Path $tempRoot 'Whisper.ps1') -Value "throw 'Whisper ne devait pas être chargé'" -Encoding utf8
@@ -259,7 +261,9 @@ function Invoke-ProviderTranscript {
             } {
                 param($TempRoot, $Cmdlet)
                 $script:TranscriptPrivateRoot = $TempRoot
-                Invoke-TranscriptBackend -MediaPath (Join-Path 'Videos' 'a.mkv') -Model 'reazon-k2-v2' -Cmdlet $Cmdlet
+                $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+                Invoke-TranscriptBackend -MediaPath (Join-Path 'Videos' 'a.mkv') -Model 'reazon-k2-v2' -Cmdlet $Cmdlet -Result $result
+                $result.Transcripts[0]
             }
 
             $got.model | Should -Be 'reazon-k2-v2'
@@ -288,14 +292,14 @@ Describe 'Invoke-TranscriptBackend' {
         Set-Content -LiteralPath (Join-Path $tempRoot 'Whisper.ps1') -Value @'
 function Get-WhisperPath { throw 'le dispatcher ne doit pas résoudre Purfview' }
 function Invoke-ProviderTranscript {
-    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, [switch] $WhatIf)
-    [pscustomobject]@{
-        model      = $Model
-        mediaPath  = $MediaPath
-        audioTrack = $AudioTrack
-        language   = $UseLanguage
-        whatIf     = [bool]$WhatIf
-    }
+    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $Result, [switch] $WhatIf)
+    [void]$Result.Transcripts.Add([pscustomobject]@{
+            model      = $Model
+            mediaPath  = $MediaPath
+            audioTrack = $AudioTrack
+            language   = $UseLanguage
+            whatIf     = [bool]$WhatIf
+        })
 }
 '@ -Encoding utf8
         Set-Content -LiteralPath (Join-Path $tempRoot 'SherpaOnnx.ps1') -Value "throw 'Sherpa ne devait pas être chargé'" -Encoding utf8
@@ -308,7 +312,9 @@ function Invoke-ProviderTranscript {
         } {
             param($TempRoot, $Cmdlet, $Media)
             $script:TranscriptPrivateRoot = $TempRoot
-            Invoke-TranscriptBackend -MediaPath $Media -Model 'large-v3' -AudioTrack 2 -UseLanguage 'ja' -Cmdlet $Cmdlet
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            Invoke-TranscriptBackend -MediaPath $Media -Model 'large-v3' -AudioTrack 2 -UseLanguage 'ja' -Cmdlet $Cmdlet -Result $result
+            $result.Transcripts[0]
         }
 
         $got.model | Should -Be 'large-v3'
@@ -325,14 +331,14 @@ function Invoke-ProviderTranscript {
 function Get-SherpaOnnxPath { throw 'le dispatcher ne doit pas résoudre Sherpa' }
 function Invoke-FFmpeg { throw 'le dispatcher ne doit pas invoquer FFmpeg' }
 function Invoke-ProviderTranscript {
-    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, [switch] $WhatIf)
-    [pscustomobject]@{
-        model      = $Model
-        mediaPath  = $MediaPath
-        audioTrack = $AudioTrack
-        language   = $UseLanguage
-        whatIf     = [bool]$WhatIf
-    }
+    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $Result, [switch] $WhatIf)
+    [void]$Result.Transcripts.Add([pscustomobject]@{
+            model      = $Model
+            mediaPath  = $MediaPath
+            audioTrack = $AudioTrack
+            language   = $UseLanguage
+            whatIf     = [bool]$WhatIf
+        })
 }
 '@ -Encoding utf8
         Set-Content -LiteralPath (Join-Path $tempRoot 'Whisper.ps1') -Value "throw 'Whisper ne devait pas être chargé'" -Encoding utf8
@@ -345,7 +351,9 @@ function Invoke-ProviderTranscript {
         } {
             param($TempRoot, $Cmdlet, $Media)
             $script:TranscriptPrivateRoot = $TempRoot
-            Invoke-TranscriptBackend -MediaPath $Media -Model 'reazon-k2-v2' -AudioTrack 2 -UseLanguage 'ja' -Cmdlet $Cmdlet
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            Invoke-TranscriptBackend -MediaPath $Media -Model 'reazon-k2-v2' -AudioTrack 2 -UseLanguage 'ja' -Cmdlet $Cmdlet -Result $result
+            $result.Transcripts[0]
         }
 
         $got.model | Should -Be 'reazon-k2-v2'
@@ -360,8 +368,8 @@ function Invoke-ProviderTranscript {
         New-Item -ItemType Directory -Path $tempRoot | Out-Null
         Set-Content -LiteralPath (Join-Path $tempRoot 'Whisper.ps1') -Value @'
 function Invoke-ProviderTranscript {
-    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, [switch] $WhatIf)
-    [pscustomobject]@{ WhatIf = [bool]$WhatIf }
+    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $Result, [switch] $WhatIf)
+    [void]$Result.Transcripts.Add([pscustomobject]@{ WhatIf = [bool]$WhatIf })
 }
 '@ -Encoding utf8
         Set-Content -LiteralPath (Join-Path $tempRoot 'SherpaOnnx.ps1') -Value "throw 'Sherpa ne devait pas être chargé'" -Encoding utf8
@@ -372,7 +380,9 @@ function Invoke-ProviderTranscript {
         } {
             param($TempRoot, $Cmdlet)
             $script:TranscriptPrivateRoot = $TempRoot
-            Invoke-TranscriptBackend -MediaPath (Join-Path 'Videos' 'a.mkv') -Model 'kotoba-v2' -Cmdlet $Cmdlet -WhatIf
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            Invoke-TranscriptBackend -MediaPath (Join-Path 'Videos' 'a.mkv') -Model 'kotoba-v2' -Cmdlet $Cmdlet -Result $result -WhatIf
+            $result.Transcripts[0]
         }
 
         $got.WhatIf | Should -BeTrue

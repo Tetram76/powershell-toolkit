@@ -39,19 +39,18 @@ function Get-MediaTranscript {
 
         foreach ($currentModel in @($Model)) {
             try {
-                foreach ($transcript in @(
-                        Invoke-TranscriptBackend `
-                            -MediaPath $mediaPath `
-                            -Model $currentModel `
-                            -AudioTrack $AudioTrack `
-                            -UseLanguage $UseLanguage `
-                            -Cmdlet $PSCmdlet `
-                            -WhatIf:$WhatIfPreference
-                    )) {
-                    if ($null -eq $transcript) {
-                        continue
-                    }
-
+                $result = @{
+                    Transcripts = [System.Collections.Generic.List[object]]::new()
+                }
+                Invoke-TranscriptBackend `
+                    -MediaPath $mediaPath `
+                    -Model $currentModel `
+                    -AudioTrack $AudioTrack `
+                    -UseLanguage $UseLanguage `
+                    -Cmdlet $PSCmdlet `
+                    -Result $result `
+                    -WhatIf:$WhatIfPreference
+                foreach ($transcript in $result.Transcripts) {
                     Publish-TetramTranscript -Transcript $transcript -MediaPath $mediaPath
                 }
             }

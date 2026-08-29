@@ -284,6 +284,18 @@ Describe 'Invoke-Whisper' {
         }
     }
 
+    It 'n''absorbe pas la sortie native dans State : seul ExitCode y est déposé' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            Mock Show-CommandLine {}
+            $cmdlet = [PSCustomObject]@{}
+            $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $true }
+            $state = @{}
+            $null = Invoke-Whisper -Exe (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'Write-Output "progress"; exit 0') -Cmdlet $cmdlet -State $state
+            $state['ExitCode'] | Should -Be 0
+            $state.Keys | Should -Be @('ExitCode')
+        }
+    }
+
     It 'préserve les frontières d''arguments, y compris les chemins à espaces' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
@@ -520,6 +532,12 @@ Describe 'Get-WhisperNativeJsonFromOutputDir' {
 
 Describe 'Invoke-WhisperTranscript' {
     BeforeAll {
+        function New-WhisperTestResult {
+            @{
+                Transcripts = [System.Collections.Generic.List[object]]::new()
+            }
+        }
+
         function Invoke-PrivateWhisperTranscript {
             param(
                 [Parameter(Mandatory)] [string] $MediaPath,
@@ -528,8 +546,13 @@ Describe 'Invoke-WhisperTranscript' {
                 [int] $AudioTrack = 1,
                 [string] $UseLanguage,
                 [string] $WhisperPath,
+                $Result,
                 [switch] $WhatIf
             )
+
+            if ($null -eq $Result) {
+                $Result = New-WhisperTestResult
+            }
 
             InModuleScope 'Tetram.Media.Transcript' -Parameters @{
                 MediaPath   = $MediaPath
@@ -538,10 +561,11 @@ Describe 'Invoke-WhisperTranscript' {
                 AudioTrack  = $AudioTrack
                 UseLanguage = $UseLanguage
                 WhisperPath = $WhisperPath
+                Result      = $Result
                 WhatIf      = [bool]$WhatIf
             } {
-                param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhisperPath, $WhatIf)
-                Invoke-WhisperTranscript -MediaPath $MediaPath -Model $Model -Cmdlet $Cmdlet -AudioTrack $AudioTrack -UseLanguage $UseLanguage -WhisperPath $WhisperPath -WhatIf:$WhatIf
+                param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhisperPath, $Result, $WhatIf)
+                Invoke-WhisperTranscript -MediaPath $MediaPath -Model $Model -Cmdlet $Cmdlet -AudioTrack $AudioTrack -UseLanguage $UseLanguage -WhisperPath $WhisperPath -Result $Result -WhatIf:$WhatIf
             }
         }
 
@@ -774,7 +798,9 @@ Describe 'Invoke-WhisperTranscript' {
             Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value $script:RecoverableNativeJson
             $State['ExitCode'] = $script:PurfviewCrashExitCode
         }
-        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet
+        $result = New-WhisperTestResult
+        $null = Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -Result $result
+        $got = $result.Transcripts[0]
         $got.engine | Should -Be 'faster-whisper'
         $got.model | Should -Be $Model
         $got.language | Should -Be 'ja'
@@ -808,7 +834,9 @@ Describe 'Invoke-WhisperTranscript' {
             Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value $script:RecoverableNativeJson
             $State['ExitCode'] = $script:PurfviewCrashExitCode
         }
-        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja
+        $result = New-WhisperTestResult
+        $null = Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja -Result $result
+        $got = $result.Transcripts[0]
         $got.language | Should -Be 'ja'
         $got.languageSource | Should -Be 'forced'
     }
@@ -825,8 +853,9 @@ Describe 'Invoke-WhisperTranscript' {
             param($Exe, $Arguments, $Cmdlet, $State)
             $script:SeenArguments = $Arguments
         }
-        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja -WhatIf
-        $got | Should -BeNullOrEmpty
+        $result = New-WhisperTestResult
+        $null = Invoke-PrivateWhisperTranscript -MediaPath $media -Model $Model -Cmdlet $script:FakeCmdlet -UseLanguage ja -Result $result -WhatIf
+        $result.Transcripts | Should -HaveCount 0
         Should -Invoke -ModuleName Tetram.Media.Transcript New-WhisperTempDirectory -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
         $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
@@ -852,7 +881,9 @@ Describe 'Invoke-WhisperTranscript' {
             Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
             $State['ExitCode'] = 0
         }
-        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -UseLanguage ja
+        $result = New-WhisperTestResult
+        $null = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -UseLanguage ja -Result $result
+        $got = $result.Transcripts[0]
         $got.engine | Should -Be 'faster-whisper'
         $got.model | Should -Be 'large-v3'
         $got.language | Should -Be 'ja'
@@ -873,10 +904,11 @@ Describe 'Invoke-WhisperTranscript' {
             Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
             $State['ExitCode'] = 0
         }
-        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -AudioTrack 2 -UseLanguage ja
+        $result = New-WhisperTestResult
+        $null = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -AudioTrack 2 -UseLanguage ja -Result $result
         $ff = [array]::IndexOf(@($script:SeenArguments), '--ff_track')
         $script:SeenArguments[$ff + 1] | Should -Be '2'
-        $got.audioTrack | Should -Be 2
+        $result.Transcripts[0].audioTrack | Should -Be 2
     }
 
     It 'lève si le JSON natif est ambigu' {
@@ -903,9 +935,10 @@ Describe 'Invoke-WhisperTranscript' {
             Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"x"}]}'
             $State['ExitCode'] = 0
         }
-        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model kotoba-v2 -Cmdlet $script:FakeCmdlet -UseLanguage ja
-        $got.model | Should -Be 'kotoba-v2'
-        $got.model | Should -Not -Match 'ctranslate'
+        $result = New-WhisperTestResult
+        $null = Invoke-PrivateWhisperTranscript -MediaPath $media -Model kotoba-v2 -Cmdlet $script:FakeCmdlet -UseLanguage ja -Result $result
+        $result.Transcripts[0].model | Should -Be 'kotoba-v2'
+        $result.Transcripts[0].model | Should -Not -Match 'ctranslate'
     }
 
     It 'reprend la langue détectée du JSON natif sans -UseLanguage' {
@@ -917,9 +950,10 @@ Describe 'Invoke-WhisperTranscript' {
             Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.en.json') -Value '{"language":"en","segments":[{"start":1.0,"end":2.0,"text":"hi"}]}'
             $State['ExitCode'] = 0
         }
-        $got = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet
-        $got.language | Should -Be 'en'
-        $got.languageSource | Should -Be 'detected'
+        $result = New-WhisperTestResult
+        $null = Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -Result $result
+        $result.Transcripts[0].language | Should -Be 'en'
+        $result.Transcripts[0].languageSource | Should -Be 'detected'
     }
 
     It 'lève si le JSON natif est invalide et nettoie le temporaire' {
@@ -935,5 +969,24 @@ Describe 'Invoke-WhisperTranscript' {
         { Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -UseLanguage ja } | Should -Throw
         $outIndex = [array]::IndexOf(@($script:SeenArguments), '--output_dir')
         Test-Path -LiteralPath $script:SeenArguments[$outIndex + 1] | Should -BeFalse
+    }
+
+    It 'ajoute le transcript issu du JSON temporaire, pas une sortie native du success stream' {
+        $media = Join-Path $TestDrive 'native-progress.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            'Progress 47%'
+            $outIndex = [array]::IndexOf(@($Arguments), '--output_dir')
+            Set-Content -LiteralPath (Join-Path $Arguments[$outIndex + 1] 'Episode.ja.json') -Value '{"language":"ja","segments":[{"start":1.0,"end":2.0,"text":"from-json"}]}'
+            $State['ExitCode'] = 0
+        }
+        $result = New-WhisperTestResult
+        $stream = @(Invoke-PrivateWhisperTranscript -MediaPath $media -Model large-v3 -Cmdlet $script:FakeCmdlet -UseLanguage ja -Result $result)
+        $result.Transcripts | Should -HaveCount 1
+        $result.Transcripts[0].language | Should -Be 'ja'
+        $result.Transcripts[0].segments[0].text | Should -Be 'from-json'
+        $result.Transcripts | Should -Not -Contain 'Progress 47%'
+        $stream | Should -Not -Contain $result.Transcripts[0]
     }
 }
