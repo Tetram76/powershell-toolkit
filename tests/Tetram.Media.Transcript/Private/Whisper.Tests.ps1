@@ -11,6 +11,11 @@ BeforeAll {
     $script:ModuleRootTranscript = Join-Path $script:RepoRootTranscript 'Tetram.Media.Transcript'
     Import-Module -Name $script:ModuleRootTranscript -Force -ErrorAction Stop
 
+    $module = Get-Module -Name 'Tetram.Media.Transcript'
+    . $module {
+        . (Join-Path $script:TranscriptPrivateRoot 'Whisper.ps1')
+    }
+
     $script:NativeWhisperJson = @'
 {
   "text": "texte global dupliqué",

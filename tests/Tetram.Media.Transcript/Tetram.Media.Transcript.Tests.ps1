@@ -3,7 +3,7 @@
 # RepoRoot depuis tests/<Module> : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
 # Manifeste : Tetram.Media.Transcript/Tetram.Media.Transcript.psd1 — Test-ModuleManifest puis Import-Module -Force
 # Orchestration : mocks Invoke-TranscriptBackend / Publish-TetramTranscript / Write-*Log.
-# Get-WhisperPath / Invoke-Whisper sont piégés : l'orchestrateur public ne doit pas connaître Purfview.
+# Les helpers Whisper/Sherpa ne doivent pas exister avant le chargement paresseux du backend.
 # Le vrai binaire n'est appelé que sous le tag Integration.
 
 BeforeAll {
@@ -107,6 +107,27 @@ Describe 'Get-MediaTranscript binding' {
         { Get-MediaTranscript -LiteralPath 'a.mkv' -Model kotoba-v2 -ErrorAction Stop } | Should -Not -Throw
     }
 
+    It 'accepte reazon-k2-v2 comme modèle' {
+        $validate = (Get-Command Get-MediaTranscript).Parameters['Model'].Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+        @($validate.ValidValues) | Should -Contain 'reazon-k2-v2'
+
+        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend { $null }
+        Mock -ModuleName Tetram.Media.Transcript Write-ErrorLog {}
+        { Get-MediaTranscript -LiteralPath 'a.mkv' -Model reazon-k2-v2 -ErrorAction Stop } | Should -Not -Throw
+    }
+
+    It 'n''expose plus -WhisperPath' {
+        (Get-Command Get-MediaTranscript).Parameters.ContainsKey('WhisperPath') | Should -BeFalse
+    }
+
+    It 'n''expose pas de paramètre public spécifique à Sherpa' {
+        $names = @((Get-Command Get-MediaTranscript).Parameters.Keys)
+        $names | Should -Not -Contain 'SherpaOnnxPath'
+        $names | Should -Not -Contain 'SherpaPath'
+        $names | Should -Not -Contain 'Engine'
+    }
+
     It 'refuse une langue hors liste' {
         { Get-MediaTranscript -LiteralPath 'a.mkv' -UseLanguage 'French' -ErrorAction Stop } | Should -Throw
     }
@@ -142,24 +163,20 @@ Describe 'Get-MediaTranscript orchestration' {
     }
 
     BeforeEach {
-        # Piège : un accouplement retrouvé à Purfview ferait échouer le test au lieu de le masquer.
-        Mock -ModuleName Tetram.Media.Transcript Get-WhisperPath { throw 'l''orchestrateur ne doit pas résoudre Purfview' }
-        Mock -ModuleName Tetram.Media.Transcript Invoke-Whisper { throw 'l''orchestrateur ne doit pas invoquer Purfview' }
-        Mock -ModuleName Tetram.Media.Transcript Show-CommandLine { throw 'l''orchestrateur ne doit pas afficher la ligne Purfview' }
         Mock -ModuleName Tetram.Media.Transcript Write-ErrorLog {}
         Mock -ModuleName Tetram.Media.Transcript Write-InfoLog {}
         Mock -ModuleName Tetram.Media.Transcript Write-DebugLog {}
         Mock -ModuleName Tetram.Media.Transcript Publish-TetramTranscript {}
         $script:SeenBackend = [System.Collections.Generic.List[hashtable]]::new()
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhisperPath, $WhatIf)
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
             $script:SeenBackend.Add(@{
                     MediaPath   = $MediaPath
                     Model       = $Model
                     AudioTrack  = $AudioTrack
                     UseLanguage = $UseLanguage
-                    WhisperPath = $WhisperPath
                     WhatIf      = [bool]$WhatIf
+                    Bound       = @($PSBoundParameters.Keys)
                 })
             [pscustomobject]@{
                 language   = 'ja'
@@ -258,7 +275,7 @@ Describe 'Get-MediaTranscript orchestration' {
     It 'sous -WhatIf, transmet WhatIf au backend et ne publie pas si le backend est muet' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'whatif'
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhisperPath, $WhatIf)
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
             $script:SeenBackend.Add(@{ WhatIf = [bool]$WhatIf; Model = $Model })
             $null
         }
@@ -280,12 +297,12 @@ Describe 'Get-MediaTranscript orchestration' {
         }
     }
 
-    It 'transmet -WhisperPath au backend sans l''interpréter' {
-        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'whisper-path'
-        $override = Join-Path $TestDrive 'custom-whisper.exe'
-        Set-Content -LiteralPath $override -Value 'stub'
-        Get-MediaTranscript -LiteralPath $media -WhisperPath $override
-        $script:SeenBackend[0].WhisperPath | Should -Be $override
+    It 'ne transmet aucun chemin d''exécutable au backend' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'no-exe-path'
+        Get-MediaTranscript -LiteralPath $media -Model large-v3
+        $script:SeenBackend[0].Bound | Should -Not -Contain 'WhisperPath'
+        $script:SeenBackend[0].Bound | Should -Not -Contain 'SherpaOnnxPath'
+        (Get-Command Get-MediaTranscript).Parameters.ContainsKey('WhisperPath') | Should -BeFalse
     }
 
     It 'appelle le backend une fois par modèle et publie chaque transcript' {
@@ -301,7 +318,7 @@ Describe 'Get-MediaTranscript orchestration' {
     It 'poursuit les modèles suivants si un backend échoue' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-model-fail'
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhisperPath, $WhatIf)
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
             if ($Model -eq 'large-v3') {
                 throw 'échec moteur'
             }
@@ -323,7 +340,7 @@ Describe 'Get-MediaTranscript orchestration' {
     It 'sous -WhatIf, appelle le backend une fois par modèle sans publier' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'whatif-multi'
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhisperPath, $WhatIf)
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
             $script:SeenBackend.Add(@{ Model = $Model; WhatIf = [bool]$WhatIf })
             $null
         }
@@ -333,6 +350,37 @@ Describe 'Get-MediaTranscript orchestration' {
         $script:SeenBackend[0].WhatIf | Should -BeTrue
         $script:SeenBackend[1].WhatIf | Should -BeTrue
         Should -Invoke -ModuleName Tetram.Media.Transcript Publish-TetramTranscript -Times 0
+    }
+
+    It 'appelle le backend une fois par modèle même si les moteurs diffèrent' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-engine'
+        Get-MediaTranscript -LiteralPath $media -Model large-v3, reazon-k2-v2 -UseLanguage ja
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 2
+        $script:SeenBackend[0].Model | Should -Be 'large-v3'
+        $script:SeenBackend[1].Model | Should -Be 'reazon-k2-v2'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Publish-TetramTranscript -Times 2
+    }
+
+    It 'poursuit un modèle Sherpa si un modèle Whisper échoue' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-engine-fail'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
+            if ($Model -eq 'large-v3') {
+                throw 'échec whisper'
+            }
+            [pscustomobject]@{
+                language   = 'ja'
+                model      = $Model
+                audioTrack = 1
+                segments   = @()
+            }
+        }
+        { Get-MediaTranscript -LiteralPath $media -Model large-v3, reazon-k2-v2 -UseLanguage ja } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 2
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-ErrorLog -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Transcript Publish-TetramTranscript -Times 1 -ParameterFilter {
+            $Transcript.model -eq 'reazon-k2-v2'
+        }
     }
 }
 
