@@ -43,16 +43,17 @@ function Get-SherpaOnnxVadModelPath {
     [CmdletBinding()]
     [OutputType([string])]
     param(
-        [Parameter(Mandatory)] [string] $Exe
+        [Parameter(Mandatory)] [string] $Exe,
+        [Parameter(Mandatory)] [string] $FileName
     )
 
     $dir = Split-Path -Parent $Exe
     if ([string]::IsNullOrWhiteSpace($dir)) {
         $dir = (Get-Location).Path
     }
-    $vad = Join-Path $dir 'silero_vad.onnx'
+    $vad = Join-Path $dir $FileName
     if (-not (Test-Path -LiteralPath $vad -PathType Leaf)) {
-        throw "silero_vad.onnx introuvable à côté de '$Exe'."
+        throw "$FileName introuvable à côté de '$Exe'."
     }
     return $vad
 }
@@ -121,26 +122,50 @@ function Get-SherpaOnnxModelFiles {
 }
 
 function Get-SherpaOnnxArguments {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Silero')]
     [OutputType([string[]])]
     param(
         [Parameter(Mandatory)] [string] $Tokens,
         [Parameter(Mandatory)] [string] $Encoder,
         [Parameter(Mandatory)] [string] $Decoder,
         [Parameter(Mandatory)] [string] $Joiner,
-        [Parameter(Mandatory)] [string] $SileroVadModel,
+        [Parameter(ParameterSetName = 'Silero', Mandatory)] [string] $SileroVadModel,
+        [Parameter(ParameterSetName = 'Ten', Mandatory)] [string] $TenVadModel,
         [Parameter(Mandatory)] [string] $WavPath
     )
 
-    return @(
+    $arguments = @(
         "--tokens=$Tokens"
         "--encoder=$Encoder"
         "--decoder=$Decoder"
         "--joiner=$Joiner"
-        "--silero-vad-model=$SileroVadModel"
-        '--num-threads=1'
-        $WavPath
     )
+
+    # Silero et Ten sont deux pipelines VAD incompatibles sur le même binaire : un seul jeu de flags par invocation.
+    if ($PSCmdlet.ParameterSetName -eq 'Silero') {
+        $arguments += @(
+            "--silero-vad-model=$SileroVadModel"
+            '--silero-vad-threshold=0.40'
+            '--silero-vad-min-silence-duration=0.5'
+            '--silero-vad-min-speech-duration=0.25'
+            '--silero-vad-max-speech-duration=6'
+            '--silero-vad-window-size=512'
+            '--silero-vad-neg-threshold=-1'
+        )
+    }
+    else {
+        $arguments += @(
+            "--ten-vad-model=$TenVadModel"
+            '--ten-vad-threshold=0.5'
+            '--ten-vad-min-silence-duration=0.5'
+            '--ten-vad-min-speech-duration=0.25'
+            '--ten-vad-max-speech-duration=6'
+            '--ten-vad-window-size=256'
+        )
+    }
+
+    $arguments += $WavPath
+    return $arguments
 }
 
 function Get-SherpaOnnxFfmpegArguments {
@@ -345,9 +370,10 @@ function Convert-SherpaOnnxVadLine {
         throw "Segment Sherpa-ONNX invalide : end ($endToken) < start ($startToken)."
     }
 
+    # Sherpa imprime déjà %.3f ; l'addition de TimelineOffset réintroduit le bruit binaire du double.
     return [pscustomobject][ordered]@{
-        start = $start + $TimelineOffset
-        end   = $end + $TimelineOffset
+        start = [math]::Round($start + $TimelineOffset, 3)
+        end   = [math]::Round($end + $TimelineOffset, 3)
         text  = $text
     }
 }
@@ -406,22 +432,28 @@ function Invoke-SherpaOnnxTranscript {
 
     $exe = Get-SherpaOnnxPath -OverridePath $SherpaOnnxPath
     $modelFiles = Get-SherpaOnnxModelFiles -Model $Model
-    $vadModel = Get-SherpaOnnxVadModelPath -Exe $exe
+    $sileroVad = Get-SherpaOnnxVadModelPath -Exe $exe -FileName 'silero_vad.onnx'
+    $tenVad = Get-SherpaOnnxVadModelPath -Exe $exe -FileName 'ten-vad.onnx'
 
     # Chemin figé avant ShouldProcess : l'affichage et l'exécution doivent citer les mêmes arguments.
     $tempDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
     $wav = Join-Path $tempDir 'audio.wav'
     $ffmpegArgs = Get-SherpaOnnxFfmpegArguments -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
-    $sherpaArgs = Get-SherpaOnnxArguments `
-        -Tokens $modelFiles.Tokens `
-        -Encoder $modelFiles.Encoder `
-        -Decoder $modelFiles.Decoder `
-        -Joiner $modelFiles.Joiner `
-        -SileroVadModel $vadModel `
-        -WavPath $wav
-    Write-DebugLog -Text ($sherpaArgs -join ' ')
+    $sherpaCommon = @{
+        Tokens  = $modelFiles.Tokens
+        Encoder = $modelFiles.Encoder
+        Decoder = $modelFiles.Decoder
+        Joiner  = $modelFiles.Joiner
+        WavPath = $wav
+    }
+    $sileroArgs = Get-SherpaOnnxArguments @sherpaCommon -SileroVadModel $sileroVad
+    $tenArgs = Get-SherpaOnnxArguments @sherpaCommon -TenVadModel $tenVad
+    Write-DebugLog -Text ($sileroArgs -join ' ')
+    Write-DebugLog -Text ($tenArgs -join ' ')
+    $sherpaNoPath = 'tokens', 'encoder', 'decoder', 'joiner', 'silero-vad-model', 'ten-vad-model', 'num-threads'
     Show-CommandLine -Exe (Get-FFmpegPath) -Arguments $ffmpegArgs -NoPathDetectionParameters 'map', 'ac', 'c:a', 'hide_banner'
-    Show-CommandLine -Exe $exe -Arguments $sherpaArgs -NoPathDetectionParameters 'tokens', 'encoder', 'decoder', 'joiner', 'silero-vad-model', 'num-threads'
+    Show-CommandLine -Exe $exe -Arguments $sileroArgs -NoPathDetectionParameters $sherpaNoPath
+    Show-CommandLine -Exe $exe -Arguments $tenArgs -NoPathDetectionParameters $sherpaNoPath
 
     if (-not $Cmdlet.ShouldProcess($MediaPath, 'sherpa-onnx-vad-with-offline-asr')) {
         return
@@ -436,25 +468,30 @@ function Invoke-SherpaOnnxTranscript {
         [void](New-SherpaOnnxTempDirectory -Path $tempDir)
         ConvertTo-SherpaOnnxWav -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
 
-        $state = @{ ExitCode = $null; Stdout = $null }
-        Invoke-SherpaOnnx -Exe $exe -Arguments $sherpaArgs -State $state
+        foreach ($run in @(
+                [pscustomobject]@{ Arguments = $sileroArgs; Model = "$Model+silero" }
+                [pscustomobject]@{ Arguments = $tenArgs; Model = "$Model+ten" }
+            )) {
+            $state = @{ ExitCode = $null; Stdout = $null }
+            Invoke-SherpaOnnx -Exe $exe -Arguments $run.Arguments -State $state
 
-        if ($null -eq $state['ExitCode']) {
-            return
-        }
-        if ($state['ExitCode'] -ne 0) {
-            throw "sherpa-onnx-vad-with-offline-asr a échoué (code $($state['ExitCode'])) sur '$MediaPath' (modèle $Model)."
-        }
-        if ([string]::IsNullOrWhiteSpace($state['Stdout'])) {
-            throw "Aucun segment de transcription produit par sherpa-onnx-vad-with-offline-asr pour '$MediaPath' (modèle $Model)."
-        }
+            if ($null -eq $state['ExitCode']) {
+                return
+            }
+            if ($state['ExitCode'] -ne 0) {
+                throw "sherpa-onnx-vad-with-offline-asr a échoué (code $($state['ExitCode'])) sur '$MediaPath' (modèle $($run.Model))."
+            }
+            if ([string]::IsNullOrWhiteSpace($state['Stdout'])) {
+                throw "Aucun segment de transcription produit par sherpa-onnx-vad-with-offline-asr pour '$MediaPath' (modèle $($run.Model))."
+            }
 
-        return ConvertFrom-SherpaOnnxTranscript `
-            -InputObject $state['Stdout'] `
-            -Model $Model `
-            -UseLanguage $UseLanguage `
-            -AudioTrack $AudioTrack `
-            -TimelineOffset $timelineOffset
+            ConvertFrom-SherpaOnnxTranscript `
+                -InputObject $state['Stdout'] `
+                -Model $run.Model `
+                -UseLanguage $UseLanguage `
+                -AudioTrack $AudioTrack `
+                -TimelineOffset $timelineOffset
+        }
     }
     finally {
         Remove-SherpaOnnxTempDirectory -Path $tempDir

@@ -305,6 +305,32 @@ Describe 'Get-MediaTranscript orchestration' {
         (Get-Command Get-MediaTranscript).Parameters.ContainsKey('WhisperPath') | Should -BeFalse
     }
 
+    It 'publie chaque transcript si le backend en retourne plusieurs' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-transcript'
+        $script:PublishedModels = [System.Collections.Generic.List[string]]::new()
+        Mock -ModuleName Tetram.Media.Transcript Publish-TetramTranscript {
+            param($Transcript, $MediaPath)
+            $script:PublishedModels.Add([string]$Transcript.model)
+        }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
+            [pscustomobject]@{
+                language   = 'ja'
+                model      = 'reazon-k2-v2+silero'
+                audioTrack = 1
+                segments   = @()
+            }
+            [pscustomobject]@{
+                language   = 'ja'
+                model      = 'reazon-k2-v2+ten'
+                audioTrack = 1
+                segments   = @()
+            }
+        }
+        Get-MediaTranscript -LiteralPath $media -Model reazon-k2-v2 -UseLanguage ja
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 1
+        $script:PublishedModels | Should -Be @('reazon-k2-v2+silero', 'reazon-k2-v2+ten')
+    }
+
     It 'appelle le backend une fois par modèle et publie chaque transcript' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-model'
         Get-MediaTranscript -LiteralPath $media -Model large-v3, kotoba-v2 -UseLanguage ja

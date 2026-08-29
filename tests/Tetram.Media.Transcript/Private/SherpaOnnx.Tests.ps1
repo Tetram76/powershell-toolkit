@@ -271,24 +271,70 @@ Describe 'Get-SherpaOnnxModelFiles' {
 }
 
 Describe 'Get-SherpaOnnxArguments' {
-    It 'produit tokens/encoder/decoder/joiner, le VAD puis le WAV, frontières préservées' {
+    It 'avec SileroVadModel : flags silero uniquement, frontières préservées' {
         InModuleScope 'Tetram.Media.Transcript' {
             $tokens = Join-Path 'm' 'tokens.txt'
             $encoder = Join-Path 'm' 'encoder.onnx'
             $decoder = Join-Path 'm' 'decoder.onnx'
             $joiner = Join-Path 'm' 'joiner.onnx'
-            $vad = Join-Path 'bin' 'silero_vad.onnx'
+            $silero = Join-Path 'bin' 'silero_vad.onnx'
             $wav = Join-Path 'tmp' 'a.wav'
-            $got = Get-SherpaOnnxArguments -Tokens $tokens -Encoder $encoder -Decoder $decoder -Joiner $joiner -SileroVadModel $vad -WavPath $wav
+            $got = Get-SherpaOnnxArguments -Tokens $tokens -Encoder $encoder -Decoder $decoder -Joiner $joiner -SileroVadModel $silero -WavPath $wav
             $got | Should -Be @(
                 "--tokens=$tokens"
                 "--encoder=$encoder"
                 "--decoder=$decoder"
                 "--joiner=$joiner"
-                "--silero-vad-model=$vad"
-                '--num-threads=1'
+                "--silero-vad-model=$silero"
+                '--silero-vad-threshold=0.40'
+                '--silero-vad-min-silence-duration=0.5'
+                '--silero-vad-min-speech-duration=0.25'
+                '--silero-vad-max-speech-duration=6'
+                '--silero-vad-window-size=512'
+                '--silero-vad-neg-threshold=-1'
                 $wav
             )
+            $got | Should -Not -Match 'ten-vad'
+        }
+    }
+
+    It 'avec TenVadModel : flags ten uniquement, frontières préservées' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $tokens = Join-Path 'm' 'tokens.txt'
+            $encoder = Join-Path 'm' 'encoder.onnx'
+            $decoder = Join-Path 'm' 'decoder.onnx'
+            $joiner = Join-Path 'm' 'joiner.onnx'
+            $ten = Join-Path 'bin' 'ten-vad.onnx'
+            $wav = Join-Path 'tmp' 'a.wav'
+            $got = Get-SherpaOnnxArguments -Tokens $tokens -Encoder $encoder -Decoder $decoder -Joiner $joiner -TenVadModel $ten -WavPath $wav
+            $got | Should -Be @(
+                "--tokens=$tokens"
+                "--encoder=$encoder"
+                "--decoder=$decoder"
+                "--joiner=$joiner"
+                "--ten-vad-model=$ten"
+                '--ten-vad-threshold=0.5'
+                '--ten-vad-min-silence-duration=0.5'
+                '--ten-vad-min-speech-duration=0.25'
+                '--ten-vad-max-speech-duration=6'
+                '--ten-vad-window-size=256'
+                $wav
+            )
+            $got | Should -Not -Match 'silero-vad'
+        }
+    }
+
+    It 'refuse SileroVadModel et TenVadModel ensemble' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $tokens = Join-Path 'm' 'tokens.txt'
+            $encoder = Join-Path 'm' 'encoder.onnx'
+            $decoder = Join-Path 'm' 'decoder.onnx'
+            $joiner = Join-Path 'm' 'joiner.onnx'
+            $silero = Join-Path 'bin' 'silero_vad.onnx'
+            $ten = Join-Path 'bin' 'ten-vad.onnx'
+            $wav = Join-Path 'tmp' 'a.wav'
+            { Get-SherpaOnnxArguments -Tokens $tokens -Encoder $encoder -Decoder $decoder -Joiner $joiner -SileroVadModel $silero -TenVadModel $ten -WavPath $wav } |
+                Should -Throw
         }
     }
 }
@@ -303,7 +349,20 @@ Describe 'Get-SherpaOnnxVadModelPath' {
             $vad = Join-Path $dir 'silero_vad.onnx'
             Set-Content -LiteralPath $exe -Value 'stub'
             Set-Content -LiteralPath $vad -Value 'stub'
-            Get-SherpaOnnxVadModelPath -Exe $exe | Should -Be $vad
+            Get-SherpaOnnxVadModelPath -Exe $exe -FileName 'silero_vad.onnx' | Should -Be $vad
+        }
+    }
+
+    It 'pointe ten-vad.onnx dans le dossier de l''exécutable' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dir = Join-Path $Work 'dist-ten'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $exe = Join-Path $dir 'sherpa-onnx-offline.exe'
+            $vad = Join-Path $dir 'ten-vad.onnx'
+            Set-Content -LiteralPath $exe -Value 'stub'
+            Set-Content -LiteralPath $vad -Value 'stub'
+            Get-SherpaOnnxVadModelPath -Exe $exe -FileName 'ten-vad.onnx' | Should -Be $vad
         }
     }
 
@@ -314,7 +373,18 @@ Describe 'Get-SherpaOnnxVadModelPath' {
             New-Item -ItemType Directory -Path $dir -Force | Out-Null
             $exe = Join-Path $dir 'sherpa-onnx-offline.exe'
             Set-Content -LiteralPath $exe -Value 'stub'
-            { Get-SherpaOnnxVadModelPath -Exe $exe } | Should -Throw '*silero_vad.onnx*'
+            { Get-SherpaOnnxVadModelPath -Exe $exe -FileName 'silero_vad.onnx' } | Should -Throw '*silero_vad.onnx*'
+        }
+    }
+
+    It 'lève si ten-vad.onnx est absent à côté de l''exe' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dir = Join-Path $Work 'sans-ten'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $exe = Join-Path $dir 'sherpa-onnx-offline.exe'
+            Set-Content -LiteralPath $exe -Value 'stub'
+            { Get-SherpaOnnxVadModelPath -Exe $exe -FileName 'ten-vad.onnx' } | Should -Throw '*ten-vad.onnx*'
         }
     }
 }
@@ -384,14 +454,25 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
         }
     }
 
+    It 'arrondit start et end à 3 décimales après TimelineOffset' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $got = ConvertFrom-SherpaOnnxTranscript -InputObject '75.084 -- 517.382: texte' -Model 'reazon-k2-v2' -TimelineOffset 0.007
+            $got.segments[0].start | Should -Be 75.091
+            $got.segments[0].end | Should -Be 517.389
+            $json = ConvertTo-Json -InputObject $got.segments[0] -Compress
+            $json | Should -Not -Match '0000000'
+            $json | Should -Not -Match '9999999'
+        }
+    }
+
     It 'conserve un offset négatif sur la timeline du média' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaVadStdout } {
             param($Native)
             $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -TimelineOffset -1.25
-            $got.segments[0].start | Should -Be (0.08 - 1.25)
-            $got.segments[0].end | Should -Be (1.32 - 1.25)
-            $got.segments[1].start | Should -Be (2.56 - 1.25)
-            $got.segments[1].end | Should -Be (4.8 - 1.25)
+            $got.segments[0].start | Should -Be -1.17
+            $got.segments[0].end | Should -Be 0.07
+            $got.segments[1].start | Should -Be 1.31
+            $got.segments[1].end | Should -Be 3.55
         }
     }
 
@@ -560,6 +641,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         $script:FakeSherpaExe = Join-Path $script:FakeSherpaDir 'sherpa-onnx-offline.exe'
         Set-Content -LiteralPath $script:FakeSherpaExe -Value 'stub'
         Set-Content -LiteralPath (Join-Path $script:FakeSherpaDir 'silero_vad.onnx') -Value 'stub'
+        Set-Content -LiteralPath (Join-Path $script:FakeSherpaDir 'ten-vad.onnx') -Value 'stub'
         Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxPath { $script:FakeSherpaExe }
         Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxModelFiles {
             [pscustomobject]@{
@@ -572,7 +654,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         Mock -ModuleName Tetram.Media.Transcript Get-FFmpegPath { 'ffmpeg.exe' }
         Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset { 0 }
         $script:SeenFfmpeg = $null
-        $script:SeenSherpa = $null
+        $script:SeenSherpaCalls = [System.Collections.Generic.List[object]]::new()
         $script:SeenWav = $null
     }
 
@@ -609,9 +691,14 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         }
         Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx {
             param($Exe, $Arguments, $Cmdlet, $State)
-            $script:SeenSherpa = $Arguments
+            $script:SeenSherpaCalls.Add([string[]]@($Arguments))
             $State['ExitCode'] = 0
-            $State['Stdout'] = $script:NativeSherpaVadStdout
+            if ($Arguments -like '--silero-vad-model=*') {
+                $State['Stdout'] = $script:NativeSherpaVadStdout
+            }
+            else {
+                $State['Stdout'] = '0.200 -- 0.400: ten-only'
+            }
         }
 
         $script:ShownWavs = @()
@@ -625,17 +712,29 @@ Describe 'Invoke-SherpaOnnxTranscript' {
 
         $mapAt = [array]::IndexOf(@($script:SeenFfmpeg), '-map')
         $script:SeenFfmpeg[$mapAt + 1] | Should -Be '0:a:1'
-        $script:SeenSherpa[-1] | Should -Be $script:SeenWav
-        $script:SeenSherpa | Should -Contain ("--silero-vad-model=" + (Join-Path $script:FakeSherpaDir 'silero_vad.onnx'))
-        $script:ShownWavs | Should -Be @($script:SeenWav, $script:SeenWav)
-        $got.engine | Should -Be 'sherpa-onnx'
-        $got.model | Should -Be 'reazon-k2-v2'
-        $got.audioTrack | Should -Be 2
-        $got.segments.Count | Should -Be 2
-        $got.segments[0].text | Should -Be 'こんにちは'
-        $got.segments[1].text | Should -Be 'どうしたの'
+        $script:SeenSherpaCalls.Count | Should -Be 2
+        $script:SeenSherpaCalls[0][-1] | Should -Be $script:SeenWav
+        $script:SeenSherpaCalls[1][-1] | Should -Be $script:SeenWav
+        $script:SeenSherpaCalls[0] | Should -Contain ("--silero-vad-model=" + (Join-Path $script:FakeSherpaDir 'silero_vad.onnx'))
+        $script:SeenSherpaCalls[0] | Should -Not -Contain ("--ten-vad-model=" + (Join-Path $script:FakeSherpaDir 'ten-vad.onnx'))
+        $script:SeenSherpaCalls[1] | Should -Contain ("--ten-vad-model=" + (Join-Path $script:FakeSherpaDir 'ten-vad.onnx'))
+        $script:SeenSherpaCalls[1] | Should -Not -Contain ("--silero-vad-model=" + (Join-Path $script:FakeSherpaDir 'silero_vad.onnx'))
+        $script:ShownWavs | Should -Be @($script:SeenWav, $script:SeenWav, $script:SeenWav)
+        $got.Count | Should -Be 2
+        $got[0].engine | Should -Be 'sherpa-onnx'
+        $got[0].model | Should -Be 'reazon-k2-v2+silero'
+        $got[0].audioTrack | Should -Be 2
+        $got[0].segments.Count | Should -Be 2
+        $got[0].segments[0].text | Should -Be 'こんにちは'
+        $got[0].segments[1].text | Should -Be 'どうしたの'
+        $got[1].engine | Should -Be 'sherpa-onnx'
+        $got[1].model | Should -Be 'reazon-k2-v2+ten'
+        $got[1].audioTrack | Should -Be 2
+        $got[1].segments.Count | Should -Be 1
+        $got[1].segments[0].text | Should -Be 'ten-only'
         Test-Path -LiteralPath $script:SeenWav | Should -BeFalse
-        Should -Invoke -ModuleName Tetram.Media.Transcript Show-CommandLine -Times 2
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 2
+        Should -Invoke -ModuleName Tetram.Media.Transcript Show-CommandLine -Times 3
     }
 
     It 'applique l''offset de piste à la timeline du média' {
@@ -661,12 +760,17 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet
         }
 
-        $got.segments.Count | Should -Be 2
-        $got.segments[0].start | Should -Be 10.08
-        $got.segments[0].end | Should -Be 11.32
-        $got.segments[1].start | Should -Be 12.56
-        $got.segments[1].end | Should -Be 14.8
-        $got.segments[0].PSObject.Properties.Name | Should -Not -Contain 'diagnostics'
+        $got.Count | Should -Be 2
+        $got[0].model | Should -Be 'reazon-k2-v2+silero'
+        $got[1].model | Should -Be 'reazon-k2-v2+ten'
+        foreach ($transcript in $got) {
+            $transcript.segments.Count | Should -Be 2
+            $transcript.segments[0].start | Should -Be 10.08
+            $transcript.segments[0].end | Should -Be 11.32
+            $transcript.segments[1].start | Should -Be 12.56
+            $transcript.segments[1].end | Should -Be 14.8
+            $transcript.segments[0].PSObject.Properties.Name | Should -Not -Contain 'diagnostics'
+        }
     }
 
     It 'n''appelle ni ffprobe ni FFmpeg si ShouldProcess refuse' {
@@ -775,7 +879,28 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 0
-        Should -Invoke -ModuleName Tetram.Media.Transcript Show-CommandLine -Times 2
+        Should -Invoke -ModuleName Tetram.Media.Transcript Show-CommandLine -Times 3
+    }
+
+    It 'lève si ten-vad.onnx est absent à côté de l''exe' {
+        $media = Join-Path $TestDrive 'no-ten.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        $dir = Join-Path $TestDrive 'exe-sans-ten'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        $exe = Join-Path $dir 'sherpa-onnx-offline.exe'
+        Set-Content -LiteralPath $exe -Value 'stub'
+        Set-Content -LiteralPath (Join-Path $dir 'silero_vad.onnx') -Value 'stub'
+        Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxPath { $exe }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-FFmpeg { throw 'ne doit pas tourner' }
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            Media  = $media
+            Cmdlet = $script:FakeCmdlet
+        } {
+            param($Media, $Cmdlet)
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet } |
+                Should -Throw '*ten-vad.onnx*'
+        }
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
     }
 
     It 'lève si silero_vad.onnx est absent à côté de l''exe' {
