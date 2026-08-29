@@ -102,6 +102,15 @@ Describe 'Show-CommandLine (-PassThru)' {
 
         $lines[1] | Should -BeExactly '    -i input.mkv'
     }
+
+    It 'ne fusionne pas le token suivant avec un parametre deja de forme nom=valeur' {
+
+        $lines = Show-CommandLine -Exe 'sherpa-onnx' -Arguments '--num-threads=1', 'audio.wav' -PassThru
+        $lines | Should -HaveCount 3
+        $lines[0] | Should -BeExactly 'sherpa-onnx'
+        $lines[1] | Should -BeExactly '    --num-threads=1'
+        $lines[2] | Should -BeExactly '    audio.wav'
+    }
 }
 
 Describe 'Write-InfoWarning' {
