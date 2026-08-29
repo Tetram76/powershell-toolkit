@@ -259,12 +259,65 @@ function ConvertTo-SherpaOnnxWav {
     }
 }
 
+function Get-SherpaOnnxWavDuration {
+    [CmdletBinding()]
+    [OutputType([double])]
+    param(
+        [Parameter(Mandatory)] [string] $LiteralPath
+    )
+
+    $bytes = [IO.File]::ReadAllBytes($LiteralPath)
+    if ($bytes.Length -lt 44) {
+        throw "WAV temporaire trop court pour lire une durée : '$LiteralPath'."
+    }
+
+    $riff = [Text.Encoding]::ASCII.GetString($bytes, 0, 4)
+    $wave = [Text.Encoding]::ASCII.GetString($bytes, 8, 4)
+    if ($riff -ne 'RIFF' -or $wave -ne 'WAVE') {
+        throw "Le temporaire n'est pas un WAV PCM : '$LiteralPath'."
+    }
+
+    $offset = 12
+    $sampleRate = 0
+    $channels = 0
+    $bitsPerSample = 0
+    $dataSize = -1
+    while (($offset + 8) -le $bytes.Length) {
+        $chunkId = [Text.Encoding]::ASCII.GetString($bytes, $offset, 4)
+        $chunkSize = [BitConverter]::ToInt32($bytes, $offset + 4)
+        if ($chunkSize -lt 0) {
+            throw "Chunk WAV illisible dans '$LiteralPath'."
+        }
+
+        if ($chunkId -eq 'fmt ' -and $chunkSize -ge 16) {
+            $channels = [BitConverter]::ToInt16($bytes, $offset + 10)
+            $sampleRate = [BitConverter]::ToInt32($bytes, $offset + 12)
+            $bitsPerSample = [BitConverter]::ToInt16($bytes, $offset + 22)
+        }
+        elseif ($chunkId -eq 'data') {
+            $dataSize = $chunkSize
+            break
+        }
+
+        $offset += 8 + $chunkSize
+        if (($chunkSize % 2) -eq 1) {
+            $offset++
+        }
+    }
+
+    $bytesPerFrame = [int][Math]::Ceiling($bitsPerSample / 8.0) * $channels
+    if ($sampleRate -le 0 -or $bytesPerFrame -le 0 -or $dataSize -lt 0) {
+        throw "En-tête WAV incomplet, durée illisible : '$LiteralPath'."
+    }
+
+    return [double]$dataSize / ($sampleRate * $bytesPerFrame)
+}
+
 function Invoke-SherpaOnnx {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Exe,
         [Parameter(Mandatory)] [string[]] $Arguments,
-        [Parameter(Mandatory)] $Cmdlet,
         [Parameter(Mandatory)] [hashtable] $State
     )
 
@@ -273,14 +326,32 @@ function Invoke-SherpaOnnx {
 
     Show-CommandLine -Exe $Exe -Arguments $Arguments -NoPathDetectionParameters 'tokens', 'encoder', 'decoder', 'joiner', 'num-threads'
 
-    if (-not $Cmdlet.ShouldProcess($Arguments[-1], 'sherpa-onnx-offline')) {
-        return
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $Exe
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $false
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    foreach ($argument in $Arguments) {
+        [void]$psi.ArgumentList.Add($argument)
     }
 
-    # JSON natif sur stdout ; stderr (config, RTF) reste visible.
-    $output = & $Exe @Arguments
-    $State['ExitCode'] = $LASTEXITCODE
-    $State['Stdout'] = @($output | ForEach-Object { "$_" }) -join "`n"
+    # AsJsonString() écrit du UTF-8 ; & $Exe décode selon [Console]::OutputEncoding (souvent OEM).
+    $process = $null
+    $savedOutputEncoding = [Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        $process = [System.Diagnostics.Process]::Start($psi)
+        $State['Stdout'] = $process.StandardOutput.ReadToEnd()
+        $process.WaitForExit()
+        $State['ExitCode'] = $process.ExitCode
+    }
+    finally {
+        [Console]::OutputEncoding = $savedOutputEncoding
+        if ($null -ne $process) {
+            $process.Dispose()
+        }
+    }
 }
 
 function ConvertFrom-SherpaOnnxTranscript {
@@ -290,7 +361,7 @@ function ConvertFrom-SherpaOnnxTranscript {
         [Parameter(Mandatory)] [string] $Model,
         [string] $UseLanguage,
         [int] $AudioTrack = 1,
-        [double] $WavDuration,
+        [Parameter(Mandatory)] [double] $WavDuration,
         [double] $TimelineOffset = 0
     )
 
@@ -337,19 +408,13 @@ function ConvertFrom-SherpaOnnxTranscript {
 
     $shiftedTimestamps = @($timestamps | ForEach-Object { [double]$_ + $TimelineOffset })
 
+    # Reazon (Zipformer Transducer) n'émet pas de durations TDT ; le dernier timestamp token
+    # sous-couvre le WAV. Le segment durable couvre l'extrait, pas le dernier token.
     $segStart = $TimelineOffset
-    $segEnd = $TimelineOffset
     if ($shiftedTimestamps.Count -gt 0) {
         $segStart = $shiftedTimestamps[0]
-        $lastIdx = $shiftedTimestamps.Count - 1
-        $segEnd = $shiftedTimestamps[$lastIdx]
-        if ($lastIdx -lt $durations.Count -and $null -ne $durations[$lastIdx]) {
-            $segEnd = $segEnd + [double]$durations[$lastIdx]
-        }
     }
-    elseif ($PSBoundParameters.ContainsKey('WavDuration')) {
-        $segEnd = $WavDuration + $TimelineOffset
-    }
+    $segEnd = $WavDuration + $TimelineOffset
 
     $segment = [ordered]@{
         start = $segStart
@@ -411,8 +476,15 @@ function Invoke-SherpaOnnxTranscript {
     $exe = Get-SherpaOnnxPath -OverridePath $SherpaOnnxPath
     $modelFiles = Get-SherpaOnnxModelFiles -Model $Model
 
+    if (-not $WhatIf) {
+        if (-not $Cmdlet.ShouldProcess($MediaPath, 'sherpa-onnx-offline')) {
+            return
+        }
+    }
+
     $tempDir = $null
     $timelineOffset = 0.0
+    $wavDuration = $null
     try {
         if ($WhatIf) {
             $wav = Join-Path ([IO.Path]::GetTempPath()) (([guid]::NewGuid().ToString()) + '.wav')
@@ -422,6 +494,7 @@ function Invoke-SherpaOnnxTranscript {
             $tempDir = New-SherpaOnnxTempDirectory
             $wav = Join-Path $tempDir 'audio.wav'
             ConvertTo-SherpaOnnxWav -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
+            $wavDuration = Get-SherpaOnnxWavDuration -LiteralPath $wav
         }
 
         $sherpaArgs = Get-SherpaOnnxArguments `
@@ -433,7 +506,7 @@ function Invoke-SherpaOnnxTranscript {
         Write-DebugLog -Text ($sherpaArgs -join ' ')
 
         $state = @{ ExitCode = $null; Stdout = $null }
-        Invoke-SherpaOnnx -Exe $exe -Arguments $sherpaArgs -Cmdlet $Cmdlet -State $state
+        Invoke-SherpaOnnx -Exe $exe -Arguments $sherpaArgs -State $state
 
         if ($null -eq $state['ExitCode']) {
             return
@@ -450,6 +523,7 @@ function Invoke-SherpaOnnxTranscript {
             -Model $Model `
             -UseLanguage $UseLanguage `
             -AudioTrack $AudioTrack `
+            -WavDuration $wavDuration `
             -TimelineOffset $timelineOffset
     }
     finally {
