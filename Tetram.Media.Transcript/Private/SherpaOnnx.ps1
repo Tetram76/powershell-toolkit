@@ -266,51 +266,26 @@ function Get-SherpaOnnxWavDuration {
         [Parameter(Mandatory)] [string] $LiteralPath
     )
 
-    $bytes = [IO.File]::ReadAllBytes($LiteralPath)
-    if ($bytes.Length -lt 44) {
-        throw "WAV temporaire trop court pour lire une durée : '$LiteralPath'."
+    # Même source de vérité que start_time : FFmpeg a écrit le WAV, ffprobe en lit la durée.
+    $probeArgs = @(
+        '-v', 'error'
+        '-show_entries', 'format=duration'
+        '-of', 'csv=p=0'
+        $LiteralPath
+    )
+    $raw = Invoke-SherpaOnnxFfprobe -Arguments $probeArgs
+    $text = ((@($raw) | ForEach-Object { "$_" }) -join '').Trim()
+    $value = 0.0
+    if ([string]::IsNullOrWhiteSpace($text) -or $text -eq 'N/A' -or
+        -not [double]::TryParse(
+            $text,
+            [Globalization.NumberStyles]::Float,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [ref]$value) -or
+        $value -le 0) {
+        throw "ffprobe n'a pas fourni de durée exploitable pour '$LiteralPath'."
     }
-
-    $riff = [Text.Encoding]::ASCII.GetString($bytes, 0, 4)
-    $wave = [Text.Encoding]::ASCII.GetString($bytes, 8, 4)
-    if ($riff -ne 'RIFF' -or $wave -ne 'WAVE') {
-        throw "Le temporaire n'est pas un WAV PCM : '$LiteralPath'."
-    }
-
-    $offset = 12
-    $sampleRate = 0
-    $channels = 0
-    $bitsPerSample = 0
-    $dataSize = -1
-    while (($offset + 8) -le $bytes.Length) {
-        $chunkId = [Text.Encoding]::ASCII.GetString($bytes, $offset, 4)
-        $chunkSize = [BitConverter]::ToInt32($bytes, $offset + 4)
-        if ($chunkSize -lt 0) {
-            throw "Chunk WAV illisible dans '$LiteralPath'."
-        }
-
-        if ($chunkId -eq 'fmt ' -and $chunkSize -ge 16) {
-            $channels = [BitConverter]::ToInt16($bytes, $offset + 10)
-            $sampleRate = [BitConverter]::ToInt32($bytes, $offset + 12)
-            $bitsPerSample = [BitConverter]::ToInt16($bytes, $offset + 22)
-        }
-        elseif ($chunkId -eq 'data') {
-            $dataSize = $chunkSize
-            break
-        }
-
-        $offset += 8 + $chunkSize
-        if (($chunkSize % 2) -eq 1) {
-            $offset++
-        }
-    }
-
-    $bytesPerFrame = [int][Math]::Ceiling($bitsPerSample / 8.0) * $channels
-    if ($sampleRate -le 0 -or $bytesPerFrame -le 0 -or $dataSize -lt 0) {
-        throw "En-tête WAV incomplet, durée illisible : '$LiteralPath'."
-    }
-
-    return [double]$dataSize / ($sampleRate * $bytesPerFrame)
+    return $value
 }
 
 function Invoke-SherpaOnnx {
@@ -476,26 +451,34 @@ function Invoke-SherpaOnnxTranscript {
     $exe = Get-SherpaOnnxPath -OverridePath $SherpaOnnxPath
     $modelFiles = Get-SherpaOnnxModelFiles -Model $Model
 
-    if (-not $WhatIf) {
-        if (-not $Cmdlet.ShouldProcess($MediaPath, 'sherpa-onnx-offline')) {
-            return
-        }
+    $previewWav = Join-Path ([IO.Path]::GetTempPath()) (([guid]::NewGuid().ToString()) + '.wav')
+    $ffmpegArgs = Get-SherpaOnnxFfmpegArguments -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $previewWav
+    $sherpaArgs = Get-SherpaOnnxArguments `
+        -Tokens $modelFiles.Tokens `
+        -Encoder $modelFiles.Encoder `
+        -Decoder $modelFiles.Decoder `
+        -Joiner $modelFiles.Joiner `
+        -WavPath $previewWav
+    Write-DebugLog -Text ($sherpaArgs -join ' ')
+    Show-CommandLine -Exe (Get-FFmpegPath) -Arguments $ffmpegArgs -NoPathDetectionParameters 'map', 'ac', 'c:a', 'hide_banner'
+    Show-CommandLine -Exe $exe -Arguments $sherpaArgs -NoPathDetectionParameters 'tokens', 'encoder', 'decoder', 'joiner', 'num-threads'
+
+    if (-not $Cmdlet.ShouldProcess($MediaPath, 'sherpa-onnx-offline')) {
+        return
+    }
+    if ($WhatIf) {
+        return
     }
 
     $tempDir = $null
     $timelineOffset = 0.0
     $wavDuration = $null
     try {
-        if ($WhatIf) {
-            $wav = Join-Path ([IO.Path]::GetTempPath()) (([guid]::NewGuid().ToString()) + '.wav')
-        }
-        else {
-            $timelineOffset = Get-SherpaOnnxTimelineOffset -MediaPath $MediaPath -AudioTrack $AudioTrack
-            $tempDir = New-SherpaOnnxTempDirectory
-            $wav = Join-Path $tempDir 'audio.wav'
-            ConvertTo-SherpaOnnxWav -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
-            $wavDuration = Get-SherpaOnnxWavDuration -LiteralPath $wav
-        }
+        $timelineOffset = Get-SherpaOnnxTimelineOffset -MediaPath $MediaPath -AudioTrack $AudioTrack
+        $tempDir = New-SherpaOnnxTempDirectory
+        $wav = Join-Path $tempDir 'audio.wav'
+        ConvertTo-SherpaOnnxWav -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
+        $wavDuration = Get-SherpaOnnxWavDuration -LiteralPath $wav
 
         $sherpaArgs = Get-SherpaOnnxArguments `
             -Tokens $modelFiles.Tokens `
@@ -503,7 +486,6 @@ function Invoke-SherpaOnnxTranscript {
             -Decoder $modelFiles.Decoder `
             -Joiner $modelFiles.Joiner `
             -WavPath $wav
-        Write-DebugLog -Text ($sherpaArgs -join ' ')
 
         $state = @{ ExitCode = $null; Stdout = $null }
         Invoke-SherpaOnnx -Exe $exe -Arguments $sherpaArgs -State $state
