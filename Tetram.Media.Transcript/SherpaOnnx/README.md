@@ -10,7 +10,7 @@ Ce modèle sert à valider le routage vers Sherpa-ONNX. Ce n'est pas le résulta
 
 ### Exécutable
 
-`sherpa-onnx-vad-with-offline-asr.exe` doit être présent **à la racine de ce dossier**, avec les DLL / runtime de la même distribution (onnxruntime, etc.), `silero_vad.onnx` et `ten-vad.onnx` (même dossier que l'exe).
+`sherpa-onnx-vad-with-offline-asr.exe` doit être présent **à la racine de ce dossier**, avec les DLL / runtime de la même distribution (onnxruntime, etc.), `silero_vad.onnx` et `ten-vad.onnx` (même dossier que l'exe). Les deux fichiers VAD sont requis pour le pipeline Reazon actuel.
 
 Si l'exécutable n'est pas ici, le backend cherche `sherpa-onnx-vad-with-offline-asr` dans le `PATH`.
 
@@ -33,9 +33,11 @@ Les binaires, DLL et poids tiers ne sont **pas** versionnés.
 
 Les archives ASR pré-entraînées sont sur [asr-models](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models). Extraire le contenu dans `models/<nom>/`. `Get-MediaTranscript` ne télécharge rien automatiquement.
 
-## Commande native à valider
+## Commandes natives (deux invocations)
 
-Cette combinaison n'a pas encore été exécutée dans ce dépôt : les tests Pester ne lancent jamais `sherpa-onnx-vad-with-offline-asr.exe`.
+Les tests Pester ne lancent jamais `sherpa-onnx-vad-with-offline-asr.exe`.
+
+`Get-MediaTranscript -Model reazon-k2-v2` prépare **un** WAV temporaire (PCM 16-bit, mono, 16 kHz via `Tetram.Media.FFmpeg`) puis lance **deux** invocations séparées du même binaire sur ce WAV : Silero, puis TEN. Silero et TEN ne sont jamais combinés dans la même commande. Le flag `--num-threads` n'est pas passé : Sherpa conserve son défaut.
 
 Une fois la distribution et les poids posés, valider **exactement** les fichiers que le backend sélectionne (recette Reazon INT8 : encoder INT8 + decoder FP32 + joiner INT8) :
 
@@ -46,13 +48,43 @@ sherpa-onnx-vad-with-offline-asr.exe ^
   --decoder=models\reazon-k2-v2\decoder-epoch-99-avg-1.onnx ^
   --joiner=models\reazon-k2-v2\joiner-epoch-99-avg-1.int8.onnx ^
   --silero-vad-model=silero_vad.onnx ^
-  --ten-vad-model=ten-vad.onnx ^
-  --num-threads=1 ^
+  --silero-vad-threshold=0.40 ^
+  --silero-vad-min-silence-duration=0.5 ^
+  --silero-vad-min-speech-duration=0.25 ^
+  --silero-vad-max-speech-duration=6 ^
+  --silero-vad-window-size=512 ^
+  --silero-vad-neg-threshold=-1 ^
   <wav-japonais>.wav
+```
+
+```text
+sherpa-onnx-vad-with-offline-asr.exe ^
+  --tokens=models\reazon-k2-v2\tokens.txt ^
+  --encoder=models\reazon-k2-v2\encoder-epoch-99-avg-1.int8.onnx ^
+  --decoder=models\reazon-k2-v2\decoder-epoch-99-avg-1.onnx ^
+  --joiner=models\reazon-k2-v2\joiner-epoch-99-avg-1.int8.onnx ^
+  --ten-vad-model=ten-vad.onnx ^
+  --ten-vad-threshold=0.5 ^
+  --ten-vad-min-silence-duration=0.5 ^
+  --ten-vad-min-speech-duration=0.25 ^
+  --ten-vad-max-speech-duration=6 ^
+  --ten-vad-window-size=256 ^
+  <wav-japonais>.wav
+```
+
+Le binaire écrit **une ligne par segment** sur stdout :
+
+```text
+<start> -- <end>: <text>
+```
+
+Pas de JSON natif. Le backend parse ces lignes, replace les timestamps sur la timeline du média (arrondi à 3 décimales) et publie deux sidecars Tetram. Le champ `model` reste `reazon-k2-v2` ; `vad` vaut `silero` ou `ten`.
+
+```text
+<media-base>.track <trackid>.<langue>.reazon-k2-v2.silero.json
+<media-base>.track <trackid>.<langue>.reazon-k2-v2.ten.json
 ```
 
 Sous Windows, Sherpa demande le code page UTF-8 (65001) si le japonais se corrompt. Le backend capture stdout en UTF-8, indépendamment de l'encodage de la console.
 
-Le JSON natif est émis sur stdout (`text`, `tokens`, `timestamps`, éventuellement `durations` et `ys_log_probs`). Les timestamps sont au niveau token, pas une segmentation phrase. Le backend Tetram en fait un seul segment durable borné par la durée du WAV extrait.
-
-Le WAV passé à Sherpa doit être PCM 16-bit ; le backend le prépare via `Tetram.Media.FFmpeg` à partir de la piste `-AudioTrack`.
+Le WAV temporaire est commun aux deux runs et n'est pas conservé après succès ou échec.
