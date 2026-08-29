@@ -39,19 +39,21 @@ function Get-MediaTranscript {
 
         foreach ($currentModel in @($Model)) {
             try {
-                $transcript = Invoke-TranscriptBackend `
-                    -MediaPath $mediaPath `
-                    -Model $currentModel `
-                    -AudioTrack $AudioTrack `
-                    -UseLanguage $UseLanguage `
-                    -Cmdlet $PSCmdlet `
-                    -WhatIf:$WhatIfPreference
+                foreach ($transcript in @(
+                        Invoke-TranscriptBackend `
+                            -MediaPath $mediaPath `
+                            -Model $currentModel `
+                            -AudioTrack $AudioTrack `
+                            -UseLanguage $UseLanguage `
+                            -Cmdlet $PSCmdlet `
+                            -WhatIf:$WhatIfPreference
+                    )) {
+                    if ($null -eq $transcript) {
+                        continue
+                    }
 
-                if ($null -eq $transcript) {
-                    continue
+                    Publish-TetramTranscript -Transcript $transcript -MediaPath $mediaPath
                 }
-
-                Publish-TetramTranscript -Transcript $transcript -MediaPath $mediaPath
             }
             catch {
                 Write-ErrorLog -Text $_.Exception.Message

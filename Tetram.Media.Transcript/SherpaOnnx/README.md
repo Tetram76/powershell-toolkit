@@ -10,7 +10,7 @@ Ce modèle sert à valider le routage vers Sherpa-ONNX. Ce n'est pas le résulta
 
 ### Exécutable
 
-`sherpa-onnx-vad-with-offline-asr.exe` doit être présent **à la racine de ce dossier**, avec les DLL / runtime de la même distribution (onnxruntime, etc.) et `silero_vad.onnx` (même dossier que l'exe).
+`sherpa-onnx-vad-with-offline-asr.exe` doit être présent **à la racine de ce dossier**, avec les DLL / runtime de la même distribution (onnxruntime, etc.), `silero_vad.onnx` et `ten-vad.onnx` (même dossier que l'exe).
 
 Si l'exécutable n'est pas ici, le backend cherche `sherpa-onnx-vad-with-offline-asr` dans le `PATH`.
 
@@ -46,6 +46,7 @@ sherpa-onnx-vad-with-offline-asr.exe ^
   --decoder=models\reazon-k2-v2\decoder-epoch-99-avg-1.onnx ^
   --joiner=models\reazon-k2-v2\joiner-epoch-99-avg-1.int8.onnx ^
   --silero-vad-model=silero_vad.onnx ^
+  --ten-vad-model=ten-vad.onnx ^
   --num-threads=1 ^
   <wav-japonais>.wav
 ```
