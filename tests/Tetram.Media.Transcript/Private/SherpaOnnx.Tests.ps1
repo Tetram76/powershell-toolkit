@@ -174,7 +174,116 @@ Describe 'Get-SherpaOnnxModelFiles' {
             try {
                 $script:SherpaOnnxRoot = Join-Path $Work 'vide'
                 New-Item -ItemType Directory -Path $script:SherpaOnnxRoot -Force | Out-Null
-                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*tokens.txt*'
+                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*reazon*'
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'ne retombe pas sur un autre Zipformer si aucun dossier Reazon n''existe' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $root = Join-Path $Work 'autre-zipformer'
+            $modelDir = Join-Path $root 'sherpa-onnx-zipformer-en'
+            New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
+            foreach ($name in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
+                Set-Content -LiteralPath (Join-Path $modelDir $name) -Value 'stub'
+            }
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $root
+                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*reazon*'
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'ignore un Zipformer non Reazon même si un dossier Reazon est incomplet' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $root = Join-Path $Work 'reazon-incomplet-plus-autre'
+            $reazonDir = Join-Path $root 'reazon-k2-v2'
+            $otherDir = Join-Path $root 'sherpa-onnx-zipformer-en'
+            New-Item -ItemType Directory -Path $reazonDir -Force | Out-Null
+            New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $reazonDir 'tokens.txt') -Value 'stub'
+            foreach ($file in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
+                Set-Content -LiteralPath (Join-Path $otherDir $file) -Value 'stub'
+            }
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $root
+                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*incomplet*'
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'ne traite pas comme Reazon un Zipformer dont seul un ancêtre contient reazon' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $root = Join-Path $Work 'reazon-workspace'
+            $modelDir = Join-Path $root 'sherpa-onnx-zipformer-en'
+            New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
+            foreach ($name in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
+                Set-Content -LiteralPath (Join-Path $modelDir $name) -Value 'stub'
+            }
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $root
+                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*reazon*'
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'prend le seul dossier Reazon complet et ignore un autre Zipformer' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $root = Join-Path $Work 'reazon-plus-autre'
+            $reazonDir = Join-Path $root 'reazon-k2-v2'
+            $otherDir = Join-Path $root 'sherpa-onnx-zipformer-en'
+            New-Item -ItemType Directory -Path $reazonDir -Force | Out-Null
+            New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
+            foreach ($file in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
+                Set-Content -LiteralPath (Join-Path $reazonDir $file) -Value 'stub'
+                Set-Content -LiteralPath (Join-Path $otherDir $file) -Value 'stub'
+            }
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $root
+                $got = Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2'
+                $got.Tokens | Should -Be (Join-Path $reazonDir 'tokens.txt')
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'lève si plusieurs dossiers Reazon complets sont présents' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $root = Join-Path $Work 'deux-reazon'
+            foreach ($name in @('reazon-k2-v2', 'sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01')) {
+                $modelDir = Join-Path $root $name
+                New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
+                foreach ($file in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
+                    Set-Content -LiteralPath (Join-Path $modelDir $file) -Value 'stub'
+                }
+            }
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $root
+                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*ambigu*'
             }
             finally {
                 $script:SherpaOnnxRoot = $saved
@@ -271,6 +380,16 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
         }
     }
 
+    It 'conserve un offset négatif sur la timeline du média' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaJson } {
+            param($Native)
+            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -TimelineOffset -1.25 -WavDuration 13.433
+            $got.segments[0].start | Should -Be (0.08 - 1.25)
+            $got.segments[0].end | Should -Be (13.433 - 1.25)
+            $got.segments[0].diagnostics.timestamps | Should -Be @((0.08 - 1.25), (0.32 - 1.25), (0.56 - 1.25))
+        }
+    }
+
     It 'refuse de borner le segment sur le dernier timestamp token' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaJson } {
             param($Native)
@@ -356,6 +475,20 @@ Describe 'Get-SherpaOnnxTimelineOffset' {
             Get-SherpaOnnxTimelineOffset -MediaPath 'film.mkv' -AudioTrack 1 | Should -Be 0
         }
     }
+
+    It 'lève si start_time est illisible' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            Mock Invoke-SherpaOnnxFfprobe { 'pas-un-nombre' }
+            { Get-SherpaOnnxTimelineOffset -MediaPath 'film.mkv' -AudioTrack 1 } | Should -Throw '*start_time*'
+        }
+    }
+
+    It 'conserve un start_time négatif : c''est un offset média, pas une erreur de probe' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            Mock Invoke-SherpaOnnxFfprobe { '-1.250000' }
+            Get-SherpaOnnxTimelineOffset -MediaPath 'film.mkv' -AudioTrack 1 | Should -Be -1.25
+        }
+    }
 }
 
 Describe 'Invoke-SherpaOnnxTranscript' {
@@ -406,6 +539,10 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             Set-Content -LiteralPath $Arguments[-1] -Value 'RIFF'
             return 0
         }
+        Mock -ModuleName Tetram.Media.Transcript Show-CommandLine {
+            param($Exe, $Arguments)
+            $script:ShownWavs += @($Arguments[-1])
+        }
         Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx {
             param($Exe, $Arguments, $Cmdlet, $State)
             $script:SeenSherpa = $Arguments
@@ -413,6 +550,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             $State['Stdout'] = $script:NativeSherpaJson
         }
 
+        $script:ShownWavs = @()
         $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
             Media  = $media
             Cmdlet = $script:FakeCmdlet
@@ -424,10 +562,12 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         $mapAt = [array]::IndexOf(@($script:SeenFfmpeg), '-map')
         $script:SeenFfmpeg[$mapAt + 1] | Should -Be '0:a:1'
         $script:SeenSherpa[-1] | Should -Be $script:SeenWav
+        $script:ShownWavs | Should -Be @($script:SeenWav, $script:SeenWav)
         $got.engine | Should -Be 'sherpa-onnx'
         $got.model | Should -Be 'reazon-k2-v2'
         $got.audioTrack | Should -Be 2
         Test-Path -LiteralPath $script:SeenWav | Should -BeFalse
+        Should -Invoke -ModuleName Tetram.Media.Transcript Show-CommandLine -Times 2
     }
 
     It 'applique l''offset de piste à la timeline du média' {
