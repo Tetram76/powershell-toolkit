@@ -203,7 +203,7 @@ Describe 'chargement paresseux des backends de transcription' {
                 Get-Command -Name Invoke-WhisperTranscript -ErrorAction SilentlyContinue
                 Get-Command -Name Get-WhisperPath -ErrorAction SilentlyContinue
                 Get-Command -Name Invoke-SherpaOnnxTranscript -ErrorAction SilentlyContinue
-                Get-Command -Name Get-SherpaOnnxPath -ErrorAction SilentlyContinue
+                Get-Command -Name Get-SherpaOnnxNativeExecutable -ErrorAction SilentlyContinue
             ) | ForEach-Object { $_.Name } | Sort-Object
         }
 
@@ -220,7 +220,7 @@ Describe 'chargement paresseux des backends de transcription' {
         $generic | Should -Not -Match 'faster-whisper-xxl'
         $generic | Should -Not -Match 'sherpa-onnx-offline'
         $generic | Should -Not -Match 'Get-WhisperPath'
-        $generic | Should -Not -Match 'Get-SherpaOnnxPath'
+        $generic | Should -Not -Match 'Get-SherpaOnnxNativeExecutable'
         $generic | Should -Not -Match 'Invoke-FFmpeg'
         $generic | Should -Not -Match 'pcm_s16le'
         $generic | Should -Not -Match '--ff_track'
@@ -381,7 +381,7 @@ function Invoke-ProviderTranscript {
         $tempRoot = Join-Path $TestDrive 'dispatch-sherpa'
         New-Item -ItemType Directory -Path $tempRoot | Out-Null
         Set-Content -LiteralPath (Join-Path $tempRoot 'SherpaOnnx.ps1') -Value @'
-function Get-SherpaOnnxPath { throw 'le dispatcher ne doit pas résoudre Sherpa' }
+function Get-SherpaOnnxNativeExecutable { throw 'le dispatcher ne doit pas résoudre Sherpa' }
 function Invoke-FFmpeg { throw 'le dispatcher ne doit pas invoquer FFmpeg' }
 function Invoke-ProviderTranscript {
     param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $Result, [switch] $WhatIf)
@@ -424,7 +424,7 @@ function Invoke-ProviderTranscript {
         $tempRoot = Join-Path $TestDrive "dispatch-$Model"
         New-Item -ItemType Directory -Path $tempRoot | Out-Null
         Set-Content -LiteralPath (Join-Path $tempRoot 'SherpaOnnx.ps1') -Value @'
-function Get-SherpaOnnxPath { throw 'le dispatcher ne doit pas résoudre Sherpa' }
+function Get-SherpaOnnxNativeExecutable { throw 'le dispatcher ne doit pas résoudre Sherpa' }
 function Invoke-FFmpeg { throw 'le dispatcher ne doit pas invoquer FFmpeg' }
 function Invoke-ProviderTranscript {
     param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $Result, [switch] $WhatIf)
