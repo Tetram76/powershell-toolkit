@@ -224,7 +224,7 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
     It 'normalise le JSON natif vers le contrat Tetram' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaJson } {
             param($Native)
-            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2'
+            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -WavDuration 13.433
             $got.engine | Should -Be 'sherpa-onnx'
             $got.model | Should -Be 'reazon-k2-v2'
             $got.language | Should -Be 'ja'
@@ -233,7 +233,7 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
             $got.segments.Count | Should -Be 1
             $got.segments[0].text | Should -Be 'こんにちは'
             $got.segments[0].start | Should -Be 0.08
-            $got.segments[0].end | Should -Be 0.56
+            $got.segments[0].end | Should -Be 13.433
             $got.segments[0].PSObject.Properties.Name | Should -Not -Contain 'words'
             $got.segments[0].diagnostics.tokens | Should -Be @('こん', 'に', 'ちは')
             $got.segments[0].diagnostics.timestamps | Should -Be @(0.08, 0.32, 0.56)
@@ -244,7 +244,7 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
     It 'accepte UseLanguage ja sans forcer une langue que le moteur n''expose pas' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaJson } {
             param($Native)
-            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -UseLanguage 'ja'
+            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -UseLanguage 'ja' -WavDuration 13.433
             $got.language | Should -Be 'ja'
             $got.languageSource | Should -Be 'model'
         }
@@ -253,30 +253,94 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
     It 'conserve les timestamps token-level et les durées natives sous diagnostics' {
         InModuleScope 'Tetram.Media.Transcript' {
             $native = '{"lang":"","emotion":"","event":"","text":"ab","timestamps":[0.10, 0.40],"durations":[0.30, 0.50],"tokens":["a","b"],"ys_log_probs":[],"words":[]}'
-            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $native -Model 'reazon-k2-v2'
+            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $native -Model 'reazon-k2-v2' -WavDuration 13.433
             $got.segments[0].PSObject.Properties.Name | Should -Not -Contain 'words'
             $got.segments[0].diagnostics.timestamps | Should -Be @(0.10, 0.40)
             $got.segments[0].diagnostics.durations | Should -Be @(0.30, 0.50)
-            $got.segments[0].end | Should -Be 0.90
+            $got.segments[0].end | Should -Be 13.433
         }
     }
 
     It 'décale les timestamps sur la timeline du média original' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaJson } {
             param($Native)
-            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -TimelineOffset 1.25
+            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -TimelineOffset 1.25 -WavDuration 13.433
             $got.segments[0].start | Should -Be 1.33
-            $got.segments[0].end | Should -Be 1.81
+            $got.segments[0].end | Should -Be 14.683
             $got.segments[0].diagnostics.timestamps | Should -Be @(1.33, 1.57, 1.81)
+        }
+    }
+
+    It 'refuse de borner le segment sur le dernier timestamp token' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaJson } {
+            param($Native)
+            { ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' } |
+                Should -Throw '*WavDuration*'
         }
     }
 
     It 'n''invente pas de métrique de confiance générique' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaJson } {
             param($Native)
-            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2'
+            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -WavDuration 13.433
             $got.PSObject.Properties.Name | Should -Not -Contain 'confidence'
             $got.segments[0].PSObject.Properties.Name | Should -Not -Contain 'avg_logprob'
+        }
+    }
+}
+
+Describe 'Get-SherpaOnnxWavDuration' {
+    It 'lit la durée depuis l''en-tête PCM du WAV extrait' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $wav = Join-Path $Work 'extrait.wav'
+            $sampleRate = 16000
+            $duration = 0.25
+            $dataSize = [int]($sampleRate * $duration * 2)
+            $stream = [IO.MemoryStream]::new()
+            $writer = [IO.BinaryWriter]::new($stream)
+            $writer.Write([Text.Encoding]::ASCII.GetBytes('RIFF'))
+            $writer.Write([int32](36 + $dataSize))
+            $writer.Write([Text.Encoding]::ASCII.GetBytes('WAVE'))
+            $writer.Write([Text.Encoding]::ASCII.GetBytes('fmt '))
+            $writer.Write([int32]16)
+            $writer.Write([int16]1)
+            $writer.Write([int16]1)
+            $writer.Write([int32]$sampleRate)
+            $writer.Write([int32]($sampleRate * 2))
+            $writer.Write([int16]2)
+            $writer.Write([int16]16)
+            $writer.Write([Text.Encoding]::ASCII.GetBytes('data'))
+            $writer.Write([int32]$dataSize)
+            $writer.Write([byte[]]::new($dataSize))
+            $writer.Flush()
+            [IO.File]::WriteAllBytes($wav, $stream.ToArray())
+            Get-SherpaOnnxWavDuration -LiteralPath $wav | Should -Be 0.25
+        }
+    }
+}
+
+Describe 'Invoke-SherpaOnnx' {
+    It 'décode stdout en UTF-8 même si la console n''est pas UTF-8' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            Mock Show-CommandLine {}
+            $helper = Join-Path $Work 'emit-utf8.ps1'
+            Set-Content -LiteralPath $helper -Value @'
+$bytes = [System.Text.Encoding]::UTF8.GetBytes('{"text":"こんにちは"}')
+[Console]::OpenStandardOutput().Write($bytes, 0, $bytes.Length)
+'@
+            $saved = [Console]::OutputEncoding
+            try {
+                [Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(437)
+                $state = @{ ExitCode = $null; Stdout = $null }
+                Invoke-SherpaOnnx -Exe (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $helper) -State $state
+                $state['ExitCode'] | Should -Be 0
+                $state['Stdout'] | Should -Match 'こんにちは'
+            }
+            finally {
+                [Console]::OutputEncoding = $saved
+            }
         }
     }
 }
@@ -318,6 +382,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         }
         Mock -ModuleName Tetram.Media.Transcript Get-FFmpegPath { 'ffmpeg.exe' }
         Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset { 0 }
+        Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxWavDuration { 13.433 }
         $script:SeenFfmpeg = $null
         $script:SeenSherpa = $null
         $script:SeenWav = $null
@@ -398,8 +463,28 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         }
 
         $got.segments[0].start | Should -Be 10.08
-        $got.segments[0].end | Should -Be 10.56
+        $got.segments[0].end | Should -Be 23.433
         $got.segments[0].diagnostics.timestamps | Should -Be @(10.08, 10.32, 10.56)
+    }
+
+    It 'n''appelle ni ffprobe ni FFmpeg si ShouldProcess refuse' {
+        $media = Join-Path $TestDrive 'confirm.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        $cmdlet = [PSCustomObject]@{}
+        $cmdlet | Add-Member -MemberType ScriptMethod -Name ShouldProcess -Value { param($Target, $Action) $false }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-FFmpeg { throw 'ne doit pas tourner' }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx { throw 'ne doit pas tourner' }
+        $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            Media  = $media
+            Cmdlet = $cmdlet
+        } {
+            param($Media, $Cmdlet)
+            Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet
+        }
+        $got | Should -BeNullOrEmpty
+        Should -Invoke -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 0
     }
 
     It 'nettoie le temporaire si FFmpeg échoue' {
