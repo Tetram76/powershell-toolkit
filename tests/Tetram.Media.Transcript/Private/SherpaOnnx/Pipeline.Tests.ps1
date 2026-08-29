@@ -87,7 +87,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
                 })
             $State['ExitCode'] = 0
             if ($Exe -eq $script:FakeVadExe) {
-                $State['Stdout'] = "0.080 -- 1.320`n2.560 -- 4.800"
+                $State['Stdout'] = ''
+                $State['Stderr'] = "VadModelConfig(...)`n0.080 -- 1.320`n2.560 -- 4.800`nSaved to speech.wav"
             }
             else {
                 $State['Stdout'] = @(
@@ -220,7 +221,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
             param($Exe, $Arguments, $State)
             $State['ExitCode'] = 0
             if ($Exe -eq $script:FakeVadExe) {
-                $State['Stdout'] = '0.080 -- 1.320'
+                $State['Stdout'] = ''
+                $State['Stderr'] = '0.080 -- 1.320'
             }
             else {
                 $State['Stdout'] = '{"text":"こんにちは","tokens":["こん"],"timestamps":[0.16]}'
@@ -270,7 +272,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
                 param($Exe, $Arguments, $State)
                 if ($Exe -like '*sherpa-onnx-vad.exe') {
                     $State['ExitCode'] = 0
-                    $State['Stdout'] = "0.080 -- 1.320`n2.560 -- 4.800"
+                    $State['Stdout'] = ''
+                    $State['Stderr'] = "0.080 -- 1.320`n2.560 -- 4.800"
                     return
                 }
                 $script:OfflineHits++
@@ -365,7 +368,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
                 })
             $State['ExitCode'] = 0
             if ($Exe -eq $script:FakeVadExe) {
-                $State['Stdout'] = '0.080 -- 1.320'
+                $State['Stdout'] = ''
+                $State['Stderr'] = '0.080 -- 1.320'
             }
             else {
                 $State['Stdout'] = '{"text":"こんにちは","tokens":["こん"],"timestamps":[0.00]}'

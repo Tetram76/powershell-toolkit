@@ -84,17 +84,18 @@ Describe 'Get-SherpaOnnxVadArguments' {
     }
 }
 
-Describe 'ConvertFrom-SherpaOnnxVadStdout' {
+Describe 'ConvertFrom-SherpaOnnxVadStderr' {
     It 'extrait uniquement les intervalles start -- end et ignore les logs' {
         InModuleScope 'Tetram.Media.Transcript' {
-            $stdout = @(
-                'Creating VAD ...'
+            $stderr = @(
+                'VadModelConfig(...)'
                 '0.080 -- 1.320'
                 ''
-                'some warning'
+                'Creating VAD ...'
                 '2.560 -- 4.800'
+                'Saved to speech.wav'
             ) -join "`n"
-            $got = @(ConvertFrom-SherpaOnnxVadStdout -Stdout $stdout)
+            $got = @(ConvertFrom-SherpaOnnxVadStderr -Stderr $stderr)
             $got.Count | Should -Be 2
             $got[0].start | Should -Be 0.08
             $got[0].end | Should -Be 1.32
@@ -108,7 +109,7 @@ Describe 'ConvertFrom-SherpaOnnxVadStdout' {
             $saved = [System.Threading.Thread]::CurrentThread.CurrentCulture
             try {
                 [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::GetCultureInfo('fr-FR')
-                $got = @(ConvertFrom-SherpaOnnxVadStdout -Stdout '12.345 -- 14.678')
+                $got = @(ConvertFrom-SherpaOnnxVadStderr -Stderr '12.345 -- 14.678')
                 $got[0].start | Should -Be 12.345
                 $got[0].end | Should -Be 14.678
             }
@@ -120,21 +121,21 @@ Describe 'ConvertFrom-SherpaOnnxVadStdout' {
 
     It 'refuse un intervalle dont la fin précède le début' {
         InModuleScope 'Tetram.Media.Transcript' {
-            { ConvertFrom-SherpaOnnxVadStdout -Stdout '2.000 -- 1.000' } | Should -Throw '*end*'
+            { ConvertFrom-SherpaOnnxVadStderr -Stderr '2.000 -- 1.000' } | Should -Throw '*end*'
         }
     }
 
     It 'retourne une collection vide si aucun intervalle n''est présent' {
         InModuleScope 'Tetram.Media.Transcript' {
-            @(ConvertFrom-SherpaOnnxVadStdout -Stdout "Creating VAD ...`n") | Should -HaveCount 0
-            @(ConvertFrom-SherpaOnnxVadStdout -Stdout '') | Should -HaveCount 0
+            @(ConvertFrom-SherpaOnnxVadStderr -Stderr "Creating VAD ...`n") | Should -HaveCount 0
+            @(ConvertFrom-SherpaOnnxVadStderr -Stderr '') | Should -HaveCount 0
         }
     }
 
     It 'accepte les fins de ligne LF et CRLF' {
         InModuleScope 'Tetram.Media.Transcript' {
-            $fromLf = @(ConvertFrom-SherpaOnnxVadStdout -Stdout "0.080 -- 1.320`n2.560 -- 4.800")
-            $fromCrlf = @(ConvertFrom-SherpaOnnxVadStdout -Stdout "0.080 -- 1.320`r`n2.560 -- 4.800")
+            $fromLf = @(ConvertFrom-SherpaOnnxVadStderr -Stderr "0.080 -- 1.320`n2.560 -- 4.800")
+            $fromCrlf = @(ConvertFrom-SherpaOnnxVadStderr -Stderr "0.080 -- 1.320`r`n2.560 -- 4.800")
             $fromLf.Count | Should -Be 2
             $fromCrlf.Count | Should -Be 2
             $fromCrlf[1].end | Should -Be 4.8
@@ -143,8 +144,8 @@ Describe 'ConvertFrom-SherpaOnnxVadStdout' {
 
     It 'ne traite pas une ligne UTF-8 non temporelle comme une erreur de parsing' {
         InModuleScope 'Tetram.Media.Transcript' {
-            $stdout = "設定を読み込みます`n0.080 -- 1.320`n完了"
-            $got = @(ConvertFrom-SherpaOnnxVadStdout -Stdout $stdout)
+            $stderr = "設定を読み込みます`n0.080 -- 1.320`n完了"
+            $got = @(ConvertFrom-SherpaOnnxVadStderr -Stderr $stderr)
             $got.Count | Should -Be 1
             $got[0].start | Should -Be 0.08
         }

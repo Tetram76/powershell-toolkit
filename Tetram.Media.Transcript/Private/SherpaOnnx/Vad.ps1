@@ -58,19 +58,20 @@ function Get-SherpaOnnxVadArguments {
     return $arguments
 }
 
-function ConvertFrom-SherpaOnnxVadStdout {
+function ConvertFrom-SherpaOnnxVadStderr {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
         [AllowEmptyString()]
-        [string] $Stdout
+        [string] $Stderr
     )
 
     $culture = [Globalization.CultureInfo]::InvariantCulture
     $style = [Globalization.NumberStyles]::Float
     $intervals = [System.Collections.Generic.List[object]]::new()
 
-    foreach ($line in ($Stdout -split '\r?\n')) {
+    # Upstream fprintf(stderr, "%.3f -- %.3f\n") : config et "Saved to" partagent ce flux.
+    foreach ($line in ($Stderr -split '\r?\n')) {
         $trimmed = $line.Trim()
         if ($trimmed.Length -eq 0) {
             continue

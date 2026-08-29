@@ -62,7 +62,7 @@ function Invoke-SherpaOnnxTranscript {
                 throw "sherpa-onnx-vad a échoué (code $($vadState['ExitCode'])) sur '$MediaPath' (modèle $Model, vad $($run.Vad))."
             }
 
-            $intervals = @(ConvertFrom-SherpaOnnxVadStdout -Stdout ([string]$vadState['Stdout']))
+            $intervals = @(ConvertFrom-SherpaOnnxVadStderr -Stderr ([string]$vadState['Stderr']))
             if ($intervals.Count -eq 0) {
                 throw "Aucun intervalle VAD exploitable produit par sherpa-onnx-vad pour '$MediaPath' (modèle $Model, vad $($run.Vad))."
             }
