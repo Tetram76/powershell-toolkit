@@ -14,12 +14,14 @@ Si l'exécutable n'est pas ici, le backend cherche `sherpa-onnx-offline` dans le
 
 ### Modèle provisoire `reazon-k2-v2`
 
-Déposer dans un sous-dossier (par exemple `reazon-k2-v2/` ou `sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01/`) les fichiers :
+Déposer dans **un seul** sous-dossier dont le nom contient `reazon` (par exemple `reazon-k2-v2/` ou `sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01/`) les fichiers :
 
 - `tokens.txt`
 - `encoder*.onnx` (INT8 préféré s'il existe aussi en FP32)
 - `decoder*.onnx` (FP32 préféré : la recette INT8 Reazon documentée est encoder INT8 + decoder FP32 + joiner INT8)
 - `joiner*.onnx` (INT8 préféré s'il existe aussi en FP32)
+
+Zéro dossier Reazon, un dossier Reazon incomplet, ou plusieurs dossiers Reazon complets : le backend lève une erreur. Un autre Zipformer présent dans ce dossier n'est jamais utilisé à la place.
 
 Les binaires, DLL et poids tiers ne sont **pas** versionnés.
 
