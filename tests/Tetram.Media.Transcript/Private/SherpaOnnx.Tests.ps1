@@ -86,11 +86,11 @@ Describe 'Get-SherpaOnnxPath' {
 }
 
 Describe 'Get-SherpaOnnxModelFiles' {
-    It 'trouve tokens/encoder/decoder/joiner sous le dossier local' {
+    It 'trouve tokens/encoder/decoder/joiner dans models/reazon-k2-v2' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $root = Join-Path $Work 'fp32-only'
-            $modelDir = Join-Path $root 'reazon-k2-v2'
+            $modelDir = Join-Path $root 'models' 'reazon-k2-v2'
             New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
             foreach ($name in @('tokens.txt', 'encoder-epoch-99-avg-1.onnx', 'decoder-epoch-99-avg-1.onnx', 'joiner-epoch-99-avg-1.onnx')) {
                 Set-Content -LiteralPath (Join-Path $modelDir $name) -Value 'stub'
@@ -114,7 +114,7 @@ Describe 'Get-SherpaOnnxModelFiles' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $root = Join-Path $Work 'reazon-int8-recipe'
-            $modelDir = Join-Path $root 'reazon-k2-v2'
+            $modelDir = Join-Path $root 'models' 'reazon-k2-v2'
             New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
             foreach ($name in @(
                     'tokens.txt',
@@ -145,7 +145,7 @@ Describe 'Get-SherpaOnnxModelFiles' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $root = Join-Path $Work 'int8-decoder-only'
-            $modelDir = Join-Path $root 'reazon-k2-v2'
+            $modelDir = Join-Path $root 'models' 'reazon-k2-v2'
             New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
             foreach ($name in @(
                     'tokens.txt',
@@ -167,14 +167,14 @@ Describe 'Get-SherpaOnnxModelFiles' {
         }
     }
 
-    It 'lève si les fichiers du modèle sont absents' {
+    It 'lève si models/reazon-k2-v2 est absent' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
             $saved = $script:SherpaOnnxRoot
             try {
                 $script:SherpaOnnxRoot = Join-Path $Work 'vide'
                 New-Item -ItemType Directory -Path $script:SherpaOnnxRoot -Force | Out-Null
-                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*reazon*'
+                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*models*reazon-k2-v2*'
             }
             finally {
                 $script:SherpaOnnxRoot = $saved
@@ -182,19 +182,19 @@ Describe 'Get-SherpaOnnxModelFiles' {
         }
     }
 
-    It 'ne retombe pas sur un autre Zipformer si aucun dossier Reazon n''existe' {
+    It 'ignore un dossier homonyme à la racine SherpaOnnx' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
-            $root = Join-Path $Work 'autre-zipformer'
-            $modelDir = Join-Path $root 'sherpa-onnx-zipformer-en'
-            New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
+            $root = Join-Path $Work 'legacy-racine'
+            $legacyDir = Join-Path $root 'reazon-k2-v2'
+            New-Item -ItemType Directory -Path $legacyDir -Force | Out-Null
             foreach ($name in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
-                Set-Content -LiteralPath (Join-Path $modelDir $name) -Value 'stub'
+                Set-Content -LiteralPath (Join-Path $legacyDir $name) -Value 'stub'
             }
             $saved = $script:SherpaOnnxRoot
             try {
                 $script:SherpaOnnxRoot = $root
-                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*reazon*'
+                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*models*reazon-k2-v2*'
             }
             finally {
                 $script:SherpaOnnxRoot = $saved
@@ -202,15 +202,35 @@ Describe 'Get-SherpaOnnxModelFiles' {
         }
     }
 
-    It 'ignore un Zipformer non Reazon même si un dossier Reazon est incomplet' {
+    It 'ignore un autre sous-dossier de models/' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
-            $root = Join-Path $Work 'reazon-incomplet-plus-autre'
-            $reazonDir = Join-Path $root 'reazon-k2-v2'
-            $otherDir = Join-Path $root 'sherpa-onnx-zipformer-en'
-            New-Item -ItemType Directory -Path $reazonDir -Force | Out-Null
+            $root = Join-Path $Work 'autre-modele'
+            $otherDir = Join-Path $root 'models' 'sherpa-onnx-zipformer-en'
             New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
-            Set-Content -LiteralPath (Join-Path $reazonDir 'tokens.txt') -Value 'stub'
+            foreach ($name in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
+                Set-Content -LiteralPath (Join-Path $otherDir $name) -Value 'stub'
+            }
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $root
+                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*models*reazon-k2-v2*'
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'lève si models/reazon-k2-v2 est incomplet même si un autre modèle l''est' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $root = Join-Path $Work 'incomplet-plus-autre'
+            $modelDir = Join-Path $root 'models' 'reazon-k2-v2'
+            $otherDir = Join-Path $root 'models' 'sherpa-onnx-zipformer-en'
+            New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
+            New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $modelDir 'tokens.txt') -Value 'stub'
             foreach ($file in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
                 Set-Content -LiteralPath (Join-Path $otherDir $file) -Value 'stub'
             }
@@ -225,65 +245,23 @@ Describe 'Get-SherpaOnnxModelFiles' {
         }
     }
 
-    It 'ne traite pas comme Reazon un Zipformer dont seul un ancêtre contient reazon' {
+    It 'prend models/reazon-k2-v2 et ignore un autre sous-dossier de models/' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
-            $root = Join-Path $Work 'reazon-workspace'
-            $modelDir = Join-Path $root 'sherpa-onnx-zipformer-en'
+            $root = Join-Path $Work 'deux-modeles'
+            $modelDir = Join-Path $root 'models' 'reazon-k2-v2'
+            $otherDir = Join-Path $root 'models' 'sherpa-onnx-zipformer-en'
             New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
-            foreach ($name in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
-                Set-Content -LiteralPath (Join-Path $modelDir $name) -Value 'stub'
-            }
-            $saved = $script:SherpaOnnxRoot
-            try {
-                $script:SherpaOnnxRoot = $root
-                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*reazon*'
-            }
-            finally {
-                $script:SherpaOnnxRoot = $saved
-            }
-        }
-    }
-
-    It 'prend le seul dossier Reazon complet et ignore un autre Zipformer' {
-        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $root = Join-Path $Work 'reazon-plus-autre'
-            $reazonDir = Join-Path $root 'reazon-k2-v2'
-            $otherDir = Join-Path $root 'sherpa-onnx-zipformer-en'
-            New-Item -ItemType Directory -Path $reazonDir -Force | Out-Null
             New-Item -ItemType Directory -Path $otherDir -Force | Out-Null
             foreach ($file in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
-                Set-Content -LiteralPath (Join-Path $reazonDir $file) -Value 'stub'
+                Set-Content -LiteralPath (Join-Path $modelDir $file) -Value 'stub'
                 Set-Content -LiteralPath (Join-Path $otherDir $file) -Value 'stub'
             }
             $saved = $script:SherpaOnnxRoot
             try {
                 $script:SherpaOnnxRoot = $root
                 $got = Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2'
-                $got.Tokens | Should -Be (Join-Path $reazonDir 'tokens.txt')
-            }
-            finally {
-                $script:SherpaOnnxRoot = $saved
-            }
-        }
-    }
-
-    It 'lève si plusieurs dossiers Reazon complets sont présents' {
-        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $root = Join-Path $Work 'deux-reazon'
-            foreach ($name in @('reazon-k2-v2', 'sherpa-onnx-zipformer-ja-reazonspeech-2024-08-01')) {
-                $modelDir = Join-Path $root $name
-                New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
-                foreach ($file in @('tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx')) {
-                    Set-Content -LiteralPath (Join-Path $modelDir $file) -Value 'stub'
-                }
-            }
-            $saved = $script:SherpaOnnxRoot
-            try {
-                $script:SherpaOnnxRoot = $root
-                { Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2' } | Should -Throw '*ambigu*'
+                $got.Tokens | Should -Be (Join-Path $modelDir 'tokens.txt')
             }
             finally {
                 $script:SherpaOnnxRoot = $saved
