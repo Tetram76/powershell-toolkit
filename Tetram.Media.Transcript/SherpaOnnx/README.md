@@ -31,7 +31,7 @@ Un dossier homonyme à la racine de `SherpaOnnx/` ou un autre sous-dossier de `m
 
 Les binaires, DLL et poids tiers ne sont **pas** versionnés.
 
-`Get-MediaTranscript` ne télécharge rien automatiquement.
+Les archives ASR pré-entraînées sont sur [asr-models](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models). Extraire le contenu dans `models/<nom>/`. `Get-MediaTranscript` ne télécharge rien automatiquement.
 
 ## Commande native à valider
 
