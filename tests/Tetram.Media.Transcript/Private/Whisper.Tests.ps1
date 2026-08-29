@@ -988,5 +988,7 @@ Describe 'Invoke-WhisperTranscript' {
         $result.Transcripts[0].segments[0].text | Should -Be 'from-json'
         $result.Transcripts | Should -Not -Contain 'Progress 47%'
         $stream | Should -Not -Contain $result.Transcripts[0]
+        # Sans ça, `$null = Invoke-Whisper` absorberait la progression et ce test resterait vert.
+        $stream | Should -Contain 'Progress 47%'
     }
 }
