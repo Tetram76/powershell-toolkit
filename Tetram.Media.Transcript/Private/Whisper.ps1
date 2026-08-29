@@ -79,7 +79,7 @@ function Get-WhisperPath {
         return $fromPath.Source
     }
 
-    throw "faster-whisper-xxl introuvable : posez la distribution Purfview dans '$script:WhisperRoot', ou fournissez -WhisperPath."
+    throw "faster-whisper-xxl introuvable : posez la distribution Purfview dans '$script:WhisperRoot'."
 }
 
 function Invoke-Whisper {
@@ -370,4 +370,18 @@ function Invoke-WhisperTranscript {
     finally {
         Remove-WhisperTempDirectory -Path $outputDir
     }
+}
+
+function Invoke-ProviderTranscript {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $MediaPath,
+        [Parameter(Mandatory)] [string] $Model,
+        [Parameter(Mandatory)] $Cmdlet,
+        [int] $AudioTrack = 1,
+        [string] $UseLanguage,
+        [switch] $WhatIf
+    )
+
+    Invoke-WhisperTranscript -MediaPath $MediaPath -Model $Model -Cmdlet $Cmdlet -AudioTrack $AudioTrack -UseLanguage $UseLanguage -WhatIf:$WhatIf
 }

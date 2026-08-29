@@ -18,9 +18,10 @@
     VariablesToExport = @()
     PrivateData = @{
         PSData = @{
-            Tags = @('transcript', 'whisper', 'transcription', 'subtitle', 'media', 'ps7')
+            Tags = @('transcript', 'whisper', 'sherpa-onnx', 'transcription', 'subtitle', 'media', 'ps7')
             ReleaseNotes = @'
 - 1.0.0 : Get-MediaTranscript (pilote faster-whisper-xxl, jeux Path/LiteralPath/Mixed, WhatIf).
+- Routage local Faster-Whisper et Sherpa-ONNX selon le modèle ; plus de -WhisperPath public.
 '@
         }
     }
