@@ -10,9 +10,9 @@ Ce modèle sert à valider le routage vers Sherpa-ONNX. Ce n'est pas le résulta
 
 ### Exécutable
 
-`sherpa-onnx-offline.exe` doit être présent **à la racine de ce dossier**, avec les DLL / runtime de la même distribution (onnxruntime, etc.).
+`sherpa-onnx-vad-with-offline-asr.exe` doit être présent **à la racine de ce dossier**, avec les DLL / runtime de la même distribution (onnxruntime, etc.) et `silero_vad.onnx` (même dossier que l'exe).
 
-Si l'exécutable n'est pas ici, le backend cherche `sherpa-onnx-offline` dans le `PATH`.
+Si l'exécutable n'est pas ici, le backend cherche `sherpa-onnx-vad-with-offline-asr` dans le `PATH`.
 
 ### Modèles (`models/<nom>`)
 
@@ -35,16 +35,17 @@ Les archives ASR pré-entraînées sont sur [asr-models](https://github.com/k2-f
 
 ## Commande native à valider
 
-Cette combinaison n'a pas encore été exécutée dans ce dépôt : les tests Pester ne lancent jamais `sherpa-onnx-offline.exe`.
+Cette combinaison n'a pas encore été exécutée dans ce dépôt : les tests Pester ne lancent jamais `sherpa-onnx-vad-with-offline-asr.exe`.
 
 Une fois la distribution et les poids posés, valider **exactement** les fichiers que le backend sélectionne (recette Reazon INT8 : encoder INT8 + decoder FP32 + joiner INT8) :
 
 ```text
-sherpa-onnx-offline.exe ^
+sherpa-onnx-vad-with-offline-asr.exe ^
   --tokens=models\reazon-k2-v2\tokens.txt ^
   --encoder=models\reazon-k2-v2\encoder-epoch-99-avg-1.int8.onnx ^
   --decoder=models\reazon-k2-v2\decoder-epoch-99-avg-1.onnx ^
   --joiner=models\reazon-k2-v2\joiner-epoch-99-avg-1.int8.onnx ^
+  --silero-vad-model=silero_vad.onnx ^
   --num-threads=1 ^
   <wav-japonais>.wav
 ```

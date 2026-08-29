@@ -56,7 +56,7 @@ Describe 'Get-SherpaOnnxPath' {
             param($Work)
             $fakeRoot = Join-Path $Work 'sherpa'
             New-Item -ItemType Directory -Path $fakeRoot -Force | Out-Null
-            $exe = Join-Path $fakeRoot 'sherpa-onnx-offline.exe'
+            $exe = Join-Path $fakeRoot 'sherpa-onnx-vad-with-offline-asr.exe'
             Set-Content -LiteralPath $exe -Value 'stub'
             $saved = $script:SherpaOnnxRoot
             try {
@@ -72,7 +72,7 @@ Describe 'Get-SherpaOnnxPath' {
     It 'échoue avec un message qui indique où poser la distribution' {
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
             param($Work)
-            Mock Get-Command { $null } -ParameterFilter { $Name -eq 'sherpa-onnx-offline' }
+            Mock Get-Command { $null } -ParameterFilter { $Name -eq 'sherpa-onnx-vad-with-offline-asr' }
             $saved = $script:SherpaOnnxRoot
             try {
                 $script:SherpaOnnxRoot = Join-Path $Work 'vide'
@@ -271,22 +271,50 @@ Describe 'Get-SherpaOnnxModelFiles' {
 }
 
 Describe 'Get-SherpaOnnxArguments' {
-    It 'produit tokens/encoder/decoder/joiner puis le WAV, frontières préservées' {
+    It 'produit tokens/encoder/decoder/joiner, le VAD puis le WAV, frontières préservées' {
         InModuleScope 'Tetram.Media.Transcript' {
             $tokens = Join-Path 'm' 'tokens.txt'
             $encoder = Join-Path 'm' 'encoder.onnx'
             $decoder = Join-Path 'm' 'decoder.onnx'
             $joiner = Join-Path 'm' 'joiner.onnx'
+            $vad = Join-Path 'bin' 'silero_vad.onnx'
             $wav = Join-Path 'tmp' 'a.wav'
-            $got = Get-SherpaOnnxArguments -Tokens $tokens -Encoder $encoder -Decoder $decoder -Joiner $joiner -WavPath $wav
+            $got = Get-SherpaOnnxArguments -Tokens $tokens -Encoder $encoder -Decoder $decoder -Joiner $joiner -SileroVadModel $vad -WavPath $wav
             $got | Should -Be @(
                 "--tokens=$tokens"
                 "--encoder=$encoder"
                 "--decoder=$decoder"
                 "--joiner=$joiner"
+                "--silero-vad-model=$vad"
                 '--num-threads=1'
                 $wav
             )
+        }
+    }
+}
+
+Describe 'Get-SherpaOnnxVadModelPath' {
+    It 'pointe silero_vad.onnx dans le dossier de l''exécutable' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dir = Join-Path $Work 'dist'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $exe = Join-Path $dir 'sherpa-onnx-offline.exe'
+            $vad = Join-Path $dir 'silero_vad.onnx'
+            Set-Content -LiteralPath $exe -Value 'stub'
+            Set-Content -LiteralPath $vad -Value 'stub'
+            Get-SherpaOnnxVadModelPath -Exe $exe | Should -Be $vad
+        }
+    }
+
+    It 'lève si silero_vad.onnx est absent à côté de l''exe' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
+            param($Work)
+            $dir = Join-Path $Work 'sans-vad'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $exe = Join-Path $dir 'sherpa-onnx-offline.exe'
+            Set-Content -LiteralPath $exe -Value 'stub'
+            { Get-SherpaOnnxVadModelPath -Exe $exe } | Should -Throw '*silero_vad.onnx*'
         }
     }
 }
@@ -473,7 +501,12 @@ Describe 'Invoke-SherpaOnnxTranscript' {
     BeforeEach {
         Mock -ModuleName Tetram.Media.Transcript Write-DebugLog {}
         Mock -ModuleName Tetram.Media.Transcript Show-CommandLine {}
-        Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxPath { 'sherpa-onnx-offline.exe' }
+        $script:FakeSherpaDir = Join-Path $TestDrive 'sherpa-dist'
+        New-Item -ItemType Directory -Path $script:FakeSherpaDir -Force | Out-Null
+        $script:FakeSherpaExe = Join-Path $script:FakeSherpaDir 'sherpa-onnx-offline.exe'
+        Set-Content -LiteralPath $script:FakeSherpaExe -Value 'stub'
+        Set-Content -LiteralPath (Join-Path $script:FakeSherpaDir 'silero_vad.onnx') -Value 'stub'
+        Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxPath { $script:FakeSherpaExe }
         Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxModelFiles {
             [pscustomobject]@{
                 Tokens   = 'tokens.txt'
@@ -540,6 +573,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         $mapAt = [array]::IndexOf(@($script:SeenFfmpeg), '-map')
         $script:SeenFfmpeg[$mapAt + 1] | Should -Be '0:a:1'
         $script:SeenSherpa[-1] | Should -Be $script:SeenWav
+        $script:SeenSherpa | Should -Contain ("--silero-vad-model=" + (Join-Path $script:FakeSherpaDir 'silero_vad.onnx'))
         $script:ShownWavs | Should -Be @($script:SeenWav, $script:SeenWav)
         $got.engine | Should -Be 'sherpa-onnx'
         $got.model | Should -Be 'reazon-k2-v2'
@@ -638,7 +672,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         } {
             param($Media, $Cmdlet)
             { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet } |
-                Should -Throw '*sherpa-onnx-offline a échoué (code 2)*'
+                Should -Throw '*sherpa-onnx-vad-with-offline-asr a échoué (code 2)*'
         }
         Test-Path -LiteralPath (Split-Path -Parent $script:SeenWav) | Should -BeFalse
     }
@@ -660,6 +694,26 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         Should -Invoke -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Show-CommandLine -Times 2
+    }
+
+    It 'lève si silero_vad.onnx est absent à côté de l''exe' {
+        $media = Join-Path $TestDrive 'no-vad.mkv'
+        Set-Content -LiteralPath $media -Value 'x'
+        $dir = Join-Path $TestDrive 'exe-sans-vad'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        $exe = Join-Path $dir 'sherpa-onnx-offline.exe'
+        Set-Content -LiteralPath $exe -Value 'stub'
+        Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxPath { $exe }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-FFmpeg { throw 'ne doit pas tourner' }
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            Media  = $media
+            Cmdlet = $script:FakeCmdlet
+        } {
+            param($Media, $Cmdlet)
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -Cmdlet $Cmdlet } |
+                Should -Throw '*silero_vad.onnx*'
+        }
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
     }
 
     It 'lève si l''exécutable est introuvable' {
