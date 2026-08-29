@@ -24,18 +24,37 @@ function Get-SherpaOnnxPath {
         throw "Exécutable Sherpa-ONNX inexistant : '$OverridePath'"
     }
 
-    $default = Join-Path $script:SherpaOnnxRoot 'sherpa-onnx-offline.exe'
+    # VAD + ASR hors-ligne : c'est ce binaire qui accepte --silero-vad-model.
+    $default = Join-Path $script:SherpaOnnxRoot 'sherpa-onnx-vad-with-offline-asr.exe'
     if (Test-Path -LiteralPath $default -PathType Leaf) {
         return $default
     }
 
     # -CommandType Application : une fonction/alias de même nom primerait sinon sur l'exécutable du PATH.
-    $fromPath = Get-Command -Name 'sherpa-onnx-offline' -CommandType Application -ErrorAction SilentlyContinue
+    $fromPath = Get-Command -Name 'sherpa-onnx-vad-with-offline-asr' -CommandType Application -ErrorAction SilentlyContinue
     if ($fromPath) {
         return $fromPath.Source
     }
 
-    throw "sherpa-onnx-offline introuvable : posez la distribution dans '$script:SherpaOnnxRoot' (dossier SherpaOnnx du module)."
+    throw "sherpa-onnx-vad-with-offline-asr introuvable : posez la distribution dans '$script:SherpaOnnxRoot' (dossier SherpaOnnx du module)."
+}
+
+function Get-SherpaOnnxVadModelPath {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)] [string] $Exe
+    )
+
+    $dir = Split-Path -Parent $Exe
+    if ([string]::IsNullOrWhiteSpace($dir)) {
+        $dir = (Get-Location).Path
+    }
+    $vad = Join-Path $dir 'silero_vad.onnx'
+    if (-not (Test-Path -LiteralPath $vad -PathType Leaf)) {
+        throw "silero_vad.onnx introuvable à côté de '$Exe'."
+    }
+    return $vad
 }
 
 function Select-SherpaOnnxOnnxFile {
@@ -109,6 +128,7 @@ function Get-SherpaOnnxArguments {
         [Parameter(Mandatory)] [string] $Encoder,
         [Parameter(Mandatory)] [string] $Decoder,
         [Parameter(Mandatory)] [string] $Joiner,
+        [Parameter(Mandatory)] [string] $SileroVadModel,
         [Parameter(Mandatory)] [string] $WavPath
     )
 
@@ -117,6 +137,7 @@ function Get-SherpaOnnxArguments {
         "--encoder=$Encoder"
         "--decoder=$Decoder"
         "--joiner=$Joiner"
+        "--silero-vad-model=$SileroVadModel"
         '--num-threads=1'
         $WavPath
     )
@@ -138,6 +159,7 @@ function Get-SherpaOnnxFfmpegArguments {
         '-map', "0:a:$($AudioTrack - 1)"
         '-vn'
         '-ac', '1'
+        '-ar', '16000'
         '-c:a', 'pcm_s16le'
         $OutputPath
     )
@@ -440,6 +462,7 @@ function Invoke-SherpaOnnxTranscript {
 
     $exe = Get-SherpaOnnxPath -OverridePath $SherpaOnnxPath
     $modelFiles = Get-SherpaOnnxModelFiles -Model $Model
+    $vadModel = Get-SherpaOnnxVadModelPath -Exe $exe
 
     # Chemin figé avant ShouldProcess : l'affichage et l'exécution doivent citer les mêmes arguments.
     $tempDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
@@ -450,12 +473,13 @@ function Invoke-SherpaOnnxTranscript {
         -Encoder $modelFiles.Encoder `
         -Decoder $modelFiles.Decoder `
         -Joiner $modelFiles.Joiner `
+        -SileroVadModel $vadModel `
         -WavPath $wav
     Write-DebugLog -Text ($sherpaArgs -join ' ')
     Show-CommandLine -Exe (Get-FFmpegPath) -Arguments $ffmpegArgs -NoPathDetectionParameters 'map', 'ac', 'c:a', 'hide_banner'
-    Show-CommandLine -Exe $exe -Arguments $sherpaArgs -NoPathDetectionParameters 'tokens', 'encoder', 'decoder', 'joiner', 'num-threads'
+    Show-CommandLine -Exe $exe -Arguments $sherpaArgs -NoPathDetectionParameters 'tokens', 'encoder', 'decoder', 'joiner', 'silero-vad-model', 'num-threads'
 
-    if (-not $Cmdlet.ShouldProcess($MediaPath, 'sherpa-onnx-offline')) {
+    if (-not $Cmdlet.ShouldProcess($MediaPath, 'sherpa-onnx-vad-with-offline-asr')) {
         return
     }
     if ($WhatIf) {
@@ -477,10 +501,10 @@ function Invoke-SherpaOnnxTranscript {
             return
         }
         if ($state['ExitCode'] -ne 0) {
-            throw "sherpa-onnx-offline a échoué (code $($state['ExitCode'])) sur '$MediaPath' (modèle $Model)."
+            throw "sherpa-onnx-vad-with-offline-asr a échoué (code $($state['ExitCode'])) sur '$MediaPath' (modèle $Model)."
         }
         if ([string]::IsNullOrWhiteSpace($state['Stdout'])) {
-            throw "Aucune sortie JSON native produite par sherpa-onnx-offline pour '$MediaPath' (modèle $Model)."
+            throw "Aucune sortie JSON native produite par sherpa-onnx-vad-with-offline-asr pour '$MediaPath' (modèle $Model)."
         }
 
         return ConvertFrom-SherpaOnnxTranscript `
