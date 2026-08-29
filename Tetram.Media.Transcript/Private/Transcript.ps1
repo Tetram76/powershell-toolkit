@@ -34,10 +34,17 @@ function Get-TetramTranscriptPath {
         [Parameter(Mandatory)] [string] $MediaBase,
         [Parameter(Mandatory)] [string] $Language,
         [Parameter(Mandatory)] [string] $Model,
-        [int] $AudioTrack = 1
+        [int] $AudioTrack = 1,
+        [string] $Vad
     )
 
-    Join-Path $Directory "$MediaBase.track $AudioTrack.$Language.$Model.json"
+    $leaf = if ([string]::IsNullOrWhiteSpace($Vad)) {
+        "$MediaBase.track $AudioTrack.$Language.$Model.json"
+    }
+    else {
+        "$MediaBase.track $AudioTrack.$Language.$Model.$Vad.json"
+    }
+    Join-Path $Directory $leaf
 }
 
 function Write-TetramTranscript {
@@ -80,7 +87,12 @@ function Publish-TetramTranscript {
         $directory = (Get-Location).Path
     }
     $mediaBase = [IO.Path]::GetFileNameWithoutExtension($MediaPath)
-    $dest = Get-TetramTranscriptPath -Directory $directory -MediaBase $mediaBase -Language $Transcript.language -Model $Transcript.model -AudioTrack $Transcript.audioTrack
+    $vad = $null
+    $vadProp = $Transcript.PSObject.Properties['vad']
+    if ($null -ne $vadProp -and -not [string]::IsNullOrWhiteSpace([string]$vadProp.Value)) {
+        $vad = [string]$vadProp.Value
+    }
+    $dest = Get-TetramTranscriptPath -Directory $directory -MediaBase $mediaBase -Language $Transcript.language -Model $Transcript.model -AudioTrack $Transcript.audioTrack -Vad $vad
     Write-TetramTranscript -Transcript $Transcript -Path $dest
 }
 

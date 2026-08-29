@@ -308,27 +308,32 @@ Describe 'Get-MediaTranscript orchestration' {
     It 'publie chaque transcript si le backend en retourne plusieurs' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-transcript'
         $script:PublishedModels = [System.Collections.Generic.List[string]]::new()
+        $script:PublishedVads = [System.Collections.Generic.List[string]]::new()
         Mock -ModuleName Tetram.Media.Transcript Publish-TetramTranscript {
             param($Transcript, $MediaPath)
             $script:PublishedModels.Add([string]$Transcript.model)
+            $script:PublishedVads.Add([string]$Transcript.vad)
         }
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
             [pscustomobject]@{
                 language   = 'ja'
-                model      = 'reazon-k2-v2+silero'
+                model      = 'reazon-k2-v2'
+                vad        = 'silero'
                 audioTrack = 1
                 segments   = @()
             }
             [pscustomobject]@{
                 language   = 'ja'
-                model      = 'reazon-k2-v2+ten'
+                model      = 'reazon-k2-v2'
+                vad        = 'ten'
                 audioTrack = 1
                 segments   = @()
             }
         }
         Get-MediaTranscript -LiteralPath $media -Model reazon-k2-v2 -UseLanguage ja
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 1
-        $script:PublishedModels | Should -Be @('reazon-k2-v2+silero', 'reazon-k2-v2+ten')
+        $script:PublishedModels | Should -Be @('reazon-k2-v2', 'reazon-k2-v2')
+        $script:PublishedVads | Should -Be @('silero', 'ten')
     }
 
     It 'appelle le backend une fois par modèle et publie chaque transcript' {

@@ -26,9 +26,9 @@ Get-MediaTranscript [-LiteralPath] <string> [-AudioTrack <int>] [-Model <string[
 
 ## DESCRIPTION
 
-`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation distincte du moteur associé à ce modèle, puis un JSON Tetram canonique à côté du média. L'appelant choisit un ou plusieurs modèles ; il ne choisit pas le moteur. Les artefacts natifs temporaires sont le JSON Faster-Whisper et le WAV préparé pour Sherpa-ONNX : ils sont écrits sous le répertoire temporaire système, lus, normalisés, puis supprimés. Le JSON Sherpa est capturé depuis stdout, pas écrit sur disque. `-LiteralPath` doit désigner un fichier unique existant : un masque ou un dossier est refusé par l'orchestrateur. Un fichier-liste existant (`.lst`, `.m3u`, …) est transmis au backend : Faster-Whisper / Purfview le refuse. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
+`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation distincte du moteur associé à ce modèle. Les modèles Faster-Whisper produisent un JSON Tetram à côté du média. `reazon-k2-v2` exécute deux observations VAD (Silero puis TEN) sur le même WAV temporaire et publie donc deux sidecars. L'appelant choisit un ou plusieurs modèles ; il ne choisit pas le moteur ni le VAD. Les artefacts natifs temporaires sont le JSON Faster-Whisper et le WAV préparé pour Sherpa-ONNX : ils sont écrits sous le répertoire temporaire système, lus, normalisés, puis supprimés. Le stdout Sherpa (lignes `start -- end: text`) est capturé, pas écrit sur disque. `-LiteralPath` doit désigner un fichier unique existant : un masque ou un dossier est refusé par l'orchestrateur. Un fichier-liste existant (`.lst`, `.m3u`, …) est transmis au backend : Faster-Whisper / Purfview le refuse. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
 
-Le fichier durable suit la convention `<media-base>.track <trackid>.<langue>.<model>.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.
+Le fichier durable Faster-Whisper/Kotoba suit `<media-base>.track <trackid>.<langue>.<model>.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Pour Reazon : `Episode.track 1.ja.reazon-k2-v2.silero.json` et `Episode.track 1.ja.reazon-k2-v2.ten.json`. Dans le JSON, `model` reste `reazon-k2-v2` ; `vad` vaut `silero` ou `ten`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.
 
 ## EXAMPLES
 
@@ -98,7 +98,7 @@ Produit `Episode.track 1.ja.large-v3.json` puis `Episode.track 1.ja.kotoba-v2.js
 Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model large-v3, reazon-k2-v2 -UseLanguage ja
 ```
 
-Chaque modèle est routé vers son moteur (Faster-Whisper ou Sherpa-ONNX) et produit son propre sidecar.
+Faster-Whisper produit `Episode.track 1.ja.large-v3.json`. Reazon produit `Episode.track 1.ja.reazon-k2-v2.silero.json` et `Episode.track 1.ja.reazon-k2-v2.ten.json` (`model` = `reazon-k2-v2`, `vad` distinct).
 
 ## PARAMETERS
 
@@ -169,7 +169,7 @@ HelpMessage: ''
 
 ### -Model
 
-Modèle de transcription, défaut `large-v2`. Plusieurs valeurs : une invocation par modèle, éventuellement sur des moteurs différents. `large-v2`, `large-v3`, `large-v3-turbo` et `kotoba-v2` passent par Faster-Whisper / Purfview. `reazon-k2-v2` est un modèle japonais provisoire exécuté localement via Sherpa-ONNX ; il sert à valider le routage, pas un choix ASR définitif. Les binaires et poids doivent déjà être présents localement : la commande ne télécharge rien. `kotoba-v2` doit être installé séparément dans la distribution Purfview. `-UseLanguage ja` est accepté pour `reazon-k2-v2` sans forcer une langue : le moteur n'expose pas de paramètre de langue. Une autre langue est refusée par le backend Sherpa.
+Modèle de transcription, défaut `large-v2`. Plusieurs valeurs : une invocation par modèle, éventuellement sur des moteurs différents. `large-v2`, `large-v3`, `large-v3-turbo` et `kotoba-v2` passent par Faster-Whisper / Purfview et produisent un sidecar chacun. `reazon-k2-v2` est un modèle japonais provisoire exécuté localement via Sherpa-ONNX ; une valeur produit deux sidecars (Silero et TEN) distingués par `vad`, sans nouveau paramètre public. Il sert à valider le routage, pas un choix ASR définitif. Les poids Sherpa sont attendus dans `SherpaOnnx/models/<nom>/` (pour `reazon-k2-v2` : `SherpaOnnx/models/reazon-k2-v2/`). Les binaires et poids doivent déjà être présents localement : la commande ne télécharge rien. `kotoba-v2` doit être installé séparément dans la distribution Purfview. `-UseLanguage ja` est accepté pour `reazon-k2-v2` sans forcer une langue : le moteur n'expose pas de paramètre de langue. Une autre langue est refusée par le backend Sherpa.
 
 ```yaml
 Type: System.String[]
@@ -249,6 +249,6 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs, chacune produisant son sidecar via le moteur associé ; les distributions Purfview et Sherpa-ONNX se posent respectivement dans `Purfview-Whisper-Faster` et `SherpaOnnx`, dossiers non versionnés hors README ; jamais de téléchargement automatique ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ce sidecar ; la commande n'accepte pas d'entrée pipeline.
+Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs ; Faster-Whisper/Kotoba produisent un sidecar par modèle, `reazon-k2-v2` en produit deux (`.silero` / `.ten`) à partir d'un WAV temporaire commun ; les distributions Purfview et Sherpa-ONNX se posent respectivement dans `Purfview-Whisper-Faster` et `SherpaOnnx`, dossiers non versionnés hors README ; jamais de téléchargement automatique ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ces sidecars ; la commande n'accepte pas d'entrée pipeline.
 
 ## RELATED LINKS

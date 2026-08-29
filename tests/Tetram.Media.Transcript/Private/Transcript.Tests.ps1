@@ -21,9 +21,10 @@ BeforeAll {
             [string] $Language = 'ja',
             [int] $AudioTrack = 1,
             [string] $Text = 'x',
-            [string] $Engine = 'faster-whisper'
+            [string] $Engine = 'faster-whisper',
+            [string] $Vad
         )
-        [pscustomobject]@{
+        $item = [ordered]@{
             engine         = $Engine
             model          = $Model
             language       = $Language
@@ -37,6 +38,10 @@ BeforeAll {
                 }
             )
         }
+        if (-not [string]::IsNullOrWhiteSpace($Vad)) {
+            $item['vad'] = $Vad
+        }
+        [pscustomobject]$item
     }
 }
 
@@ -67,6 +72,25 @@ Describe 'Get-TetramTranscriptPath' {
             $got = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'kotoba-v2'
             $got | Should -Be (Join-Path $dir 'Episode.track 1.ja.kotoba-v2.json')
             $got | Should -Not -Match 'ctranslate'
+        }
+    }
+
+    It 'suffixe le chemin Reazon avec la variante VAD sans changer le modèle' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $dir = Join-Path 'Videos' 'Shows'
+            $silero = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'reazon-k2-v2' -Vad 'silero'
+            $ten = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'reazon-k2-v2' -Vad 'ten'
+            $silero | Should -Be (Join-Path $dir 'Episode.track 1.ja.reazon-k2-v2.silero.json')
+            $ten | Should -Be (Join-Path $dir 'Episode.track 1.ja.reazon-k2-v2.ten.json')
+        }
+    }
+
+    It 'garde le chemin Faster-Whisper inchangé en l''absence de VAD' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $dir = Join-Path 'Videos' 'Shows'
+            $got = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model 'large-v3'
+            $got | Should -Be (Join-Path $dir 'Episode.track 1.ja.large-v3.json')
+            $got | Should -Not -Match '\.silero\.|\.ten\.'
         }
     }
 }
@@ -457,6 +481,28 @@ Describe 'Publish-TetramTranscript' {
             $parsed = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $dest -Raw -Encoding UTF8)
             $parsed.audioTrack | Should -Be 2
             $parsed.language | Should -Be 'ja'
+        }
+    }
+
+    It 'distingue deux sidecars Reazon par vad, pas par un faux modèle' {
+        $silero = script:New-TestTetramTranscript -Model 'reazon-k2-v2' -Engine 'sherpa-onnx' -Vad 'silero'
+        $ten = script:New-TestTetramTranscript -Model 'reazon-k2-v2' -Engine 'sherpa-onnx' -Vad 'ten'
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            Work   = "$TestDrive"
+            Silero = $silero
+            Ten    = $ten
+        } {
+            param($Work, $Silero, $Ten)
+            $mediaDir = Join-Path $Work 'Videos'
+            New-Item -ItemType Directory -Path $mediaDir -Force | Out-Null
+            $media = Join-Path $mediaDir 'Episode.mkv'
+            Set-Content -LiteralPath $media -Value 'x'
+            Publish-TetramTranscript -Transcript $Silero -MediaPath $media
+            Publish-TetramTranscript -Transcript $Ten -MediaPath $media
+            Test-Path -LiteralPath (Join-Path $mediaDir 'Episode.track 1.ja.reazon-k2-v2.silero.json') | Should -BeTrue
+            Test-Path -LiteralPath (Join-Path $mediaDir 'Episode.track 1.ja.reazon-k2-v2.ten.json') | Should -BeTrue
+            Test-Path -LiteralPath (Join-Path $mediaDir 'Episode.track 1.ja.reazon-k2-v2.json') | Should -BeFalse
+            Test-Path -LiteralPath (Join-Path $mediaDir 'Episode.track 1.ja.reazon-k2-v2+silero.json') | Should -BeFalse
         }
     }
 }

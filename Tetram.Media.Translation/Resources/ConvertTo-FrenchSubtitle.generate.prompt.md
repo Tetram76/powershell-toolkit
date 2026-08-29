@@ -63,7 +63,7 @@ Elles peuvent notamment être :
 - une traduction française à améliorer ;
 - une traduction officielle dans une autre langue ;
 - une autre édition d'un sous-titre ;
-- une transcription automatique Whisper ;
+- une transcription automatique (Whisper ou Sherpa-ONNX / Reazon) ;
 - toute combinaison de ces types.
 
 Leur ordre d'apparition ne représente aucune priorité linguistique.
@@ -175,6 +175,21 @@ Les marqueurs techniques présents dans un sous-titre non structurant peuvent fo
 
 Ne copie pas automatiquement dans la sortie un marqueur uniquement parce qu'il apparaît dans une source non structurante.
 
+## Transcriptions automatiques
+
+Une transcription automatique est une observation directe de la piste audio.
+
+`engine`, `model` et, lorsqu'il existe, `vad` décrivent la provenance de cette observation. Ils ne donnent aucune priorité.
+
+Une transcription automatique est susceptible de :
+
+- mal reconnaître ;
+- omettre ;
+- halluciner ;
+- segmenter différemment ;
+- être décalée ;
+- produire une lecture plausible mais fausse.
+
 ## Transcriptions Whisper JSON
 
 Une transcription Whisper est une observation automatique directe de la piste audio.
@@ -183,6 +198,8 @@ Elle est fournie sous forme de JSON compact par segments :
 
 ```json
 {
+  "engine": "faster-whisper",
+  "model": "large-v3",
   "language": "ja",
   "segments": [
     {
@@ -349,6 +366,47 @@ Utilise la combinaison convergence + diagnostics pour tirer plusieurs avantages 
 La pondération n'a donc pas pour but de désigner une source gagnante une fois pour toutes.
 
 Elle sert à estimer, passage par passage, quelle hypothèse explique le mieux l'ensemble des éléments disponibles.
+
+## Transcriptions Sherpa-ONNX / Reazon
+
+Une transcription Sherpa-ONNX / Reazon est également une observation automatique directe de la piste audio.
+
+Elle est fournie sous forme de JSON compact par segments :
+
+```json
+{
+  "engine": "sherpa-onnx",
+  "model": "reazon-k2-v2",
+  "vad": "silero",
+  "language": "ja",
+  "segments": [
+    {
+      "start": 12.34,
+      "end": 15.67,
+      "text": "..."
+    }
+  ]
+}
+```
+
+Reazon n'expose pas les diagnostics Whisper (`avg_logprob`, `compression_ratio`, `no_speech_prob`, `temperature`). Cette absence n'est pas un signal négatif.
+
+`vad` distingue deux segmentations du même modèle ASR Reazon :
+
+- `silero` ;
+- `ten`.
+
+Reazon/Silero et Reazon/TEN ne sont pas deux observations ASR indépendantes. Elles utilisent le même modèle ASR et diffèrent par leur VAD/segmentation.
+
+Leur accord montre surtout qu'une lecture résiste à deux découpages différents. Ne compte pas cet accord comme deux votes ASR indépendants.
+
+Lorsqu'une sortie Reazon contient une réplique que l'autre omet, ne conclus pas automatiquement que la réplique est fausse : le découpage VAD peut rendre le modèle plus ou moins performant localement. Une omission dans une variante Reazon n'est pas une preuve automatique d'absence.
+
+Une convergence Reazon ↔ Whisper est plus indépendante que Reazon/Silero ↔ Reazon/TEN et peut constituer un tie-break utile.
+
+Les timestamps et la proximité sémantique restent à utiliser comme pour les autres sources, sans alignement positionnel naïf.
+
+Aucune source ne reçoit de priorité globale fixe ; l'arbitrage reste local au passage.
 
 ## Synchronisation et rapprochement entre les sources
 

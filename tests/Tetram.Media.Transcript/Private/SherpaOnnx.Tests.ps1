@@ -295,6 +295,7 @@ Describe 'Get-SherpaOnnxArguments' {
                 $wav
             )
             $got | Should -Not -Match 'ten-vad'
+            $got | Should -Not -Match 'num-threads'
         }
     }
 
@@ -321,6 +322,7 @@ Describe 'Get-SherpaOnnxArguments' {
                 $wav
             )
             $got | Should -Not -Match 'silero-vad'
+            $got | Should -Not -Match 'num-threads'
         }
     }
 
@@ -412,6 +414,7 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
             $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2'
             $got.engine | Should -Be 'sherpa-onnx'
             $got.model | Should -Be 'reazon-k2-v2'
+            $got.PSObject.Properties.Name | Should -Not -Contain 'vad'
             $got.language | Should -Be 'ja'
             $got.languageSource | Should -Be 'model'
             $got.audioTrack | Should -Be 1
@@ -424,6 +427,15 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
             $got.segments[1].text | Should -Be 'どうしたの'
             $got.segments[0].PSObject.Properties.Name | Should -Not -Contain 'diagnostics'
             $got.segments[0].PSObject.Properties.Name | Should -Not -Contain 'words'
+        }
+    }
+
+    It 'ajoute vad quand il est fourni, sans changer le modèle ASR' {
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Native = $script:NativeSherpaVadStdout } {
+            param($Native)
+            $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -Vad 'silero'
+            $got.model | Should -Be 'reazon-k2-v2'
+            $got.vad | Should -Be 'silero'
         }
     }
 
@@ -719,16 +731,20 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         $script:SeenSherpaCalls[0] | Should -Not -Contain ("--ten-vad-model=" + (Join-Path $script:FakeSherpaDir 'ten-vad.onnx'))
         $script:SeenSherpaCalls[1] | Should -Contain ("--ten-vad-model=" + (Join-Path $script:FakeSherpaDir 'ten-vad.onnx'))
         $script:SeenSherpaCalls[1] | Should -Not -Contain ("--silero-vad-model=" + (Join-Path $script:FakeSherpaDir 'silero_vad.onnx'))
+        ($script:SeenSherpaCalls[0] -join ' ') | Should -Not -Match '--num-threads'
+        ($script:SeenSherpaCalls[1] -join ' ') | Should -Not -Match '--num-threads'
         $script:ShownWavs | Should -Be @($script:SeenWav, $script:SeenWav, $script:SeenWav)
         $got.Count | Should -Be 2
         $got[0].engine | Should -Be 'sherpa-onnx'
-        $got[0].model | Should -Be 'reazon-k2-v2+silero'
+        $got[0].model | Should -Be 'reazon-k2-v2'
+        $got[0].vad | Should -Be 'silero'
         $got[0].audioTrack | Should -Be 2
         $got[0].segments.Count | Should -Be 2
         $got[0].segments[0].text | Should -Be 'こんにちは'
         $got[0].segments[1].text | Should -Be 'どうしたの'
         $got[1].engine | Should -Be 'sherpa-onnx'
-        $got[1].model | Should -Be 'reazon-k2-v2+ten'
+        $got[1].model | Should -Be 'reazon-k2-v2'
+        $got[1].vad | Should -Be 'ten'
         $got[1].audioTrack | Should -Be 2
         $got[1].segments.Count | Should -Be 1
         $got[1].segments[0].text | Should -Be 'ten-only'
@@ -761,8 +777,10 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         }
 
         $got.Count | Should -Be 2
-        $got[0].model | Should -Be 'reazon-k2-v2+silero'
-        $got[1].model | Should -Be 'reazon-k2-v2+ten'
+        $got[0].model | Should -Be 'reazon-k2-v2'
+        $got[0].vad | Should -Be 'silero'
+        $got[1].model | Should -Be 'reazon-k2-v2'
+        $got[1].vad | Should -Be 'ten'
         foreach ($transcript in $got) {
             $transcript.segments.Count | Should -Be 2
             $transcript.segments[0].start | Should -Be 10.08
