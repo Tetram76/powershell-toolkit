@@ -79,48 +79,25 @@ function Get-SherpaOnnxModelFiles {
         throw "Modèle Sherpa-ONNX non géré : '$Model'."
     }
 
-    if (-not (Test-Path -LiteralPath $script:SherpaOnnxRoot -PathType Container)) {
-        throw "Aucun dossier Reazon (nom contenant 'reazon') pour reazon-k2-v2 sous '$script:SherpaOnnxRoot'."
+    # Convention : SherpaOnnx/models/<nom-canonique> ; pas de scan ni de repli sur un autre dossier.
+    $modelDir = Join-Path $script:SherpaOnnxRoot 'models' $Model
+    if (-not (Test-Path -LiteralPath $modelDir -PathType Container)) {
+        throw "Dossier modèle introuvable : '$modelDir'."
     }
 
-    $tokenFiles = @(Get-ChildItem -LiteralPath $script:SherpaOnnxRoot -Recurse -Filter 'tokens.txt' -File -ErrorAction SilentlyContinue)
-    # Le modèle publié est reazon-k2-v2 : un autre Zipformer complet ne peut pas servir de repli.
-    # Directory.Name (feuille) : un ancêtre nommé *reazon* ne doit pas qualifier un autre Zipformer.
-    $reazonTokens = @($tokenFiles | Where-Object { $_.Directory.Name -match 'reazon' })
-    if ($reazonTokens.Count -eq 0) {
-        throw "Aucun dossier Reazon (nom contenant 'reazon') pour reazon-k2-v2 sous '$script:SherpaOnnxRoot'."
-    }
-
-    $candidates = [System.Collections.Generic.List[object]]::new()
-    foreach ($tokens in $reazonTokens) {
-        $dir = $tokens.DirectoryName
-        $encoder = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'encoder' -PreferInt8
-        $decoder = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'decoder'
-        $joiner = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'joiner' -PreferInt8
-        if ($encoder -and $decoder -and $joiner) {
-            $candidates.Add([pscustomobject]@{
-                    Tokens    = $tokens.FullName
-                    Encoder   = $encoder
-                    Decoder   = $decoder
-                    Joiner    = $joiner
-                    Directory = $dir
-                })
-        }
-    }
-
-    if ($candidates.Count -eq 0) {
-        throw "Fichiers encoder/decoder/joiner incomplets pour reazon-k2-v2 sous '$script:SherpaOnnxRoot'."
-    }
-    if ($candidates.Count -gt 1) {
-        $dirs = ($candidates | ForEach-Object { $_.Directory }) -join ', '
-        throw "Plusieurs dossiers Reazon complets pour reazon-k2-v2, choix ambigu : $dirs."
+    $tokens = Join-Path $modelDir 'tokens.txt'
+    $encoder = Select-SherpaOnnxOnnxFile -Directory $modelDir -Prefix 'encoder' -PreferInt8
+    $decoder = Select-SherpaOnnxOnnxFile -Directory $modelDir -Prefix 'decoder'
+    $joiner = Select-SherpaOnnxOnnxFile -Directory $modelDir -Prefix 'joiner' -PreferInt8
+    if (-not (Test-Path -LiteralPath $tokens -PathType Leaf) -or -not $encoder -or -not $decoder -or -not $joiner) {
+        throw "Fichiers encoder/decoder/joiner incomplets pour '$modelDir'."
     }
 
     return [pscustomobject]@{
-        Tokens  = $candidates[0].Tokens
-        Encoder = $candidates[0].Encoder
-        Decoder = $candidates[0].Decoder
-        Joiner  = $candidates[0].Joiner
+        Tokens  = $tokens
+        Encoder = $encoder
+        Decoder = $decoder
+        Joiner  = $joiner
     }
 }
 
