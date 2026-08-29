@@ -89,8 +89,12 @@ function ConvertFrom-SherpaOnnxOfflineStdout {
     $results = [System.Collections.Generic.List[object]]::new()
     foreach ($line in ($Stdout -split '\r?\n')) {
         $trimmed = $line.Trim()
-        if ($trimmed.Length -eq 0 -or -not $trimmed.StartsWith('{')) {
+        if ($trimmed.Length -eq 0) {
             continue
+        }
+        # Upstream n'écrit que AsJsonString() sur stdout ; une autre ligne est une fuite native, pas un log.
+        if (-not $trimmed.StartsWith('{')) {
+            throw "Sortie sherpa-onnx-offline inattendue : '$trimmed'."
         }
 
         try {
