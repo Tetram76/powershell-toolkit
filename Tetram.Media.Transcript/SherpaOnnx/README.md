@@ -89,7 +89,7 @@ Les tests Pester ne lancent jamais `sherpa-onnx-vad.exe` ni `sherpa-onnx-offline
 `Get-MediaTranscript -Model <modèle-sherpa>` :
 
 1. extrait **un** WAV maître temporaire (PCM signed 16-bit, mono, 16 kHz via `Tetram.Media.FFmpeg`) ;
-2. lance `sherpa-onnx-vad.exe` une fois pour Silero, une fois pour TEN, sur ce WAV maître ;
+2. lance `sherpa-onnx-vad.exe` une fois pour Silero, une fois pour TEN, sur ce WAV maître (intervalles sur stderr, mélangés aux logs) ;
 3. découpe un chunk WAV par intervalle VAD **depuis le WAV maître** (pas depuis le WAV parole concaténé imposé par le VAD) ;
 4. lance `sherpa-onnx-offline.exe` sur ces chunks, par lots bornés (détail privé) ;
 5. recale segments et timestamps token-level sur la timeline du média : `TimelineOffset + vadStart + tokenLocal`.
