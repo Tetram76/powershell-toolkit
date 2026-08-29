@@ -290,32 +290,23 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
 }
 
 Describe 'Get-SherpaOnnxWavDuration' {
-    It 'lit la durée depuis l''en-tête PCM du WAV extrait' {
-        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = "$TestDrive" } {
-            param($Work)
-            $wav = Join-Path $Work 'extrait.wav'
-            $sampleRate = 16000
-            $duration = 0.25
-            $dataSize = [int]($sampleRate * $duration * 2)
-            $stream = [IO.MemoryStream]::new()
-            $writer = [IO.BinaryWriter]::new($stream)
-            $writer.Write([Text.Encoding]::ASCII.GetBytes('RIFF'))
-            $writer.Write([int32](36 + $dataSize))
-            $writer.Write([Text.Encoding]::ASCII.GetBytes('WAVE'))
-            $writer.Write([Text.Encoding]::ASCII.GetBytes('fmt '))
-            $writer.Write([int32]16)
-            $writer.Write([int16]1)
-            $writer.Write([int16]1)
-            $writer.Write([int32]$sampleRate)
-            $writer.Write([int32]($sampleRate * 2))
-            $writer.Write([int16]2)
-            $writer.Write([int16]16)
-            $writer.Write([Text.Encoding]::ASCII.GetBytes('data'))
-            $writer.Write([int32]$dataSize)
-            $writer.Write([byte[]]::new($dataSize))
-            $writer.Flush()
-            [IO.File]::WriteAllBytes($wav, $stream.ToArray())
-            Get-SherpaOnnxWavDuration -LiteralPath $wav | Should -Be 0.25
+    It 'demande à ffprobe la durée du WAV extrait' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            Mock Invoke-SherpaOnnxFfprobe {
+                param($Arguments)
+                $script:SeenFfprobe = $Arguments
+                '13.433000'
+            }
+            Get-SherpaOnnxWavDuration -LiteralPath 'audio.wav' | Should -Be 13.433
+            $script:SeenFfprobe | Should -Contain 'format=duration'
+            $script:SeenFfprobe[-1] | Should -Be 'audio.wav'
+        }
+    }
+
+    It 'lève si ffprobe ne donne pas de durée' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            Mock Invoke-SherpaOnnxFfprobe { 'N/A' }
+            { Get-SherpaOnnxWavDuration -LiteralPath 'audio.wav' } | Should -Throw '*durée*'
         }
     }
 }
@@ -538,10 +529,7 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         $media = Join-Path $TestDrive 'whatif.mkv'
         Set-Content -LiteralPath $media -Value 'x'
         Mock -ModuleName Tetram.Media.Transcript Invoke-FFmpeg { throw 'ne doit pas tourner' }
-        Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx {
-            param($Exe, $Arguments, $Cmdlet, $State)
-            $script:SeenSherpa = $Arguments
-        }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx { throw 'ne doit pas tourner' }
         $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
             Media  = $media
             Cmdlet = $script:FakeCmdlet
@@ -552,9 +540,8 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         $got | Should -BeNullOrEmpty
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
         Should -Invoke -ModuleName Tetram.Media.Transcript Get-SherpaOnnxTimelineOffset -Times 0
-        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 1
-        $script:SeenSherpa[-1] | Should -Match '\.wav$'
-        Test-Path -LiteralPath $script:SeenSherpa[-1] | Should -BeFalse
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Transcript Show-CommandLine -Times 2
     }
 
     It 'lève si l''exécutable est introuvable' {
