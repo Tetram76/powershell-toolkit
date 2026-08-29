@@ -135,6 +135,14 @@ Describe 'ConvertFrom-SherpaOnnxOfflineStdout' {
         }
     }
 
+    It 'lève si une ligne stdout non vide n''est pas un objet JSON' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $stdout = "OfflineRecognizer config`n{`"text`":`"x`",`"tokens`":[],`"timestamps`":[]}"
+            { ConvertFrom-SherpaOnnxOfflineStdout -Stdout $stdout -ExpectedCount 1 } |
+                Should -Throw '*OfflineRecognizer config*'
+        }
+    }
+
     It 'lève si le nombre de JSON diffère du nombre de chunks' {
         InModuleScope 'Tetram.Media.Transcript' {
             $stdout = '{"text":"un","tokens":[],"timestamps":[]}'
