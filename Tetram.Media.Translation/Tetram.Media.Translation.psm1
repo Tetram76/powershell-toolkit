@@ -20,14 +20,14 @@ function ConvertTo-SecondarySourcePromptPart {
     if ($extension.Equals('.json', [StringComparison]::OrdinalIgnoreCase)) {
         $rawJson = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
         try {
-            $whisper = ConvertFrom-Json -InputObject $rawJson -ErrorAction Stop
+            $transcript = ConvertFrom-Json -InputObject $rawJson -ErrorAction Stop
         }
         catch {
             throw "La source secondaire n'est pas un JSON valide : $Path"
         }
 
         try {
-            $compactJson = ConvertTo-CompactTranscriptJson -InputObject $whisper
+            $compactJson = ConvertTo-CompactTranscriptJson -InputObject $transcript
         }
         catch {
             throw "La source secondaire n'a pas la structure Tetram attendue : $Path"
