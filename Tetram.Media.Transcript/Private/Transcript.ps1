@@ -107,7 +107,7 @@ function Get-TranscriptEngineName {
         { $_ -in @('large-v2', 'large-v3', 'large-v3-turbo', 'kotoba-v2') } {
             return 'Whisper'
         }
-        'reazon-k2-v2' {
+        { $_ -in @('reazon-k2-v2', 'parakeet-0.6b-ja', 'sensevoice-small') } {
             return 'SherpaOnnx'
         }
         default {

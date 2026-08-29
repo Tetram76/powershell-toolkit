@@ -157,6 +157,7 @@ Describe 'Tetram.Media.Translation manifest' {
         $prompt | Should -Match 'pas un signal négatif'
         $prompt | Should -Match 'plus indépendante'
         $prompt | Should -Match 'preuve automatique d''absence'
+        $prompt | Should -Match 'même model \+ VAD différent'
         $prompt | Should -Not -Match 'Déterminer le sens avant de traduire'
         $prompt | Should -Not -Match 'SOURCE PRINCIPALE'
         $prompt | Should -Not -Match 'JSON brut'
@@ -589,6 +590,52 @@ Describe 'ConvertTo-FrenchSubtitle' {
         $compacts[2].model | Should -Be 'reazon-k2-v2'
         $compacts[2].vad | Should -Be 'ten'
         $compacts[1].segments[0].PSObject.Properties.Name | Should -Not -Contain 'avg_logprob'
+    }
+
+    It 'garde model et vad identifiables pour plusieurs modèles Sherpa' {
+        $env:GEMINI_API_KEY = 'test-key'
+        $sources = @(
+            @{ Leaf = 'episode.track 1.ja.reazon-k2-v2.silero.json'; Model = 'reazon-k2-v2'; Vad = 'silero' }
+            @{ Leaf = 'episode.track 1.ja.reazon-k2-v2.ten.json'; Model = 'reazon-k2-v2'; Vad = 'ten' }
+            @{ Leaf = 'episode.track 1.ja.parakeet-0.6b-ja.silero.json'; Model = 'parakeet-0.6b-ja'; Vad = 'silero' }
+            @{ Leaf = 'episode.track 1.ja.parakeet-0.6b-ja.ten.json'; Model = 'parakeet-0.6b-ja'; Vad = 'ten' }
+            @{ Leaf = 'episode.track 1.ja.sensevoice-small.silero.json'; Model = 'sensevoice-small'; Vad = 'silero'; LanguageSource = 'forced' }
+            @{ Leaf = 'episode.track 1.ja.sensevoice-small.ten.json'; Model = 'sensevoice-small'; Vad = 'ten'; LanguageSource = 'forced' }
+        )
+        $paths = foreach ($source in $sources) {
+            $path = Join-Path $script:Work $source.Leaf
+            $languageSource = if ($source.ContainsKey('LanguageSource')) { $source.LanguageSource } else { 'model' }
+            $json = '{"engine":"sherpa-onnx","model":"' + $source.Model + '","vad":"' + $source.Vad + '","language":"ja","languageSource":"' + $languageSource + '","audioTrack":1,"segments":[{"start":1.0,"end":2.0,"text":"' + $source.Model + '-' + $source.Vad + '"}]}'
+            Set-Content -LiteralPath $path -Value $json -Encoding utf8NoBOM -NoNewline
+            $path
+        }
+        Mock -ModuleName Tetram.Media.Translation Invoke-RestMethod {
+            Get-GeminiMockResponse -Uri $Uri -OnGenerateContent {
+                $script:LastGeminiBody = ConvertFrom-GeminiRequestBody $Body
+                New-GeminiStopResponse $script:HelloJson
+            }
+        }
+
+        ConvertTo-FrenchSubtitle -SubtitlePath $script:SubtitlePath -SecondarySourcePath $paths
+
+        $autoParts = @(
+            Get-GeminiPromptText $script:LastGeminiBody |
+                Where-Object { $_ -match 'TRANSCRIPTION AUTOMATIQUE JSON' }
+        )
+        $autoParts.Count | Should -Be 6
+        $compacts = @(
+            $autoParts | ForEach-Object {
+                if ($_ -notmatch '(?s)===== SOURCE LINGUISTIQUE \d+ — TRANSCRIPTION AUTOMATIQUE JSON =====\r?\n(.+)\r?\n===== FIN SOURCE LINGUISTIQUE \d+ =====') {
+                    throw 'JSON compact introuvable'
+                }
+                ConvertFrom-Json -InputObject $Matches[1].Trim()
+            }
+        )
+        for ($i = 0; $i -lt $sources.Count; $i++) {
+            $compacts[$i].engine | Should -Be 'sherpa-onnx'
+            $compacts[$i].model | Should -Be $sources[$i].Model
+            $compacts[$i].vad | Should -Be $sources[$i].Vad
+        }
     }
 
     It 'refuse un engine inconnu avant tout appel réseau' {
