@@ -235,6 +235,34 @@ Describe 'ConvertTo-CompactTranscriptJson' {
         $got.vad | Should -Be 'ten'
     }
 
+    It 'accepte un JSON Sherpa <Model> sans inventer de diagnostic Whisper' -TestCases @(
+        @{ Model = 'parakeet-0.6b-ja'; Vad = 'silero' }
+        @{ Model = 'parakeet-0.6b-ja'; Vad = 'ten' }
+        @{ Model = 'sensevoice-small'; Vad = 'silero' }
+        @{ Model = 'sensevoice-small'; Vad = 'ten' }
+    ) {
+        param($Model, $Vad)
+        $json = script:Get-MinimalTetramJson -Engine 'sherpa-onnx' -Model $Model -Vad $Vad -SegmentBody '"start":12.34,"end":15.67,"text":"ja text"'
+        $compact = Invoke-CompactTranscriptJson -InputObject $json
+        $got = ConvertFrom-Json -InputObject $compact
+        $segment = @($got.segments)[0]
+
+        $got.engine | Should -Be 'sherpa-onnx'
+        $got.model | Should -Be $Model
+        $got.vad | Should -Be $Vad
+        $got.language | Should -Be 'ja'
+        $segment.start | Should -Be 12.34
+        $segment.end | Should -Be 15.67
+        $segment.text | Should -Be 'ja text'
+        $segment.PSObject.Properties['temperature'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['avg_logprob'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['compression_ratio'] | Should -BeNullOrEmpty
+        $segment.PSObject.Properties['no_speech_prob'] | Should -BeNullOrEmpty
+        $compact | Should -Not -Match '"diagnostics"'
+        $compact | Should -Not -Match '"words"'
+        $compact | Should -Not -Match '"tokens"'
+    }
+
     It 'lève si un JSON Whisper legacy à diagnostics plats est fourni' {
         { Invoke-CompactTranscriptJson -InputObject $script:LegacyWhisperJson } |
             Should -Throw '*Tetram*'

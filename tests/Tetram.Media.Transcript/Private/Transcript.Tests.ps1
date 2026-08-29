@@ -85,6 +85,23 @@ Describe 'Get-TetramTranscriptPath' {
         }
     }
 
+    It 'suffixe le chemin <Model> avec la variante VAD sans changer le modèle' -TestCases @(
+        @{ Model = 'parakeet-0.6b-ja' }
+        @{ Model = 'sensevoice-small' }
+    ) {
+        param($Model)
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Model = $Model } {
+            param($Model)
+            $dir = Join-Path 'Videos' 'Shows'
+            $silero = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model $Model -Vad 'silero'
+            $ten = Get-TetramTranscriptPath -Directory $dir -MediaBase 'Episode' -Language 'ja' -Model $Model -Vad 'ten'
+            $silero | Should -Be (Join-Path $dir "Episode.track 1.ja.$Model.silero.json")
+            $ten | Should -Be (Join-Path $dir "Episode.track 1.ja.$Model.ten.json")
+            $silero | Should -Not -Match [regex]::Escape("$Model+silero")
+            $ten | Should -Not -Match [regex]::Escape("$Model+ten")
+        }
+    }
+
     It 'garde le chemin Faster-Whisper inchangé en l''absence de VAD' {
         InModuleScope 'Tetram.Media.Transcript' {
             $dir = Join-Path 'Videos' 'Shows'
@@ -164,9 +181,15 @@ Describe 'Get-TranscriptEngineName' {
         }
     }
 
-    It 'route reazon-k2-v2 vers SherpaOnnx' {
-        InModuleScope 'Tetram.Media.Transcript' {
-            Get-TranscriptEngineName -Model 'reazon-k2-v2' | Should -Be 'SherpaOnnx'
+    It 'route <Model> vers SherpaOnnx' -TestCases @(
+        @{ Model = 'reazon-k2-v2' }
+        @{ Model = 'parakeet-0.6b-ja' }
+        @{ Model = 'sensevoice-small' }
+    ) {
+        param($Model)
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Model = $Model } {
+            param($Model)
+            Get-TranscriptEngineName -Model $Model | Should -Be 'SherpaOnnx'
         }
     }
 }
@@ -268,6 +291,36 @@ function Invoke-ProviderTranscript {
 
             $got.model | Should -Be 'reazon-k2-v2'
         }
+
+        It 'n''exécute pas Whisper.ps1 pour <Model>' -TestCases @(
+            @{ Model = 'parakeet-0.6b-ja' }
+            @{ Model = 'sensevoice-small' }
+        ) {
+            param($Model)
+            $tempRoot = Join-Path $TestDrive "transcript-private-$Model"
+            New-Item -ItemType Directory -Path $tempRoot | Out-Null
+            Set-Content -LiteralPath (Join-Path $tempRoot 'SherpaOnnx.ps1') -Value @'
+function Invoke-ProviderTranscript {
+    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $Result, [switch] $WhatIf)
+    [void]$Result.Transcripts.Add([pscustomobject]@{ model = $Model; engine = 'sherpa-onnx' })
+}
+'@ -Encoding utf8
+            Set-Content -LiteralPath (Join-Path $tempRoot 'Whisper.ps1') -Value "throw 'Whisper ne devait pas être chargé'" -Encoding utf8
+
+            $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+                TempRoot = $tempRoot
+                Cmdlet   = $script:FakeCmdlet
+                Model    = $Model
+            } {
+                param($TempRoot, $Cmdlet, $Model)
+                $script:TranscriptPrivateRoot = $TempRoot
+                $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+                Invoke-TranscriptBackend -MediaPath (Join-Path 'Videos' 'a.mkv') -Model $Model -Cmdlet $Cmdlet -Result $result
+                $result.Transcripts[0]
+            }
+
+            $got.model | Should -Be $Model
+        }
     }
 }
 
@@ -357,6 +410,50 @@ function Invoke-ProviderTranscript {
         }
 
         $got.model | Should -Be 'reazon-k2-v2'
+        $got.mediaPath | Should -Be $media
+        $got.audioTrack | Should -Be 2
+        $got.language | Should -Be 'ja'
+        $got.whatIf | Should -BeFalse
+    }
+
+    It 'délègue <Model> au contrat commun sans résoudre Sherpa' -TestCases @(
+        @{ Model = 'parakeet-0.6b-ja' }
+        @{ Model = 'sensevoice-small' }
+    ) {
+        param($Model)
+        $tempRoot = Join-Path $TestDrive "dispatch-$Model"
+        New-Item -ItemType Directory -Path $tempRoot | Out-Null
+        Set-Content -LiteralPath (Join-Path $tempRoot 'SherpaOnnx.ps1') -Value @'
+function Get-SherpaOnnxPath { throw 'le dispatcher ne doit pas résoudre Sherpa' }
+function Invoke-FFmpeg { throw 'le dispatcher ne doit pas invoquer FFmpeg' }
+function Invoke-ProviderTranscript {
+    param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $Result, [switch] $WhatIf)
+    [void]$Result.Transcripts.Add([pscustomobject]@{
+            model      = $Model
+            mediaPath  = $MediaPath
+            audioTrack = $AudioTrack
+            language   = $UseLanguage
+            whatIf     = [bool]$WhatIf
+        })
+}
+'@ -Encoding utf8
+        Set-Content -LiteralPath (Join-Path $tempRoot 'Whisper.ps1') -Value "throw 'Whisper ne devait pas être chargé'" -Encoding utf8
+
+        $media = Join-Path 'Videos' 'Episode.mkv'
+        $got = InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            TempRoot = $tempRoot
+            Cmdlet   = $script:FakeCmdlet
+            Media    = $media
+            Model    = $Model
+        } {
+            param($TempRoot, $Cmdlet, $Media, $Model)
+            $script:TranscriptPrivateRoot = $TempRoot
+            $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
+            Invoke-TranscriptBackend -MediaPath $Media -Model $Model -AudioTrack 2 -UseLanguage 'ja' -Cmdlet $Cmdlet -Result $result
+            $result.Transcripts[0]
+        }
+
+        $got.model | Should -Be $Model
         $got.mediaPath | Should -Be $media
         $got.audioTrack | Should -Be 2
         $got.language | Should -Be 'ja'
@@ -513,6 +610,38 @@ Describe 'Publish-TetramTranscript' {
             Test-Path -LiteralPath (Join-Path $mediaDir 'Episode.track 1.ja.reazon-k2-v2.ten.json') | Should -BeTrue
             Test-Path -LiteralPath (Join-Path $mediaDir 'Episode.track 1.ja.reazon-k2-v2.json') | Should -BeFalse
             Test-Path -LiteralPath (Join-Path $mediaDir 'Episode.track 1.ja.reazon-k2-v2+silero.json') | Should -BeFalse
+        }
+    }
+
+    It 'distingue deux sidecars <Model> par vad, pas par un faux modèle' -TestCases @(
+        @{ Model = 'parakeet-0.6b-ja' }
+        @{ Model = 'sensevoice-small' }
+    ) {
+        param($Model)
+        $silero = script:New-TestTetramTranscript -Model $Model -Engine 'sherpa-onnx' -Vad 'silero'
+        $ten = script:New-TestTetramTranscript -Model $Model -Engine 'sherpa-onnx' -Vad 'ten'
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            Work   = "$TestDrive"
+            Silero = $silero
+            Ten    = $ten
+            Model  = $Model
+        } {
+            param($Work, $Silero, $Ten, $Model)
+            $mediaDir = Join-Path $Work "Videos-$Model"
+            New-Item -ItemType Directory -Path $mediaDir -Force | Out-Null
+            $media = Join-Path $mediaDir 'Episode.mkv'
+            Set-Content -LiteralPath $media -Value 'x'
+            Publish-TetramTranscript -Transcript $Silero -MediaPath $media
+            Publish-TetramTranscript -Transcript $Ten -MediaPath $media
+            Test-Path -LiteralPath (Join-Path $mediaDir "Episode.track 1.ja.$Model.silero.json") | Should -BeTrue
+            Test-Path -LiteralPath (Join-Path $mediaDir "Episode.track 1.ja.$Model.ten.json") | Should -BeTrue
+            Test-Path -LiteralPath (Join-Path $mediaDir "Episode.track 1.ja.$Model.json") | Should -BeFalse
+            Test-Path -LiteralPath (Join-Path $mediaDir "Episode.track 1.ja.$Model+silero.json") | Should -BeFalse
+            $parsed = ConvertFrom-Json -InputObject (
+                Get-Content -LiteralPath (Join-Path $mediaDir "Episode.track 1.ja.$Model.silero.json") -Raw -Encoding UTF8
+            )
+            $parsed.model | Should -Be $Model
+            $parsed.vad | Should -Be 'silero'
         }
     }
 }

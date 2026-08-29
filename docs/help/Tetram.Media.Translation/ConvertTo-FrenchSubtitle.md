@@ -28,7 +28,7 @@ ConvertTo-FrenchSubtitle -SubtitlePath <string> [-SecondarySourcePath <string[]>
 
 ## DESCRIPTION
 
-Importer `.\Tetram.Media.Translation` (PowerShell 7+). `-SubtitlePath` définit toujours la structure finale (cues, `cueId`, timestamps, reconstruction). Le modèle reçoit un gabarit technique `cueId`/`start`/`end` sans texte ; le texte de `-SubtitlePath` est envoyé séparément comme source linguistique structurante (`start`/`end`/`text`, sans `cueId`). `-SecondarySourcePath` accepte 0..N sources linguistiques facultatives : sous-titres SRT/ASS/SSA (JSON `start`/`end`/`text`, sans `cueId`) ou transcriptions JSON Tetram canoniques Faster-Whisper et Sherpa-ONNX/Reazon produites par `Get-MediaTranscript` (compactées en JSON par segments pour le prompt). Plusieurs transcriptions automatiques peuvent être fournies simultanément ; Reazon/Silero et Reazon/TEN sont deux segmentations du même ASR, pas deux modèles distincts. Aucune source linguistique n'a de priorité fixe. Le modèle retourne une proposition JSON `{ cueId, text }`.
+Importer `.\Tetram.Media.Translation` (PowerShell 7+). `-SubtitlePath` définit toujours la structure finale (cues, `cueId`, timestamps, reconstruction). Le modèle reçoit un gabarit technique `cueId`/`start`/`end` sans texte ; le texte de `-SubtitlePath` est envoyé séparément comme source linguistique structurante (`start`/`end`/`text`, sans `cueId`). `-SecondarySourcePath` accepte 0..N sources linguistiques facultatives : sous-titres SRT/ASS/SSA (JSON `start`/`end`/`text`, sans `cueId`) ou transcriptions JSON Tetram canoniques Faster-Whisper et Sherpa-ONNX produites par `Get-MediaTranscript` (compactées en JSON par segments pour le prompt). Plusieurs transcriptions automatiques peuvent être fournies simultanément ; deux VAD d'un même `model` Sherpa sont deux segmentations du même ASR, pas deux votes indépendants. Aucune source linguistique n'a de priorité fixe. Le modèle retourne une proposition JSON `{ cueId, text }`.
 
 Le fournisseur se choisit avec `-Provider` (`Gemini` ou `Ollama`). Sans `-Provider`, Gemini est utilisé.
 
@@ -328,7 +328,7 @@ HelpMessage: ''
 
 ### -SecondarySourcePath
 
-0..N sources linguistiques facultatives : sous-titres SRT/ASS/SSA ou transcriptions JSON Tetram canoniques Faster-Whisper et Sherpa-ONNX/Reazon (typiquement produites par `Get-MediaTranscript`, ex. `Episode.track 1.ja.large-v3.json`, `Episode.track 1.ja.reazon-k2-v2.silero.json`, `Episode.track 1.ja.reazon-k2-v2.ten.json`). L'ordre fourni ne représente aucune priorité linguistique. Reazon/Silero et Reazon/TEN ne sont pas deux modèles ASR différents.
+0..N sources linguistiques facultatives : sous-titres SRT/ASS/SSA ou transcriptions JSON Tetram canoniques Faster-Whisper et Sherpa-ONNX (typiquement produites par `Get-MediaTranscript`, ex. `Episode.track 1.ja.large-v3.json`, `Episode.track 1.ja.reazon-k2-v2.silero.json`, `Episode.track 1.ja.parakeet-0.6b-ja.ten.json`, `Episode.track 1.ja.sensevoice-small.silero.json`). L'ordre fourni ne représente aucune priorité linguistique. Deux VAD d'un même modèle Sherpa ne sont pas deux modèles ASR différents.
 
 ```yaml
 Type: System.String[]

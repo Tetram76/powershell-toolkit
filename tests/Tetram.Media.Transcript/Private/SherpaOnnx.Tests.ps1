@@ -25,6 +25,20 @@ BeforeAll {
             Transcripts = [System.Collections.Generic.List[object]]::new()
         }
     }
+
+    function script:New-SherpaModelTree {
+        param(
+            [Parameter(Mandatory)] [string] $Root,
+            [Parameter(Mandatory)] [string] $Model,
+            [Parameter(Mandatory)] [string[]] $Files
+        )
+        $modelDir = Join-Path $Root 'models' $Model
+        New-Item -ItemType Directory -Path $modelDir -Force | Out-Null
+        foreach ($name in $Files) {
+            Set-Content -LiteralPath (Join-Path $modelDir $name) -Value 'stub'
+        }
+        $modelDir
+    }
 }
 
 AfterAll {
@@ -274,6 +288,164 @@ Describe 'Get-SherpaOnnxModelFiles' {
             }
         }
     }
+
+    It 'trouve tokens.txt et model.int8.onnx pour <Model>' -TestCases @(
+        @{ Model = 'parakeet-0.6b-ja'; Property = 'NemoCtcModel' }
+        @{ Model = 'sensevoice-small'; Property = 'SenseVoiceModel' }
+    ) {
+        param($Model, $Property)
+        $root = Join-Path $TestDrive "single-file-$Model"
+        $modelDir = script:New-SherpaModelTree -Root $root -Model $Model -Files @('tokens.txt', 'model.int8.onnx')
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            Root     = $root
+            Model    = $Model
+            Property = $Property
+            ModelDir = $modelDir
+        } {
+            param($Root, $Model, $Property, $ModelDir)
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $Root
+                $got = Get-SherpaOnnxModelFiles -Model $Model
+                $got.Tokens | Should -Be (Join-Path $ModelDir 'tokens.txt')
+                $got.$Property | Should -Be (Join-Path $ModelDir 'model.int8.onnx')
+                $got.PSObject.Properties.Name | Should -Not -Contain 'Encoder'
+                $got.PSObject.Properties.Name | Should -Not -Contain 'Decoder'
+                $got.PSObject.Properties.Name | Should -Not -Contain 'Joiner'
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'lève si tokens.txt manque pour <Model>' -TestCases @(
+        @{ Model = 'parakeet-0.6b-ja' }
+        @{ Model = 'sensevoice-small' }
+    ) {
+        param($Model)
+        $root = Join-Path $TestDrive "sans-tokens-$Model"
+        script:New-SherpaModelTree -Root $root -Model $Model -Files @('model.int8.onnx') | Out-Null
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Root = $root; Model = $Model } {
+            param($Root, $Model)
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $Root
+                { Get-SherpaOnnxModelFiles -Model $Model } | Should -Throw '*incomplet*'
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'lève si model.int8.onnx manque pour <Model>' -TestCases @(
+        @{ Model = 'parakeet-0.6b-ja' }
+        @{ Model = 'sensevoice-small' }
+    ) {
+        param($Model)
+        $root = Join-Path $TestDrive "sans-onnx-$Model"
+        script:New-SherpaModelTree -Root $root -Model $Model -Files @('tokens.txt') | Out-Null
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Root = $root; Model = $Model } {
+            param($Root, $Model)
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $Root
+                { Get-SherpaOnnxModelFiles -Model $Model } | Should -Throw '*incomplet*'
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+
+    It 'ne prend pas les fichiers d''un autre dossier modèle' {
+        $root = Join-Path $TestDrive 'isolation-dossiers'
+        script:New-SherpaModelTree -Root $root -Model 'reazon-k2-v2' -Files @(
+            'tokens.txt', 'encoder.onnx', 'decoder.onnx', 'joiner.onnx'
+        ) | Out-Null
+        script:New-SherpaModelTree -Root $root -Model 'parakeet-0.6b-ja' -Files @(
+            'tokens.txt', 'model.int8.onnx'
+        ) | Out-Null
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Root = $root } {
+            param($Root)
+            $saved = $script:SherpaOnnxRoot
+            try {
+                $script:SherpaOnnxRoot = $Root
+                $parakeet = Get-SherpaOnnxModelFiles -Model 'parakeet-0.6b-ja'
+                $reazon = Get-SherpaOnnxModelFiles -Model 'reazon-k2-v2'
+                $parakeet.Tokens | Should -Match 'parakeet-0\.6b-ja'
+                $parakeet.NemoCtcModel | Should -Match 'parakeet-0\.6b-ja'
+                $reazon.Tokens | Should -Match 'reazon-k2-v2'
+                $reazon.Encoder | Should -Match 'reazon-k2-v2'
+            }
+            finally {
+                $script:SherpaOnnxRoot = $saved
+            }
+        }
+    }
+}
+
+Describe 'Get-SherpaOnnxAsrArguments' {
+    It 'Reazon : tokens/encoder/decoder/joiner, sans NeMo ni SenseVoice ni num-threads' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $files = [pscustomobject]@{
+                Tokens  = Join-Path 'm' 'tokens.txt'
+                Encoder = Join-Path 'm' 'encoder.onnx'
+                Decoder = Join-Path 'm' 'decoder.onnx'
+                Joiner  = Join-Path 'm' 'joiner.onnx'
+            }
+            $got = Get-SherpaOnnxAsrArguments -Model 'reazon-k2-v2' -ModelFiles $files
+            $got | Should -Be @(
+                "--tokens=$($files.Tokens)"
+                "--encoder=$($files.Encoder)"
+                "--decoder=$($files.Decoder)"
+                "--joiner=$($files.Joiner)"
+            )
+            ($got -join ' ') | Should -Not -Match 'nemo-ctc-model'
+            ($got -join ' ') | Should -Not -Match 'sense-voice'
+            ($got -join ' ') | Should -Not -Match 'num-threads'
+        }
+    }
+
+    It 'Parakeet : tokens + nemo-ctc-model, sans flags Reazon ni SenseVoice' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $files = [pscustomobject]@{
+                Tokens       = Join-Path 'p' 'tokens.txt'
+                NemoCtcModel = Join-Path 'p' 'model.int8.onnx'
+            }
+            $got = Get-SherpaOnnxAsrArguments -Model 'parakeet-0.6b-ja' -ModelFiles $files
+            $got | Should -Be @(
+                "--tokens=$($files.Tokens)"
+                "--nemo-ctc-model=$($files.NemoCtcModel)"
+            )
+            ($got -join ' ') | Should -Not -Match '--encoder'
+            ($got -join ' ') | Should -Not -Match '--decoder'
+            ($got -join ' ') | Should -Not -Match '--joiner'
+            ($got -join ' ') | Should -Not -Match 'sense-voice'
+            ($got -join ' ') | Should -Not -Match 'num-threads'
+        }
+    }
+
+    It 'SenseVoice : tokens + sense-voice-model + language=ja même sans UseLanguage' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $files = [pscustomobject]@{
+                Tokens          = Join-Path 's' 'tokens.txt'
+                SenseVoiceModel = Join-Path 's' 'model.int8.onnx'
+            }
+            $got = Get-SherpaOnnxAsrArguments -Model 'sensevoice-small' -ModelFiles $files
+            $got | Should -Be @(
+                "--tokens=$($files.Tokens)"
+                "--sense-voice-model=$($files.SenseVoiceModel)"
+                '--sense-voice-language=ja'
+            )
+            ($got -join ' ') | Should -Not -Match '--encoder'
+            ($got -join ' ') | Should -Not -Match '--decoder'
+            ($got -join ' ') | Should -Not -Match '--joiner'
+            ($got -join ' ') | Should -Not -Match 'nemo-ctc-model'
+            ($got -join ' ') | Should -Not -Match 'num-threads'
+        }
+    }
 }
 
 Describe 'Get-SherpaOnnxArguments' {
@@ -343,6 +515,24 @@ Describe 'Get-SherpaOnnxArguments' {
             $wav = Join-Path 'tmp' 'a.wav'
             { Get-SherpaOnnxArguments -Tokens $tokens -Encoder $encoder -Decoder $decoder -Joiner $joiner -SileroVadModel $silero -TenVadModel $ten -WavPath $wav } |
                 Should -Throw
+        }
+    }
+
+    It 'compose AsrArguments + VAD sans ajouter num-threads' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $asr = @(
+                '--tokens=p\tokens.txt'
+                '--nemo-ctc-model=p\model.int8.onnx'
+            )
+            $silero = Join-Path 'bin' 'silero_vad.onnx'
+            $wav = Join-Path 'tmp' 'a.wav'
+            $got = Get-SherpaOnnxArguments -AsrArguments $asr -SileroVadModel $silero -WavPath $wav
+            $got[0] | Should -Be '--tokens=p\tokens.txt'
+            $got[1] | Should -Be '--nemo-ctc-model=p\model.int8.onnx'
+            $got | Should -Contain "--silero-vad-model=$silero"
+            $got[-1] | Should -Be $wav
+            ($got -join ' ') | Should -Not -Match 'num-threads'
+            ($got -join ' ') | Should -Not -Match 'ten-vad'
         }
     }
 }
@@ -451,6 +641,29 @@ Describe 'ConvertFrom-SherpaOnnxTranscript' {
             $got = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model 'reazon-k2-v2' -UseLanguage 'ja'
             $got.language | Should -Be 'ja'
             $got.languageSource | Should -Be 'model'
+        }
+    }
+
+    It 'publie language=ja et languageSource=<LanguageSource> pour <Model>' -TestCases @(
+        @{ Model = 'reazon-k2-v2'; LanguageSource = 'model' }
+        @{ Model = 'parakeet-0.6b-ja'; LanguageSource = 'model' }
+        @{ Model = 'sensevoice-small'; LanguageSource = 'forced' }
+    ) {
+        param($Model, $LanguageSource)
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            Native         = $script:NativeSherpaVadStdout
+            Model          = $Model
+            LanguageSource = $LanguageSource
+        } {
+            param($Native, $Model, $LanguageSource)
+            $without = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model $Model
+            $withJa = ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model $Model -UseLanguage 'ja'
+            $without.language | Should -Be 'ja'
+            $without.languageSource | Should -Be $LanguageSource
+            $withJa.language | Should -Be 'ja'
+            $withJa.languageSource | Should -Be $LanguageSource
+            { ConvertFrom-SherpaOnnxTranscript -InputObject $Native -Model $Model -UseLanguage 'en' } |
+                Should -Throw '*incompatible*'
         }
     }
 
@@ -662,11 +875,28 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         Set-Content -LiteralPath (Join-Path $script:FakeSherpaDir 'ten-vad.onnx') -Value 'stub'
         Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxPath { $script:FakeSherpaExe }
         Mock -ModuleName Tetram.Media.Transcript Get-SherpaOnnxModelFiles {
-            [pscustomobject]@{
-                Tokens   = 'tokens.txt'
-                Encoder  = 'encoder.onnx'
-                Decoder  = 'decoder.onnx'
-                Joiner   = 'joiner.onnx'
+            param($Model)
+            switch ($Model) {
+                'parakeet-0.6b-ja' {
+                    [pscustomobject]@{
+                        Tokens       = 'tokens.txt'
+                        NemoCtcModel = 'model.int8.onnx'
+                    }
+                }
+                'sensevoice-small' {
+                    [pscustomobject]@{
+                        Tokens          = 'tokens.txt'
+                        SenseVoiceModel = 'model.int8.onnx'
+                    }
+                }
+                default {
+                    [pscustomobject]@{
+                        Tokens  = 'tokens.txt'
+                        Encoder = 'encoder.onnx'
+                        Decoder = 'decoder.onnx'
+                        Joiner  = 'joiner.onnx'
+                    }
+                }
             }
         }
         Mock -ModuleName Tetram.Media.Transcript Get-FFmpegPath { 'ffmpeg.exe' }
@@ -676,18 +906,24 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         $script:SeenWav = $null
     }
 
-    It 'refuse une langue incompatible avant tout binaire' {
-        $media = Join-Path $TestDrive 'lang.mkv'
+    It 'refuse une langue incompatible avant tout binaire pour <Model>' -TestCases @(
+        @{ Model = 'reazon-k2-v2' }
+        @{ Model = 'parakeet-0.6b-ja' }
+        @{ Model = 'sensevoice-small' }
+    ) {
+        param($Model)
+        $media = Join-Path $TestDrive "lang-$Model.mkv"
         Set-Content -LiteralPath $media -Value 'x'
         Mock -ModuleName Tetram.Media.Transcript Invoke-FFmpeg { throw 'ne doit pas tourner' }
         Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx { throw 'ne doit pas tourner' }
         InModuleScope 'Tetram.Media.Transcript' -Parameters @{
             Media  = $media
             Cmdlet = $script:FakeCmdlet
+            Model  = $Model
         } {
-            param($Media, $Cmdlet)
+            param($Media, $Cmdlet, $Model)
             $result = @{ Transcripts = [System.Collections.Generic.List[object]]::new() }
-            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model 'reazon-k2-v2' -UseLanguage 'en' -Cmdlet $Cmdlet -Result $result } |
+            { Invoke-SherpaOnnxTranscript -MediaPath $Media -Model $Model -UseLanguage 'en' -Cmdlet $Cmdlet -Result $result } |
                 Should -Throw '*incompatible*'
         }
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 0
@@ -762,6 +998,95 @@ Describe 'Invoke-SherpaOnnxTranscript' {
         Test-Path -LiteralPath $script:SeenWav | Should -BeFalse
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 2
         Should -Invoke -ModuleName Tetram.Media.Transcript Show-CommandLine -Times 3
+    }
+
+    It 'prépare un WAV commun et deux VAD pour <Model>' -TestCases @(
+        @{
+            Model              = 'reazon-k2-v2'
+            LanguageSource     = 'model'
+            RequiredAsr        = @('--encoder=', '--decoder=', '--joiner=')
+            ForbiddenAsr       = @('nemo-ctc-model', 'sense-voice')
+        }
+        @{
+            Model              = 'parakeet-0.6b-ja'
+            LanguageSource     = 'model'
+            RequiredAsr        = @('--nemo-ctc-model=')
+            ForbiddenAsr       = @('--encoder=', '--decoder=', '--joiner=', 'sense-voice')
+        }
+        @{
+            Model              = 'sensevoice-small'
+            LanguageSource     = 'forced'
+            RequiredAsr        = @('--sense-voice-model=', '--sense-voice-language=ja')
+            ForbiddenAsr       = @('--encoder=', '--decoder=', '--joiner=', 'nemo-ctc-model')
+        }
+    ) {
+        param($Model, $LanguageSource, $RequiredAsr, $ForbiddenAsr)
+        $media = Join-Path $TestDrive "dual-vad-$Model.mkv"
+        Set-Content -LiteralPath $media -Value 'x'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-FFmpeg {
+            param($Arguments)
+            $script:SeenWav = $Arguments[-1]
+            Set-Content -LiteralPath $Arguments[-1] -Value 'RIFF'
+            return 0
+        }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx {
+            param($Exe, $Arguments, $Cmdlet, $State)
+            $script:SeenSherpaCalls.Add([string[]]@($Arguments))
+            $State['ExitCode'] = 0
+            $State['Stdout'] = $script:NativeSherpaVadStdout
+        }
+
+        $result = New-SherpaTestResult
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{
+            Media  = $media
+            Cmdlet = $script:FakeCmdlet
+            Result = $result
+            Model  = $Model
+        } {
+            param($Media, $Cmdlet, $Result, $Model)
+            Invoke-SherpaOnnxTranscript -MediaPath $Media -Model $Model -Cmdlet $Cmdlet -Result $Result
+        }
+
+        $script:SeenSherpaCalls.Count | Should -Be 2
+        $script:SeenSherpaCalls[0][-1] | Should -Be $script:SeenWav
+        $script:SeenSherpaCalls[1][-1] | Should -Be $script:SeenWav
+        $script:SeenSherpaCalls[0] | Should -Contain ("--silero-vad-model=" + (Join-Path $script:FakeSherpaDir 'silero_vad.onnx'))
+        $script:SeenSherpaCalls[0] | Should -Contain '--silero-vad-threshold=0.40'
+        $script:SeenSherpaCalls[0] | Should -Contain '--silero-vad-min-silence-duration=0.5'
+        $script:SeenSherpaCalls[0] | Should -Contain '--silero-vad-min-speech-duration=0.25'
+        $script:SeenSherpaCalls[0] | Should -Contain '--silero-vad-max-speech-duration=6'
+        $script:SeenSherpaCalls[0] | Should -Contain '--silero-vad-window-size=512'
+        $script:SeenSherpaCalls[0] | Should -Contain '--silero-vad-neg-threshold=-1'
+        $script:SeenSherpaCalls[0] | Should -Not -Contain ("--ten-vad-model=" + (Join-Path $script:FakeSherpaDir 'ten-vad.onnx'))
+        $script:SeenSherpaCalls[1] | Should -Contain ("--ten-vad-model=" + (Join-Path $script:FakeSherpaDir 'ten-vad.onnx'))
+        $script:SeenSherpaCalls[1] | Should -Contain '--ten-vad-threshold=0.5'
+        $script:SeenSherpaCalls[1] | Should -Contain '--ten-vad-min-silence-duration=0.5'
+        $script:SeenSherpaCalls[1] | Should -Contain '--ten-vad-min-speech-duration=0.25'
+        $script:SeenSherpaCalls[1] | Should -Contain '--ten-vad-max-speech-duration=6'
+        $script:SeenSherpaCalls[1] | Should -Contain '--ten-vad-window-size=256'
+        $script:SeenSherpaCalls[1] | Should -Not -Contain ("--silero-vad-model=" + (Join-Path $script:FakeSherpaDir 'silero_vad.onnx'))
+        foreach ($call in $script:SeenSherpaCalls) {
+            $joined = $call -join ' '
+            $joined | Should -Not -Match '--num-threads'
+            foreach ($flag in $RequiredAsr) {
+                $joined | Should -Match ([regex]::Escape($flag))
+            }
+            foreach ($flag in $ForbiddenAsr) {
+                $joined | Should -Not -Match ([regex]::Escape($flag))
+            }
+        }
+        $got = @($result.Transcripts)
+        $got.Count | Should -Be 2
+        $got[0].model | Should -Be $Model
+        $got[0].vad | Should -Be 'silero'
+        $got[0].language | Should -Be 'ja'
+        $got[0].languageSource | Should -Be $LanguageSource
+        $got[1].model | Should -Be $Model
+        $got[1].vad | Should -Be 'ten'
+        $got[1].languageSource | Should -Be $LanguageSource
+        Test-Path -LiteralPath $script:SeenWav | Should -BeFalse
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-FFmpeg -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-SherpaOnnx -Times 2
     }
 
     It 'applique l''offset de piste à la timeline du média' {

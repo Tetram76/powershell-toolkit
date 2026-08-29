@@ -63,7 +63,7 @@ Elles peuvent notamment être :
 - une traduction française à améliorer ;
 - une traduction officielle dans une autre langue ;
 - une autre édition d'un sous-titre ;
-- une transcription automatique (Whisper ou Sherpa-ONNX / Reazon) ;
+- une transcription automatique (Whisper ou Sherpa-ONNX) ;
 - toute combinaison de ces types.
 
 Leur ordre d'apparition ne représente aucune priorité linguistique.
@@ -367,9 +367,9 @@ La pondération n'a donc pas pour but de désigner une source gagnante une fois 
 
 Elle sert à estimer, passage par passage, quelle hypothèse explique le mieux l'ensemble des éléments disponibles.
 
-## Transcriptions Sherpa-ONNX / Reazon
+## Transcriptions Sherpa-ONNX
 
-Une transcription Sherpa-ONNX / Reazon est également une observation automatique directe de la piste audio.
+Une transcription Sherpa-ONNX est également une observation automatique directe de la piste audio.
 
 Elle est fournie sous forme de JSON compact par segments :
 
@@ -389,20 +389,20 @@ Elle est fournie sous forme de JSON compact par segments :
 }
 ```
 
-Reazon n'expose pas les diagnostics Whisper (`avg_logprob`, `compression_ratio`, `no_speech_prob`, `temperature`). Cette absence n'est pas un signal négatif.
+Les modèles Sherpa-ONNX n'exposent pas les diagnostics Whisper (`avg_logprob`, `compression_ratio`, `no_speech_prob`, `temperature`). Cette absence n'est pas un signal négatif.
 
-`vad` distingue deux segmentations du même modèle ASR Reazon :
+`engine` + `model` identifient le modèle ASR. `vad` distingue deux segmentations du même modèle ASR :
 
 - `silero` ;
 - `ten`.
 
-Reazon/Silero et Reazon/TEN ne sont pas deux observations ASR indépendantes. Elles utilisent le même modèle ASR et diffèrent par leur VAD/segmentation.
+Règle : même model + VAD différent = même ASR segmenté différemment, pas deux votes ASR indépendants. Elles utilisent le même modèle ASR et diffèrent par leur VAD/segmentation. Exemples : `reazon-k2-v2` / silero ↔ ten, `parakeet-0.6b-ja` / silero ↔ ten, `sensevoice-small` / silero ↔ ten.
 
 Leur accord montre surtout qu'une lecture résiste à deux découpages différents. Ne compte pas cet accord comme deux votes ASR indépendants.
 
-Lorsqu'une sortie Reazon contient une réplique que l'autre omet, ne conclus pas automatiquement que la réplique est fausse : le découpage VAD peut rendre le modèle plus ou moins performant localement. Une omission dans une variante Reazon n'est pas une preuve automatique d'absence.
+Lorsqu'une variante VAD d'un même modèle contient une réplique que l'autre omet, ne conclus pas automatiquement que la réplique est fausse : le découpage VAD peut rendre le modèle plus ou moins performant localement. Une omission dans une variante VAD n'est pas une preuve automatique d'absence.
 
-Une convergence Reazon ↔ Whisper est plus indépendante que Reazon/Silero ↔ Reazon/TEN et peut constituer un tie-break utile.
+La convergence entre modèles différents (Sherpa ↔ Whisper, ou deux `model` Sherpa distincts) est plus indépendante que l'accord des deux VAD d'un même modèle et peut constituer un tie-break utile.
 
 Les timestamps et la proximité sémantique restent à utiliser comme pour les autres sources, sans alignement positionnel naïf.
 
