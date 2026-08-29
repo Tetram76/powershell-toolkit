@@ -298,7 +298,8 @@ function Show-CommandLine
 
         $hasValue = $false
         $val = $null
-        if ($i + 1 -lt $Arguments.Count -and $Arguments[$i + 1] -notmatch '^-')
+        # Forme GNU nom=valeur : la valeur est déjà dans le token, pas dans le suivant.
+        if ($i + 1 -lt $Arguments.Count -and $Arguments[$i + 1] -notmatch '^-' -and $arg -notlike '*=*')
         {
             $hasValue = $true
             $val = $Arguments[$i + 1]
