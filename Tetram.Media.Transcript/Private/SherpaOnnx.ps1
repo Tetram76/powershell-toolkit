@@ -273,35 +273,6 @@ function ConvertTo-SherpaOnnxWav {
     }
 }
 
-function Get-SherpaOnnxWavDuration {
-    [CmdletBinding()]
-    [OutputType([double])]
-    param(
-        [Parameter(Mandatory)] [string] $LiteralPath
-    )
-
-    # Même source de vérité que start_time : FFmpeg a écrit le WAV, ffprobe en lit la durée.
-    $probeArgs = @(
-        '-v', 'error'
-        '-show_entries', 'format=duration'
-        '-of', 'csv=p=0'
-        $LiteralPath
-    )
-    $raw = Invoke-SherpaOnnxFfprobe -Arguments $probeArgs
-    $text = ((@($raw) | ForEach-Object { "$_" }) -join '').Trim()
-    $value = 0.0
-    if ([string]::IsNullOrWhiteSpace($text) -or $text -eq 'N/A' -or
-        -not [double]::TryParse(
-            $text,
-            [Globalization.NumberStyles]::Float,
-            [Globalization.CultureInfo]::InvariantCulture,
-            [ref]$value) -or
-        $value -le 0) {
-        throw "ffprobe n'a pas fourni de durée exploitable pour '$LiteralPath'."
-    }
-    return $value
-}
-
 function Invoke-SherpaOnnx {
     [CmdletBinding()]
     param(
@@ -323,7 +294,7 @@ function Invoke-SherpaOnnx {
         [void]$psi.ArgumentList.Add($argument)
     }
 
-    # AsJsonString() écrit du UTF-8 ; & $Exe décode selon [Console]::OutputEncoding (souvent OEM).
+    # Le binaire VAD écrit le japonais en UTF-8 ; & $Exe décode selon [Console]::OutputEncoding (souvent OEM).
     $process = $null
     $savedOutputEncoding = [Console]::OutputEncoding
     try {
@@ -341,6 +312,46 @@ function Invoke-SherpaOnnx {
     }
 }
 
+function Convert-SherpaOnnxVadLine {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Line,
+        [Parameter(Mandatory)] [double] $TimelineOffset
+    )
+
+    # Préfixe natif "start -- end:" ; le texte ASR peut lui-même contenir ':'.
+    $separator = $Line.IndexOf(' -- ')
+    $colon = if ($separator -ge 0) { $Line.IndexOf(':', $separator + 4) } else { -1 }
+    if ($separator -lt 0 -or $colon -lt 0) {
+        throw "Ligne de sortie Sherpa-ONNX inattendue : '$Line'."
+    }
+
+    $startToken = $Line.Substring(0, $separator).Trim()
+    $endToken = $Line.Substring($separator + 4, $colon - ($separator + 4)).Trim()
+    $text = $Line.Substring($colon + 1)
+    if ($text.StartsWith(' ')) {
+        $text = $text.Substring(1)
+    }
+
+    $start = 0.0
+    $end = 0.0
+    $culture = [Globalization.CultureInfo]::InvariantCulture
+    $style = [Globalization.NumberStyles]::Float
+    if (-not [double]::TryParse($startToken, $style, $culture, [ref]$start) -or
+        -not [double]::TryParse($endToken, $style, $culture, [ref]$end)) {
+        throw "Ligne de sortie Sherpa-ONNX inattendue : '$Line'."
+    }
+    if ($end -lt $start) {
+        throw "Segment Sherpa-ONNX invalide : end ($endToken) < start ($startToken)."
+    }
+
+    return [pscustomobject][ordered]@{
+        start = $start + $TimelineOffset
+        end   = $end + $TimelineOffset
+        text  = $text
+    }
+}
+
 function ConvertFrom-SherpaOnnxTranscript {
     [CmdletBinding()]
     param(
@@ -348,92 +359,25 @@ function ConvertFrom-SherpaOnnxTranscript {
         [Parameter(Mandatory)] [string] $Model,
         [string] $UseLanguage,
         [int] $AudioTrack = 1,
-        [Parameter(Mandatory)] [double] $WavDuration,
         [double] $TimelineOffset = 0
     )
 
     Assert-SherpaOnnxLanguage -UseLanguage $UseLanguage
 
-    $native = if ($InputObject -is [string]) {
-        ConvertFrom-Json -InputObject $InputObject -ErrorAction Stop
-    }
-    else {
-        $InputObject
-    }
-
-    if ($null -eq $native) {
-        throw "La sortie native Sherpa-ONNX n'est pas un JSON exploitable."
-    }
-
     # Reazon est monolingue ja et ne reçoit pas --language : ja n'est pas une contrainte forcée.
     $language = 'ja'
     $languageSource = 'model'
 
-    $text = ''
-    $textProp = $native.PSObject.Properties['text']
-    if ($null -ne $textProp -and $null -ne $textProp.Value) {
-        $text = [string]$textProp.Value
-    }
-
-    $timestamps = @()
-    $tsProp = $native.PSObject.Properties['timestamps']
-    if ($null -ne $tsProp -and $null -ne $tsProp.Value) {
-        $timestamps = @($tsProp.Value)
-    }
-
-    $durations = @()
-    $durProp = $native.PSObject.Properties['durations']
-    if ($null -ne $durProp -and $null -ne $durProp.Value) {
-        $durations = @($durProp.Value)
-    }
-
-    $tokens = @()
-    $tokProp = $native.PSObject.Properties['tokens']
-    if ($null -ne $tokProp -and $null -ne $tokProp.Value) {
-        $tokens = @($tokProp.Value)
-    }
-
-    $shiftedTimestamps = @($timestamps | ForEach-Object { [double]$_ + $TimelineOffset })
-
-    # Reazon (Zipformer Transducer) n'émet pas de durations TDT ; le dernier timestamp token
-    # sous-couvre le WAV. Le segment durable couvre l'extrait, pas le dernier token.
-    $segStart = $TimelineOffset
-    if ($shiftedTimestamps.Count -gt 0) {
-        $segStart = $shiftedTimestamps[0]
-    }
-    $segEnd = $WavDuration + $TimelineOffset
-
-    $segment = [ordered]@{
-        start = $segStart
-        end   = $segEnd
-        text  = $text
-    }
-
-    $diagnostics = [ordered]@{}
-    $probsProp = $native.PSObject.Properties['ys_log_probs']
-    if ($null -ne $probsProp -and $null -ne $probsProp.Value) {
-        $probs = @($probsProp.Value)
-        if ($probs.Count -gt 0) {
-            $diagnostics['ys_log_probs'] = $probs
+    $segments = [System.Collections.Generic.List[object]]::new()
+    foreach ($line in ([string]$InputObject -split '\r?\n')) {
+        if ($line.Length -eq 0) {
+            continue
         }
+        $segments.Add((Convert-SherpaOnnxVadLine -Line $line -TimelineOffset $TimelineOffset))
     }
-    if ($tokens.Count -gt 0) {
-        $diagnostics['tokens'] = $tokens
-    }
-    if ($shiftedTimestamps.Count -gt 0) {
-        $diagnostics['timestamps'] = $shiftedTimestamps
-    }
-    if ($durations.Count -gt 0) {
-        $diagnostics['durations'] = $durations
-    }
-    foreach ($name in @('lang', 'emotion', 'event')) {
-        $p = $native.PSObject.Properties[$name]
-        if ($null -ne $p -and -not [string]::IsNullOrWhiteSpace([string]$p.Value)) {
-            $diagnostics[$name] = [string]$p.Value
-        }
-    }
-    if ($diagnostics.Count -gt 0) {
-        $segment['diagnostics'] = [pscustomobject]$diagnostics
+
+    if ($segments.Count -eq 0) {
+        throw "Aucun segment de transcription exploitable dans la sortie Sherpa-ONNX."
     }
 
     return [pscustomobject][ordered]@{
@@ -442,7 +386,7 @@ function ConvertFrom-SherpaOnnxTranscript {
         language       = $language
         languageSource = $languageSource
         audioTrack     = $AudioTrack
-        segments       = @([pscustomobject]$segment)
+        segments       = @($segments.ToArray())
     }
 }
 
@@ -487,12 +431,10 @@ function Invoke-SherpaOnnxTranscript {
     }
 
     $timelineOffset = 0.0
-    $wavDuration = $null
     try {
         $timelineOffset = Get-SherpaOnnxTimelineOffset -MediaPath $MediaPath -AudioTrack $AudioTrack
         [void](New-SherpaOnnxTempDirectory -Path $tempDir)
         ConvertTo-SherpaOnnxWav -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
-        $wavDuration = Get-SherpaOnnxWavDuration -LiteralPath $wav
 
         $state = @{ ExitCode = $null; Stdout = $null }
         Invoke-SherpaOnnx -Exe $exe -Arguments $sherpaArgs -State $state
@@ -504,7 +446,7 @@ function Invoke-SherpaOnnxTranscript {
             throw "sherpa-onnx-vad-with-offline-asr a échoué (code $($state['ExitCode'])) sur '$MediaPath' (modèle $Model)."
         }
         if ([string]::IsNullOrWhiteSpace($state['Stdout'])) {
-            throw "Aucune sortie JSON native produite par sherpa-onnx-vad-with-offline-asr pour '$MediaPath' (modèle $Model)."
+            throw "Aucun segment de transcription produit par sherpa-onnx-vad-with-offline-asr pour '$MediaPath' (modèle $Model)."
         }
 
         return ConvertFrom-SherpaOnnxTranscript `
@@ -512,7 +454,6 @@ function Invoke-SherpaOnnxTranscript {
             -Model $Model `
             -UseLanguage $UseLanguage `
             -AudioTrack $AudioTrack `
-            -WavDuration $wavDuration `
             -TimelineOffset $timelineOffset
     }
     finally {
