@@ -80,35 +80,48 @@ function Get-SherpaOnnxModelFiles {
     }
 
     if (-not (Test-Path -LiteralPath $script:SherpaOnnxRoot -PathType Container)) {
-        throw "Aucun tokens.txt pour reazon-k2-v2 sous '$script:SherpaOnnxRoot'."
+        throw "Aucun dossier Reazon (nom contenant 'reazon') pour reazon-k2-v2 sous '$script:SherpaOnnxRoot'."
     }
 
     $tokenFiles = @(Get-ChildItem -LiteralPath $script:SherpaOnnxRoot -Recurse -Filter 'tokens.txt' -File -ErrorAction SilentlyContinue)
-    if ($tokenFiles.Count -eq 0) {
-        throw "Aucun tokens.txt pour reazon-k2-v2 sous '$script:SherpaOnnxRoot'."
+    # Le modèle publié est reazon-k2-v2 : un autre Zipformer complet ne peut pas servir de repli.
+    # Directory.Name (feuille) : un ancêtre nommé *reazon* ne doit pas qualifier un autre Zipformer.
+    $reazonTokens = @($tokenFiles | Where-Object { $_.Directory.Name -match 'reazon' })
+    if ($reazonTokens.Count -eq 0) {
+        throw "Aucun dossier Reazon (nom contenant 'reazon') pour reazon-k2-v2 sous '$script:SherpaOnnxRoot'."
     }
 
-    $preferred = @($tokenFiles | Where-Object { $_.DirectoryName -match 'reazon' })
-    if ($preferred.Count -eq 0) {
-        $preferred = $tokenFiles
-    }
-
-    foreach ($tokens in $preferred) {
+    $candidates = [System.Collections.Generic.List[object]]::new()
+    foreach ($tokens in $reazonTokens) {
         $dir = $tokens.DirectoryName
         $encoder = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'encoder' -PreferInt8
         $decoder = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'decoder'
         $joiner = Select-SherpaOnnxOnnxFile -Directory $dir -Prefix 'joiner' -PreferInt8
         if ($encoder -and $decoder -and $joiner) {
-            return [pscustomobject]@{
-                Tokens  = $tokens.FullName
-                Encoder = $encoder
-                Decoder = $decoder
-                Joiner  = $joiner
-            }
+            $candidates.Add([pscustomobject]@{
+                    Tokens    = $tokens.FullName
+                    Encoder   = $encoder
+                    Decoder   = $decoder
+                    Joiner    = $joiner
+                    Directory = $dir
+                })
         }
     }
 
-    throw "Fichiers encoder/decoder/joiner incomplets pour reazon-k2-v2 sous '$script:SherpaOnnxRoot'."
+    if ($candidates.Count -eq 0) {
+        throw "Fichiers encoder/decoder/joiner incomplets pour reazon-k2-v2 sous '$script:SherpaOnnxRoot'."
+    }
+    if ($candidates.Count -gt 1) {
+        $dirs = ($candidates | ForEach-Object { $_.Directory }) -join ', '
+        throw "Plusieurs dossiers Reazon complets pour reazon-k2-v2, choix ambigu : $dirs."
+    }
+
+    return [pscustomobject]@{
+        Tokens  = $candidates[0].Tokens
+        Encoder = $candidates[0].Encoder
+        Decoder = $candidates[0].Decoder
+        Joiner  = $candidates[0].Joiner
+    }
 }
 
 function Get-SherpaOnnxArguments {
@@ -156,10 +169,14 @@ function Get-SherpaOnnxFfmpegArguments {
 function New-SherpaOnnxTempDirectory {
     [CmdletBinding()]
     [OutputType([string])]
-    param()
+    param(
+        [string] $Path
+    )
 
-    $dir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
-    $created = New-Item -ItemType Directory -Path $dir -Force -Confirm:$false -WhatIf:$false -ErrorAction Stop
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        $Path = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
+    }
+    $created = New-Item -ItemType Directory -Path $Path -Force -Confirm:$false -WhatIf:$false -ErrorAction Stop
     return $created.FullName
 }
 
@@ -231,11 +248,10 @@ function Get-SherpaOnnxTimelineOffset {
             [Globalization.NumberStyles]::Float,
             [Globalization.CultureInfo]::InvariantCulture,
             [ref]$value)) {
-        return 0
+        throw "start_time illisible pour la piste $AudioTrack de '$MediaPath' : '$text'."
     }
-    if ($value -lt 0) {
-        return 0
-    }
+
+    # Un start_time négatif est un offset média réel (edit list / priming), pas une erreur de probe.
     return $value
 }
 
@@ -249,7 +265,6 @@ function ConvertTo-SherpaOnnxWav {
 
     $ffmpegArgs = Get-SherpaOnnxFfmpegArguments -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $OutputPath
     $exe = Get-FFmpegPath
-    Show-CommandLine -Exe $exe -Arguments $ffmpegArgs -NoPathDetectionParameters 'map', 'ac', 'c:a', 'hide_banner'
     $code = Invoke-FFmpeg -Arguments $ffmpegArgs -ExePath $exe
     if ($code -ne 0) {
         throw "FFmpeg a échoué (code $code) en préparant l'audio de '$MediaPath' (piste $AudioTrack)."
@@ -298,8 +313,6 @@ function Invoke-SherpaOnnx {
 
     $State['ExitCode'] = $null
     $State['Stdout'] = $null
-
-    Show-CommandLine -Exe $Exe -Arguments $Arguments -NoPathDetectionParameters 'tokens', 'encoder', 'decoder', 'joiner', 'num-threads'
 
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = $Exe
@@ -451,14 +464,16 @@ function Invoke-SherpaOnnxTranscript {
     $exe = Get-SherpaOnnxPath -OverridePath $SherpaOnnxPath
     $modelFiles = Get-SherpaOnnxModelFiles -Model $Model
 
-    $previewWav = Join-Path ([IO.Path]::GetTempPath()) (([guid]::NewGuid().ToString()) + '.wav')
-    $ffmpegArgs = Get-SherpaOnnxFfmpegArguments -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $previewWav
+    # Chemin figé avant ShouldProcess : l'affichage et l'exécution doivent citer les mêmes arguments.
+    $tempDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
+    $wav = Join-Path $tempDir 'audio.wav'
+    $ffmpegArgs = Get-SherpaOnnxFfmpegArguments -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
     $sherpaArgs = Get-SherpaOnnxArguments `
         -Tokens $modelFiles.Tokens `
         -Encoder $modelFiles.Encoder `
         -Decoder $modelFiles.Decoder `
         -Joiner $modelFiles.Joiner `
-        -WavPath $previewWav
+        -WavPath $wav
     Write-DebugLog -Text ($sherpaArgs -join ' ')
     Show-CommandLine -Exe (Get-FFmpegPath) -Arguments $ffmpegArgs -NoPathDetectionParameters 'map', 'ac', 'c:a', 'hide_banner'
     Show-CommandLine -Exe $exe -Arguments $sherpaArgs -NoPathDetectionParameters 'tokens', 'encoder', 'decoder', 'joiner', 'num-threads'
@@ -470,22 +485,13 @@ function Invoke-SherpaOnnxTranscript {
         return
     }
 
-    $tempDir = $null
     $timelineOffset = 0.0
     $wavDuration = $null
     try {
         $timelineOffset = Get-SherpaOnnxTimelineOffset -MediaPath $MediaPath -AudioTrack $AudioTrack
-        $tempDir = New-SherpaOnnxTempDirectory
-        $wav = Join-Path $tempDir 'audio.wav'
+        [void](New-SherpaOnnxTempDirectory -Path $tempDir)
         ConvertTo-SherpaOnnxWav -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
         $wavDuration = Get-SherpaOnnxWavDuration -LiteralPath $wav
-
-        $sherpaArgs = Get-SherpaOnnxArguments `
-            -Tokens $modelFiles.Tokens `
-            -Encoder $modelFiles.Encoder `
-            -Decoder $modelFiles.Decoder `
-            -Joiner $modelFiles.Joiner `
-            -WavPath $wav
 
         $state = @{ ExitCode = $null; Stdout = $null }
         Invoke-SherpaOnnx -Exe $exe -Arguments $sherpaArgs -State $state
