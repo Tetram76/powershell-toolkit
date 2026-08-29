@@ -122,6 +122,7 @@ function Invoke-TranscriptBackend {
         [Parameter(Mandatory)] [string] $MediaPath,
         [Parameter(Mandatory)] [string] $Model,
         [Parameter(Mandatory)] $Cmdlet,
+        [Parameter(Mandatory)] $Result,
         [int] $AudioTrack = 1,
         [string] $UseLanguage,
         [switch] $WhatIf
@@ -140,11 +141,12 @@ function Invoke-TranscriptBackend {
         }
     }
 
-    return Invoke-ProviderTranscript `
+    Invoke-ProviderTranscript `
         -MediaPath $MediaPath `
         -Model $Model `
         -AudioTrack $AudioTrack `
         -UseLanguage $UseLanguage `
         -Cmdlet $Cmdlet `
+        -Result $Result `
         -WhatIf:$WhatIf
 }

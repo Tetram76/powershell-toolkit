@@ -169,7 +169,7 @@ Describe 'Get-MediaTranscript orchestration' {
         Mock -ModuleName Tetram.Media.Transcript Publish-TetramTranscript {}
         $script:SeenBackend = [System.Collections.Generic.List[hashtable]]::new()
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
             $script:SeenBackend.Add(@{
                     MediaPath   = $MediaPath
                     Model       = $Model
@@ -178,12 +178,12 @@ Describe 'Get-MediaTranscript orchestration' {
                     WhatIf      = [bool]$WhatIf
                     Bound       = @($PSBoundParameters.Keys)
                 })
-            [pscustomobject]@{
-                language   = 'ja'
-                model      = $Model
-                audioTrack = $AudioTrack
-                segments   = @()
-            }
+            [void]$Result.Transcripts.Add([pscustomobject]@{
+                    language   = 'ja'
+                    model      = $Model
+                    audioTrack = $AudioTrack
+                    segments   = @()
+                })
         }
     }
 
@@ -264,9 +264,9 @@ Describe 'Get-MediaTranscript orchestration' {
         $out | Should -BeNullOrEmpty
     }
 
-    It 'n''appelle pas Publish si le backend ne retourne rien' {
+    It 'n''appelle pas Publish si le backend ne dépose aucun transcript' {
         $media = New-TranscriptTestMedia -Name 'a.mkv' -Folder 'null-backend'
-        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend { $null }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend { }
         Get-MediaTranscript -LiteralPath $media
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 1
         Should -Invoke -ModuleName Tetram.Media.Transcript Publish-TetramTranscript -Times 0
@@ -275,9 +275,8 @@ Describe 'Get-MediaTranscript orchestration' {
     It 'sous -WhatIf, transmet WhatIf au backend et ne publie pas si le backend est muet' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'whatif'
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
             $script:SeenBackend.Add(@{ WhatIf = [bool]$WhatIf; Model = $Model })
-            $null
         }
         Get-MediaTranscript -LiteralPath $media -Model large-v3 -WhatIf
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 1
@@ -305,7 +304,7 @@ Describe 'Get-MediaTranscript orchestration' {
         (Get-Command Get-MediaTranscript).Parameters.ContainsKey('WhisperPath') | Should -BeFalse
     }
 
-    It 'publie chaque transcript si le backend en retourne plusieurs' {
+    It 'publie chaque transcript explicitement déposé, notamment Silero puis TEN' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-transcript'
         $script:PublishedModels = [System.Collections.Generic.List[string]]::new()
         $script:PublishedVads = [System.Collections.Generic.List[string]]::new()
@@ -315,25 +314,69 @@ Describe 'Get-MediaTranscript orchestration' {
             $script:PublishedVads.Add([string]$Transcript.vad)
         }
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            [pscustomobject]@{
-                language   = 'ja'
-                model      = 'reazon-k2-v2'
-                vad        = 'silero'
-                audioTrack = 1
-                segments   = @()
-            }
-            [pscustomobject]@{
-                language   = 'ja'
-                model      = 'reazon-k2-v2'
-                vad        = 'ten'
-                audioTrack = 1
-                segments   = @()
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
+            foreach ($vad in @('silero', 'ten')) {
+                [void]$Result.Transcripts.Add([pscustomobject]@{
+                        language   = 'ja'
+                        model      = 'reazon-k2-v2'
+                        vad        = $vad
+                        audioTrack = 1
+                        segments   = @()
+                    })
             }
         }
         Get-MediaTranscript -LiteralPath $media -Model reazon-k2-v2 -UseLanguage ja
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 1
         $script:PublishedModels | Should -Be @('reazon-k2-v2', 'reazon-k2-v2')
         $script:PublishedVads | Should -Be @('silero', 'ten')
+    }
+
+    It 'ignore une sortie parasite du success stream et publie uniquement Result.Transcripts' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'parasite-stream'
+        $script:Published = [System.Collections.Generic.List[object]]::new()
+        Mock -ModuleName Tetram.Media.Transcript Publish-TetramTranscript {
+            param($Transcript, $MediaPath)
+            # Rejoue l'accès métier : une chaîne de progression n'a pas .language.
+            $script:Published.Add([pscustomobject]@{
+                    language = $Transcript.language
+                    model    = $Transcript.model
+                })
+        }
+        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
+            'Progress 47%'
+            [void]$Result.Transcripts.Add([pscustomobject]@{
+                    language   = 'ja'
+                    model      = $Model
+                    audioTrack = $AudioTrack
+                    segments   = @()
+                })
+        }
+        { Get-MediaTranscript -LiteralPath $media } | Should -Not -Throw
+        $script:Published.Count | Should -Be 1
+        $script:Published[0].language | Should -Be 'ja'
+        $script:Published[0].model | Should -Be 'large-v2'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Publish-TetramTranscript -Times 1 -ParameterFilter {
+            $Transcript -isnot [string] -and $Transcript.language -eq 'ja'
+        }
+    }
+
+    It 'ne publie pas un transcript déjà déposé si l''invocation backend échoue ensuite' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'partial-then-throw'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
+            [void]$Result.Transcripts.Add([pscustomobject]@{
+                    language   = 'ja'
+                    model      = $Model
+                    vad        = 'silero'
+                    audioTrack = 1
+                    segments   = @()
+                })
+            throw 'échec TEN'
+        }
+        { Get-MediaTranscript -LiteralPath $media -Model reazon-k2-v2 } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-ErrorLog -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Transcript Publish-TetramTranscript -Times 0
     }
 
     It 'appelle le backend une fois par modèle et publie chaque transcript' {
@@ -349,16 +392,16 @@ Describe 'Get-MediaTranscript orchestration' {
     It 'poursuit les modèles suivants si un backend échoue' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-model-fail'
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
             if ($Model -eq 'large-v3') {
                 throw 'échec moteur'
             }
-            [pscustomobject]@{
-                language   = 'ja'
-                model      = $Model
-                audioTrack = 1
-                segments   = @()
-            }
+            [void]$Result.Transcripts.Add([pscustomobject]@{
+                    language   = 'ja'
+                    model      = $Model
+                    audioTrack = 1
+                    segments   = @()
+                })
         }
         { Get-MediaTranscript -LiteralPath $media -Model large-v3, kotoba-v2 -UseLanguage ja } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 2
@@ -371,9 +414,8 @@ Describe 'Get-MediaTranscript orchestration' {
     It 'sous -WhatIf, appelle le backend une fois par modèle sans publier' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'whatif-multi'
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
             $script:SeenBackend.Add(@{ Model = $Model; WhatIf = [bool]$WhatIf })
-            $null
         }
         Get-MediaTranscript -LiteralPath $media -Model large-v3, kotoba-v2 -WhatIf
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 2
@@ -395,16 +437,16 @@ Describe 'Get-MediaTranscript orchestration' {
     It 'poursuit un modèle Sherpa si un modèle Whisper échoue' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-engine-fail'
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
-            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf)
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
             if ($Model -eq 'large-v3') {
                 throw 'échec whisper'
             }
-            [pscustomobject]@{
-                language   = 'ja'
-                model      = $Model
-                audioTrack = 1
-                segments   = @()
-            }
+            [void]$Result.Transcripts.Add([pscustomobject]@{
+                    language   = 'ja'
+                    model      = $Model
+                    audioTrack = 1
+                    segments   = @()
+                })
         }
         { Get-MediaTranscript -LiteralPath $media -Model large-v3, reazon-k2-v2 -UseLanguage ja } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 2
