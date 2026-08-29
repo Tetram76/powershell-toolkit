@@ -95,54 +95,159 @@ function Get-SherpaOnnxModelFiles {
         [Parameter(Mandatory)] [string] $Model
     )
 
-    if ($Model -ne 'reazon-k2-v2') {
-        throw "Modèle Sherpa-ONNX non géré : '$Model'."
-    }
-
     # Convention : SherpaOnnx/models/<nom-canonique> ; pas de scan ni de repli sur un autre dossier.
     $modelDir = Join-Path $script:SherpaOnnxRoot 'models' $Model
+    if ($Model -notin @('reazon-k2-v2', 'parakeet-0.6b-ja', 'sensevoice-small')) {
+        throw "Modèle Sherpa-ONNX non géré : '$Model'."
+    }
     if (-not (Test-Path -LiteralPath $modelDir -PathType Container)) {
         throw "Dossier modèle introuvable : '$modelDir'."
     }
 
     $tokens = Join-Path $modelDir 'tokens.txt'
-    $encoder = Select-SherpaOnnxOnnxFile -Directory $modelDir -Prefix 'encoder' -PreferInt8
-    $decoder = Select-SherpaOnnxOnnxFile -Directory $modelDir -Prefix 'decoder'
-    $joiner = Select-SherpaOnnxOnnxFile -Directory $modelDir -Prefix 'joiner' -PreferInt8
-    if (-not (Test-Path -LiteralPath $tokens -PathType Leaf) -or -not $encoder -or -not $decoder -or -not $joiner) {
-        throw "Fichiers encoder/decoder/joiner incomplets pour '$modelDir'."
+    switch ($Model) {
+        'reazon-k2-v2' {
+            $encoder = Select-SherpaOnnxOnnxFile -Directory $modelDir -Prefix 'encoder' -PreferInt8
+            $decoder = Select-SherpaOnnxOnnxFile -Directory $modelDir -Prefix 'decoder'
+            $joiner = Select-SherpaOnnxOnnxFile -Directory $modelDir -Prefix 'joiner' -PreferInt8
+            if (-not (Test-Path -LiteralPath $tokens -PathType Leaf) -or -not $encoder -or -not $decoder -or -not $joiner) {
+                throw "Fichiers encoder/decoder/joiner incomplets pour '$modelDir'."
+            }
+            return [pscustomobject]@{
+                Tokens  = $tokens
+                Encoder = $encoder
+                Decoder = $decoder
+                Joiner  = $joiner
+            }
+        }
+        'parakeet-0.6b-ja' {
+            $nemo = Join-Path $modelDir 'model.int8.onnx'
+            if (-not (Test-Path -LiteralPath $tokens -PathType Leaf) -or -not (Test-Path -LiteralPath $nemo -PathType Leaf)) {
+                throw "Fichiers tokens/model.int8.onnx incomplets pour '$modelDir'."
+            }
+            return [pscustomobject]@{
+                Tokens       = $tokens
+                NemoCtcModel = $nemo
+            }
+        }
+        'sensevoice-small' {
+            $senseVoice = Join-Path $modelDir 'model.int8.onnx'
+            if (-not (Test-Path -LiteralPath $tokens -PathType Leaf) -or -not (Test-Path -LiteralPath $senseVoice -PathType Leaf)) {
+                throw "Fichiers tokens/model.int8.onnx incomplets pour '$modelDir'."
+            }
+            return [pscustomobject]@{
+                Tokens          = $tokens
+                SenseVoiceModel = $senseVoice
+            }
+        }
     }
 
-    return [pscustomobject]@{
-        Tokens  = $tokens
-        Encoder = $encoder
-        Decoder = $decoder
-        Joiner  = $joiner
+    throw "Modèle Sherpa-ONNX non géré : '$Model'."
+}
+
+function Get-SherpaOnnxAsrArguments {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)] [string] $Model,
+        [Parameter(Mandatory)] $ModelFiles
+    )
+
+    switch ($Model) {
+        'reazon-k2-v2' {
+            return @(
+                "--tokens=$($ModelFiles.Tokens)"
+                "--encoder=$($ModelFiles.Encoder)"
+                "--decoder=$($ModelFiles.Decoder)"
+                "--joiner=$($ModelFiles.Joiner)"
+            )
+        }
+        'parakeet-0.6b-ja' {
+            return @(
+                "--tokens=$($ModelFiles.Tokens)"
+                "--nemo-ctc-model=$($ModelFiles.NemoCtcModel)"
+            )
+        }
+        'sensevoice-small' {
+            return @(
+                "--tokens=$($ModelFiles.Tokens)"
+                "--sense-voice-model=$($ModelFiles.SenseVoiceModel)"
+                '--sense-voice-language=ja'
+            )
+        }
+        default {
+            throw "Modèle Sherpa-ONNX non géré : '$Model'."
+        }
+    }
+}
+
+function Get-SherpaOnnxLanguageContract {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Model
+    )
+
+    switch ($Model) {
+        { $_ -in @('reazon-k2-v2', 'parakeet-0.6b-ja') } {
+            return [pscustomobject]@{
+                Language       = 'ja'
+                LanguageSource = 'model'
+            }
+        }
+        'sensevoice-small' {
+            return [pscustomobject]@{
+                Language       = 'ja'
+                LanguageSource = 'forced'
+            }
+        }
+        default {
+            throw "Modèle Sherpa-ONNX non géré : '$Model'."
+        }
     }
 }
 
 function Get-SherpaOnnxArguments {
-    [CmdletBinding(DefaultParameterSetName = 'Silero')]
+    [CmdletBinding(DefaultParameterSetName = 'ReazonSilero')]
     [OutputType([string[]])]
     param(
-        [Parameter(Mandatory)] [string] $Tokens,
-        [Parameter(Mandatory)] [string] $Encoder,
-        [Parameter(Mandatory)] [string] $Decoder,
-        [Parameter(Mandatory)] [string] $Joiner,
-        [Parameter(ParameterSetName = 'Silero', Mandatory)] [string] $SileroVadModel,
-        [Parameter(ParameterSetName = 'Ten', Mandatory)] [string] $TenVadModel,
+        [Parameter(ParameterSetName = 'ReazonSilero', Mandatory)]
+        [Parameter(ParameterSetName = 'ReazonTen', Mandatory)]
+        [string] $Tokens,
+        [Parameter(ParameterSetName = 'ReazonSilero', Mandatory)]
+        [Parameter(ParameterSetName = 'ReazonTen', Mandatory)]
+        [string] $Encoder,
+        [Parameter(ParameterSetName = 'ReazonSilero', Mandatory)]
+        [Parameter(ParameterSetName = 'ReazonTen', Mandatory)]
+        [string] $Decoder,
+        [Parameter(ParameterSetName = 'ReazonSilero', Mandatory)]
+        [Parameter(ParameterSetName = 'ReazonTen', Mandatory)]
+        [string] $Joiner,
+        [Parameter(ParameterSetName = 'AsrSilero', Mandatory)]
+        [Parameter(ParameterSetName = 'AsrTen', Mandatory)]
+        [string[]] $AsrArguments,
+        [Parameter(ParameterSetName = 'ReazonSilero', Mandatory)]
+        [Parameter(ParameterSetName = 'AsrSilero', Mandatory)]
+        [string] $SileroVadModel,
+        [Parameter(ParameterSetName = 'ReazonTen', Mandatory)]
+        [Parameter(ParameterSetName = 'AsrTen', Mandatory)]
+        [string] $TenVadModel,
         [Parameter(Mandatory)] [string] $WavPath
     )
 
-    $arguments = @(
-        "--tokens=$Tokens"
-        "--encoder=$Encoder"
-        "--decoder=$Decoder"
-        "--joiner=$Joiner"
-    )
+    $arguments = if ($PSBoundParameters.ContainsKey('AsrArguments')) {
+        @($AsrArguments)
+    }
+    else {
+        @(
+            "--tokens=$Tokens"
+            "--encoder=$Encoder"
+            "--decoder=$Decoder"
+            "--joiner=$Joiner"
+        )
+    }
 
     # Silero et Ten sont deux pipelines VAD incompatibles sur le même binaire : un seul jeu de flags par invocation.
-    if ($PSCmdlet.ParameterSetName -eq 'Silero') {
+    if ($PSBoundParameters.ContainsKey('SileroVadModel')) {
         $arguments += @(
             "--silero-vad-model=$SileroVadModel"
             '--silero-vad-threshold=0.40'
@@ -218,7 +323,8 @@ function Remove-SherpaOnnxTempDirectory {
 function Assert-SherpaOnnxLanguage {
     [CmdletBinding()]
     param(
-        [string] $UseLanguage
+        [string] $UseLanguage,
+        [string] $Model
     )
 
     if ([string]::IsNullOrWhiteSpace($UseLanguage)) {
@@ -226,7 +332,8 @@ function Assert-SherpaOnnxLanguage {
     }
 
     if ($UseLanguage -ne 'ja') {
-        throw "Le modèle reazon-k2-v2 n'accepte que le japonais (ja) ; UseLanguage='$UseLanguage' est incompatible."
+        $label = if ([string]::IsNullOrWhiteSpace($Model)) { 'Sherpa-ONNX' } else { $Model }
+        throw "Le modèle $label n'accepte que le japonais (ja) ; UseLanguage='$UseLanguage' est incompatible."
     }
 }
 
@@ -389,11 +496,11 @@ function ConvertFrom-SherpaOnnxTranscript {
         [double] $TimelineOffset = 0
     )
 
-    Assert-SherpaOnnxLanguage -UseLanguage $UseLanguage
+    Assert-SherpaOnnxLanguage -UseLanguage $UseLanguage -Model $Model
 
-    # Reazon est monolingue ja et ne reçoit pas --language : ja n'est pas une contrainte forcée.
-    $language = 'ja'
-    $languageSource = 'model'
+    $languageContract = Get-SherpaOnnxLanguageContract -Model $Model
+    $language = $languageContract.Language
+    $languageSource = $languageContract.LanguageSource
 
     $segments = [System.Collections.Generic.List[object]]::new()
     foreach ($line in ([string]$InputObject -split '\r?\n')) {
@@ -434,7 +541,7 @@ function Invoke-SherpaOnnxTranscript {
         [switch] $WhatIf
     )
 
-    Assert-SherpaOnnxLanguage -UseLanguage $UseLanguage
+    Assert-SherpaOnnxLanguage -UseLanguage $UseLanguage -Model $Model
 
     $exe = Get-SherpaOnnxPath -OverridePath $SherpaOnnxPath
     $modelFiles = Get-SherpaOnnxModelFiles -Model $Model
@@ -445,18 +552,12 @@ function Invoke-SherpaOnnxTranscript {
     $tempDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
     $wav = Join-Path $tempDir 'audio.wav'
     $ffmpegArgs = Get-SherpaOnnxFfmpegArguments -MediaPath $MediaPath -AudioTrack $AudioTrack -OutputPath $wav
-    $sherpaCommon = @{
-        Tokens  = $modelFiles.Tokens
-        Encoder = $modelFiles.Encoder
-        Decoder = $modelFiles.Decoder
-        Joiner  = $modelFiles.Joiner
-        WavPath = $wav
-    }
-    $sileroArgs = Get-SherpaOnnxArguments @sherpaCommon -SileroVadModel $sileroVad
-    $tenArgs = Get-SherpaOnnxArguments @sherpaCommon -TenVadModel $tenVad
+    $asrArgs = Get-SherpaOnnxAsrArguments -Model $Model -ModelFiles $modelFiles
+    $sileroArgs = Get-SherpaOnnxArguments -AsrArguments $asrArgs -SileroVadModel $sileroVad -WavPath $wav
+    $tenArgs = Get-SherpaOnnxArguments -AsrArguments $asrArgs -TenVadModel $tenVad -WavPath $wav
     Write-DebugLog -Text ($sileroArgs -join ' ')
     Write-DebugLog -Text ($tenArgs -join ' ')
-    $sherpaNoPath = 'tokens', 'encoder', 'decoder', 'joiner', 'silero-vad-model', 'ten-vad-model', 'num-threads'
+    $sherpaNoPath = 'tokens', 'encoder', 'decoder', 'joiner', 'nemo-ctc-model', 'sense-voice-model', 'silero-vad-model', 'ten-vad-model', 'num-threads'
     Show-CommandLine -Exe (Get-FFmpegPath) -Arguments $ffmpegArgs -NoPathDetectionParameters 'map', 'ac', 'c:a', 'hide_banner'
     Show-CommandLine -Exe $exe -Arguments $sileroArgs -NoPathDetectionParameters $sherpaNoPath
     Show-CommandLine -Exe $exe -Arguments $tenArgs -NoPathDetectionParameters $sherpaNoPath

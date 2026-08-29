@@ -117,6 +117,20 @@ Describe 'Get-MediaTranscript binding' {
         { Get-MediaTranscript -LiteralPath 'a.mkv' -Model reazon-k2-v2 -ErrorAction Stop } | Should -Not -Throw
     }
 
+    It 'accepte <Model> comme modèle Sherpa' -TestCases @(
+        @{ Model = 'parakeet-0.6b-ja' }
+        @{ Model = 'sensevoice-small' }
+    ) {
+        param($Model)
+        $validate = (Get-Command Get-MediaTranscript).Parameters['Model'].Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+        @($validate.ValidValues) | Should -Contain $Model
+
+        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend { $null }
+        Mock -ModuleName Tetram.Media.Transcript Write-ErrorLog {}
+        { Get-MediaTranscript -LiteralPath 'a.mkv' -Model $Model -ErrorAction Stop } | Should -Not -Throw
+    }
+
     It 'n''expose plus -WhisperPath' {
         (Get-Command Get-MediaTranscript).Parameters.ContainsKey('WhisperPath') | Should -BeFalse
     }
@@ -126,6 +140,8 @@ Describe 'Get-MediaTranscript binding' {
         $names | Should -Not -Contain 'SherpaOnnxPath'
         $names | Should -Not -Contain 'SherpaPath'
         $names | Should -Not -Contain 'Engine'
+        $names | Should -Not -Contain 'Vad'
+        $names | Should -Not -Contain 'SherpaModelType'
     }
 
     It 'refuse une langue hors liste' {
@@ -432,6 +448,17 @@ Describe 'Get-MediaTranscript orchestration' {
         $script:SeenBackend[0].Model | Should -Be 'large-v3'
         $script:SeenBackend[1].Model | Should -Be 'reazon-k2-v2'
         Should -Invoke -ModuleName Tetram.Media.Transcript Publish-TetramTranscript -Times 2
+    }
+
+    It 'invoque les modèles Sherpa dans l''ordre demandé' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'multi-sherpa-order'
+        Get-MediaTranscript -LiteralPath $media -Model large-v2, reazon-k2-v2, parakeet-0.6b-ja, sensevoice-small
+        Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 4
+        $script:SeenBackend.Count | Should -Be 4
+        $script:SeenBackend[0].Model | Should -Be 'large-v2'
+        $script:SeenBackend[1].Model | Should -Be 'reazon-k2-v2'
+        $script:SeenBackend[2].Model | Should -Be 'parakeet-0.6b-ja'
+        $script:SeenBackend[3].Model | Should -Be 'sensevoice-small'
     }
 
     It 'poursuit un modèle Sherpa si un modèle Whisper échoue' {

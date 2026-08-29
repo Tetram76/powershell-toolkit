@@ -18,7 +18,7 @@ function Get-MediaTranscript {
         [ValidateRange(1, [int]::MaxValue)]
         [int] $AudioTrack = 1,
 
-        [ValidateSet('large-v2', 'large-v3-turbo', 'large-v3', 'kotoba-v2', 'reazon-k2-v2')]
+        [ValidateSet('large-v2', 'large-v3-turbo', 'large-v3', 'kotoba-v2', 'reazon-k2-v2', 'parakeet-0.6b-ja', 'sensevoice-small')]
         [string[]] $Model = 'large-v2',
 
         [ValidateSet(
