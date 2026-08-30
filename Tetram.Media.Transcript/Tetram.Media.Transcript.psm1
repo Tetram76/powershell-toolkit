@@ -10,6 +10,7 @@ function Get-MediaTranscript {
 .EXTERNALHELP Tetram.Media.Transcript-Help.xml
 #>
     [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([System.IO.FileInfo])]
     param(
         [Parameter(Mandatory, Position = 0)]
         [Alias('PSPath')]
@@ -62,7 +63,7 @@ function Get-MediaTranscript {
         }
 
         foreach ($path in $publishedPaths) {
-            Write-InfoLog -Force -Text $path
+            Get-Item -LiteralPath $path
         }
     }
     catch {
