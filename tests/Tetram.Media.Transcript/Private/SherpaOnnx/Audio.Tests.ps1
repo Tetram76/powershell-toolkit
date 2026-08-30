@@ -39,6 +39,10 @@ Describe 'Get-SherpaOnnxChunkFfmpegArguments' {
             $joined | Should -Not -Match 'vad-silero-speech'
             $joined | Should -Not -Match 'vad-ten-speech'
             $got[-1] | Should -Be $chunk
+            $logAt = [array]::IndexOf(@($got), '-loglevel')
+            $logAt | Should -BeGreaterThan -1
+            $got[$logAt + 1] | Should -Be 'error'
+            $got | Should -Contain '-nostats'
         }
     }
 
@@ -108,6 +112,33 @@ Describe 'Get-SherpaOnnxTimelineOffset' {
         InModuleScope 'Tetram.Media.Transcript' {
             Mock Invoke-SherpaOnnxFfprobe { '-1.250000' }
             Get-SherpaOnnxTimelineOffset -MediaPath 'film.mkv' -AudioTrack 1 | Should -Be -1.25
+        }
+    }
+}
+
+Describe 'New-SherpaOnnxChunkWav' {
+    It 'découpe le WAV sans afficher la ligne de commande' {
+        $work = $TestDrive
+        InModuleScope 'Tetram.Media.Transcript' -Parameters @{ Work = $work } {
+            param($Work)
+            $master = Join-Path $Work 'audio.wav'
+            $chunk = Join-Path $Work 'silero' 'chunk-0001.wav'
+            Set-Content -LiteralPath $master -Value 'RIFF'
+            Mock Get-FFmpegPath { 'ffmpeg.exe' }
+            Mock Show-CommandLine { throw 'le découpage ne doit pas afficher Show-CommandLine' }
+            Mock Invoke-FFmpeg {
+                param($Arguments)
+                $out = $Arguments[-1]
+                $parent = Split-Path -Parent $out
+                if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+                    New-Item -ItemType Directory -Path $parent -Force | Out-Null
+                }
+                Set-Content -LiteralPath $out -Value 'RIFF'
+                return 0
+            }
+            New-SherpaOnnxChunkWav -MasterWav $master -Start 0.08 -End 1.32 -OutputPath $chunk
+            Should -Invoke Show-CommandLine -Times 0
+            Test-Path -LiteralPath $chunk | Should -BeTrue
         }
     }
 }
