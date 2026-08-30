@@ -30,11 +30,9 @@ function Invoke-SherpaOnnxTranscript {
     $sileroVadArgs = Get-SherpaOnnxVadArguments -SileroVadModel $sileroVad -WavPath $wav -SpeechWavPath $sileroSpeech
     $tenVadArgs = Get-SherpaOnnxVadArguments -TenVadModel $tenVad -WavPath $wav -SpeechWavPath $tenSpeech
 
-    $vadNoPath = 'silero-vad-model', 'ten-vad-model', 'num-threads', 'vad-num-threads'
-    $asrNoPath = 'tokens', 'encoder', 'decoder', 'joiner', 'nemo-ctc-model', 'sense-voice-model', 'num-threads'
-    Show-CommandLine -Exe (Get-FFmpegPath) -Arguments $ffmpegArgs -NoPathDetectionParameters 'map', 'ac', 'c:a', 'hide_banner'
-    Show-CommandLine -Exe $vadExe -Arguments $sileroVadArgs -NoPathDetectionParameters $vadNoPath
-    Show-CommandLine -Exe $vadExe -Arguments $tenVadArgs -NoPathDetectionParameters $vadNoPath
+    Show-CommandLine -Exe (Get-FFmpegPath) -Arguments $ffmpegArgs
+    Show-CommandLine -Exe $vadExe -Arguments $sileroVadArgs
+    Show-CommandLine -Exe $vadExe -Arguments $tenVadArgs
     Write-DebugLog -Text 'découpage des chunks + sherpa-onnx-offline dépendent du résultat VAD'
 
     if (-not $Cmdlet.ShouldProcess($MediaPath, 'sherpa-onnx-vad + sherpa-onnx-offline')) {
@@ -80,7 +78,7 @@ function Invoke-SherpaOnnxTranscript {
             foreach ($batch in $batches) {
                 $batchPaths = [string[]]@($batch)
                 $offlineArgs = Get-SherpaOnnxOfflineArguments -AsrArguments $asrArgs -ChunkPaths $batchPaths
-                Show-CommandLine -Exe $offlineExe -Arguments $offlineArgs -NoPathDetectionParameters $asrNoPath
+                Show-CommandLine -Exe $offlineExe -Arguments $offlineArgs
                 $asrState = @{ ExitCode = $null; Stdout = $null; Stderr = $null }
                 Invoke-SherpaOnnx -Exe $offlineExe -Arguments $offlineArgs -State $asrState
                 if ($null -eq $asrState['ExitCode']) {

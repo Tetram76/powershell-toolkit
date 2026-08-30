@@ -239,8 +239,8 @@ function Show-CommandLine
         [ConsoleColor] $ParamColor = 'DarkGray',
         [ConsoleColor] $FileColor = 'Cyan',
 
-    # - Wildcards : 'c:*', 'metadata*', 'map*', etc.
-    # - Regex via préfixe 're:' : 're:^(metadata|map)(:|$)'
+        # Faux positifs de Test-IsLikelyPath uniquement (valeur qui ressemble à un fichier sans en être un).
+        # Motifs : joker (-like) ou préfixe 're:' pour une regex sur le nom sans le '-'.
         [Parameter()]
         [string[]] $NoPathDetectionParameters = @(),
 

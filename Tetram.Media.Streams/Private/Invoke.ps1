@@ -30,7 +30,7 @@ function Invoke-StreamsFFmpeg {
         [Parameter(Mandatory)][string[]] $Arguments,
         [Parameter(Mandatory)][string] $TargetLabel
     )
-    Show-CommandLine $Exe $Arguments -NoPathDetectionParameters 'metadata*', 'disposition*', 'map*'
+    Show-CommandLine $Exe $Arguments
     # ShouldProcess ne sert qu'à simuler un dry-run (-WhatIf) : il gouverne à lui seul
     # ffmpeg + le Move-Item final (même opération, pas de prompt séparé).
     # $null = pas exécuté (WhatIf ou -Confirm refusé, message déjà affiché par ShouldProcess).
