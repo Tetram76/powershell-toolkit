@@ -60,8 +60,11 @@ function Get-SherpaOnnxFfmpegArguments {
         [Parameter(Mandatory)] [string] $OutputPath
     )
 
+    # -stats : un loglevel error masquerait aussi la barre de progression FFmpeg.
     return @(
         '-hide_banner'
+        '-loglevel', 'error'
+        '-stats'
         '-y'
         '-i', $MediaPath
         '-map', "0:a:$($AudioTrack - 1)"

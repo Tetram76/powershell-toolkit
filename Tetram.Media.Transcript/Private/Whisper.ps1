@@ -96,7 +96,7 @@ function Invoke-Whisper {
     $State['ExitCode'] = $null
 
     # Avant ShouldProcess : sous -WhatIf, la ligne prévue reste visible.
-    Show-CommandLine -Exe $Exe -Arguments $Arguments -NoPathDetectionParameters 'output_format', 'model', 'task', 'language', 'ff_track'
+    Show-CommandLine -Exe $Exe -Arguments $Arguments
 
     if (-not $Cmdlet.ShouldProcess($Arguments[0], 'faster-whisper-xxl')) {
         return
