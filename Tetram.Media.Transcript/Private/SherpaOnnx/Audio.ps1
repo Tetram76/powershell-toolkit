@@ -17,6 +17,8 @@ function Get-SherpaOnnxChunkFfmpegArguments {
     # atrim après -i : un -ss avant l'entrée ferait un seek approximatif sur le WAV maître.
     return @(
         '-hide_banner'
+        '-loglevel', 'error'
+        '-nostats'
         '-y'
         '-i', $MasterWav
         '-af', "atrim=start=${startText}:end=${endText},asetpts=PTS-STARTPTS"
@@ -40,7 +42,6 @@ function New-SherpaOnnxChunkWav {
     }
 
     $ffmpegArgs = Get-SherpaOnnxChunkFfmpegArguments -MasterWav $MasterWav -Start $Start -End $End -OutputPath $OutputPath
-    Show-CommandLine -Exe (Get-FFmpegPath) -Arguments $ffmpegArgs -NoPathDetectionParameters 'af', 'c:a', 'hide_banner'
     $code = Invoke-FFmpeg -Arguments $ffmpegArgs -ExePath (Get-FFmpegPath)
     if ($code -ne 0) {
         throw "FFmpeg a échoué (code $code) en découpant le chunk '$OutputPath'."
