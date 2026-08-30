@@ -34,6 +34,7 @@ function Get-MediaTranscript {
     )
 
     # Contrat public : aucune exception vers l'appelant.
+    $publishedPaths = [System.Collections.Generic.List[string]]::new()
     try {
         $mediaPath = Resolve-TranscriptMediaFile -LiteralPath $LiteralPath
 
@@ -52,11 +53,16 @@ function Get-MediaTranscript {
                     -WhatIf:$WhatIfPreference
                 foreach ($transcript in $result.Transcripts) {
                     Publish-TetramTranscript -Transcript $transcript -MediaPath $mediaPath
+                    [void]$publishedPaths.Add((Get-TetramTranscriptDest -Transcript $transcript -MediaPath $mediaPath))
                 }
             }
             catch {
                 Write-ErrorLog -Text $_.Exception.Message
             }
+        }
+
+        foreach ($path in $publishedPaths) {
+            Write-InfoLog -Force -Text $path
         }
     }
     catch {

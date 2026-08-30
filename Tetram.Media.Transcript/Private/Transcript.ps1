@@ -75,8 +75,9 @@ function Write-TetramTranscript {
     }
 }
 
-function Publish-TetramTranscript {
+function Get-TetramTranscriptDest {
     [CmdletBinding()]
+    [OutputType([string])]
     param(
         [Parameter(Mandatory)] $Transcript,
         [Parameter(Mandatory)] [string] $MediaPath
@@ -92,7 +93,17 @@ function Publish-TetramTranscript {
     if ($null -ne $vadProp -and -not [string]::IsNullOrWhiteSpace([string]$vadProp.Value)) {
         $vad = [string]$vadProp.Value
     }
-    $dest = Get-TetramTranscriptPath -Directory $directory -MediaBase $mediaBase -Language $Transcript.language -Model $Transcript.model -AudioTrack $Transcript.audioTrack -Vad $vad
+    Get-TetramTranscriptPath -Directory $directory -MediaBase $mediaBase -Language $Transcript.language -Model $Transcript.model -AudioTrack $Transcript.audioTrack -Vad $vad
+}
+
+function Publish-TetramTranscript {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] $Transcript,
+        [Parameter(Mandatory)] [string] $MediaPath
+    )
+
+    $dest = Get-TetramTranscriptDest -Transcript $Transcript -MediaPath $MediaPath
     Write-TetramTranscript -Transcript $Transcript -Path $dest
 }
 
