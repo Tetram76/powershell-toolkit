@@ -3,6 +3,7 @@
 # RepoRoot depuis tests/<Module> : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
 # Manifeste : Tetram.Media.Transcript/Tetram.Media.Transcript.psd1 — Test-ModuleManifest puis Import-Module -Force
 # Orchestration : mocks Invoke-TranscriptBackend / Publish-TetramTranscript / Write-*Log.
+# Publish mock écrit le sidecar : le success stream doit pouvoir renvoyer un FileInfo.
 # Les helpers Whisper/Sherpa ne doivent pas exister avant le chargement paresseux du backend.
 # Le vrai binaire n'est appelé que sous le tag Integration.
 
@@ -173,6 +174,18 @@ Describe 'Get-MediaTranscript orchestration' {
             Set-Content -LiteralPath $path -Value 'x'
             (Get-Item -LiteralPath $path).FullName
         }
+        function script:Write-TranscriptTestSidecar {
+            param($Transcript, [string] $MediaPath)
+            $directory = [IO.Path]::GetDirectoryName($MediaPath)
+            $mediaBase = [IO.Path]::GetFileNameWithoutExtension($MediaPath)
+            $vadSuffix = ''
+            $vadProp = $Transcript.PSObject.Properties['vad']
+            if ($null -ne $vadProp -and -not [string]::IsNullOrWhiteSpace([string]$vadProp.Value)) {
+                $vadSuffix = ".$([string]$vadProp.Value)"
+            }
+            $dest = Join-Path $directory "$mediaBase.track $($Transcript.audioTrack).$($Transcript.language).$($Transcript.model)$vadSuffix.json"
+            Set-Content -LiteralPath $dest -Value '{}'
+        }
     }
     AfterAll {
         Remove-Module -Name 'Tetram.Media.Transcript' -Force -ErrorAction SilentlyContinue
@@ -182,7 +195,10 @@ Describe 'Get-MediaTranscript orchestration' {
         Mock -ModuleName Tetram.Media.Transcript Write-ErrorLog {}
         Mock -ModuleName Tetram.Media.Transcript Write-InfoLog {}
         Mock -ModuleName Tetram.Media.Transcript Write-DebugLog {}
-        Mock -ModuleName Tetram.Media.Transcript Publish-TetramTranscript {}
+        Mock -ModuleName Tetram.Media.Transcript Publish-TetramTranscript {
+            param($Transcript, $MediaPath)
+            script:Write-TranscriptTestSidecar -Transcript $Transcript -MediaPath $MediaPath
+        }
         $script:SeenBackend = [System.Collections.Generic.List[hashtable]]::new()
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
             param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
@@ -274,10 +290,13 @@ Describe 'Get-MediaTranscript orchestration' {
         Should -Invoke -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend -Times 0
     }
 
-    It 'n''émet rien dans le pipeline' {
-        $media = New-TranscriptTestMedia -Name 'a.mkv' -Folder 'no-pipeline'
-        $out = Get-MediaTranscript -LiteralPath $media
-        $out | Should -BeNullOrEmpty
+    It 'émet un FileInfo par sidecar publié' {
+        $media = New-TranscriptTestMedia -Name 'a.mkv' -Folder 'pipeline-files'
+        $out = @(Get-MediaTranscript -LiteralPath $media)
+        $expected = Join-Path (Split-Path -LiteralPath $media) 'a.track 1.ja.large-v2.json'
+        $out.Count | Should -Be 1
+        $out[0] | Should -BeOfType ([System.IO.FileInfo])
+        $out[0].FullName | Should -Be $expected
     }
 
     It 'n''appelle pas Publish si le backend ne dépose aucun transcript' {
@@ -328,6 +347,7 @@ Describe 'Get-MediaTranscript orchestration' {
             param($Transcript, $MediaPath)
             $script:PublishedModels.Add([string]$Transcript.model)
             $script:PublishedVads.Add([string]$Transcript.vad)
+            script:Write-TranscriptTestSidecar -Transcript $Transcript -MediaPath $MediaPath
         }
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
             param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
@@ -357,6 +377,7 @@ Describe 'Get-MediaTranscript orchestration' {
                     language = $Transcript.language
                     model    = $Transcript.model
                 })
+            script:Write-TranscriptTestSidecar -Transcript $Transcript -MediaPath $MediaPath
         }
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
             param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
@@ -483,17 +504,14 @@ Describe 'Get-MediaTranscript orchestration' {
         }
     }
 
-    It 'journalise chaque sidecar publié via Write-InfoLog -Force' {
-        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'log-sidecars'
-        Get-MediaTranscript -LiteralPath $media
-        $expected = Join-Path (Split-Path -LiteralPath $media) 'Episode.track 1.ja.large-v2.json'
-        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 1 -ParameterFilter {
-            $Force -and $Text -eq $expected
-        }
+    It 'n''appelle pas Write-InfoLog pour lister les sidecars publiés' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'no-info-log'
+        Get-MediaTranscript -LiteralPath $media | Out-Null
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
     }
 
-    It 'journalise tous les sidecars quand plusieurs transcripts sont publiés' {
-        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'log-multi-sidecars'
+    It 'émet un FileInfo par sidecar quand plusieurs transcripts sont publiés' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'pipeline-multi'
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
             param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
             foreach ($vad in @('silero', 'ten')) {
@@ -506,20 +524,19 @@ Describe 'Get-MediaTranscript orchestration' {
                     })
             }
         }
-        Get-MediaTranscript -LiteralPath $media -Model reazon-k2-v2
+        $out = @(Get-MediaTranscript -LiteralPath $media -Model reazon-k2-v2)
         $dir = Split-Path -LiteralPath $media
-        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 1 -ParameterFilter {
-            $Force -and $Text -eq (Join-Path $dir 'Episode.track 1.ja.reazon-k2-v2.silero.json')
-        }
-        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 1 -ParameterFilter {
-            $Force -and $Text -eq (Join-Path $dir 'Episode.track 1.ja.reazon-k2-v2.ten.json')
-        }
+        $out.Count | Should -Be 2
+        $out | ForEach-Object { $_ | Should -BeOfType ([System.IO.FileInfo]) }
+        $out[0].FullName | Should -Be (Join-Path $dir 'Episode.track 1.ja.reazon-k2-v2.silero.json')
+        $out[1].FullName | Should -Be (Join-Path $dir 'Episode.track 1.ja.reazon-k2-v2.ten.json')
     }
 
-    It 'ne journalise aucun sidecar si rien n''a été publié' {
+    It 'n''émet rien si aucun sidecar n''a été publié' {
         $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'log-none'
         Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend { }
-        Get-MediaTranscript -LiteralPath $media
+        $out = Get-MediaTranscript -LiteralPath $media
+        $out | Should -BeNullOrEmpty
         Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
     }
 }

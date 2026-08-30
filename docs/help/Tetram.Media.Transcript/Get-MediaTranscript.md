@@ -26,7 +26,7 @@ Get-MediaTranscript [-LiteralPath] <string> [-AudioTrack <int>] [-Model <string[
 
 ## DESCRIPTION
 
-`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation distincte du moteur associé à ce modèle. Les modèles Faster-Whisper produisent un JSON Tetram à côté du média. Chaque modèle Sherpa (`reazon-k2-v2`, `parakeet-0.6b-ja`, `sensevoice-small`) exécute deux observations VAD (Silero puis TEN) sur le même WAV temporaire et publie donc deux sidecars. L'appelant choisit un ou plusieurs modèles ; il ne choisit pas le moteur ni le VAD. Les artefacts natifs temporaires sont le JSON Faster-Whisper et le WAV préparé pour Sherpa-ONNX : ils sont écrits sous le répertoire temporaire système, lus, normalisés, puis supprimés. Le stdout Sherpa (lignes `start -- end: text`) est capturé, pas écrit sur disque. `-LiteralPath` doit désigner un fichier unique existant : un masque ou un dossier est refusé par l'orchestrateur. Un fichier-liste existant (`.lst`, `.m3u`, …) est transmis au backend : Faster-Whisper / Purfview le refuse. Les caractères spéciaux PowerShell font partie du nom. La commande n'émet rien dans le pipeline.
+`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation distincte du moteur associé à ce modèle. Les modèles Faster-Whisper produisent un JSON Tetram à côté du média. Chaque modèle Sherpa (`reazon-k2-v2`, `parakeet-0.6b-ja`, `sensevoice-small`) exécute deux observations VAD (Silero puis TEN) sur le même WAV temporaire et publie donc deux sidecars. L'appelant choisit un ou plusieurs modèles ; il ne choisit pas le moteur ni le VAD. Les artefacts natifs temporaires sont le JSON Faster-Whisper et le WAV préparé pour Sherpa-ONNX : ils sont écrits sous le répertoire temporaire système, lus, normalisés, puis supprimés. Le stdout Sherpa (lignes `start -- end: text`) est capturé, pas écrit sur disque. `-LiteralPath` doit désigner un fichier unique existant : un masque ou un dossier est refusé par l'orchestrateur. Un fichier-liste existant (`.lst`, `.m3u`, …) est transmis au backend : Faster-Whisper / Purfview le refuse. Les caractères spéciaux PowerShell font partie du nom. Le success stream émet un `FileInfo` par sidecar JSON publié.
 
 Le fichier durable Faster-Whisper/Kotoba suit `<media-base>.track <trackid>.<langue>.<model>.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Pour un modèle Sherpa : `Episode.track 1.ja.<model>.silero.json` et `Episode.track 1.ja.<model>.ten.json`. Dans le JSON, `model` reste le nom canonique ; `vad` vaut `silero` ou `ten`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.
 
@@ -257,8 +257,12 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
+### System.IO.FileInfo
+
+Un objet fichier par sidecar JSON publié, dans l'ordre de publication. Rien n'est émis si aucun transcript n'a été écrit.
+
 ## NOTES
 
-Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs ; Faster-Whisper/Kotoba produisent un sidecar par modèle, chaque modèle Sherpa en produit deux (`.silero` / `.ten`) à partir d'un WAV temporaire commun ; les distributions Purfview et Sherpa-ONNX se posent respectivement dans `Purfview-Whisper-Faster` et `SherpaOnnx`, dossiers non versionnés hors README ; jamais de téléchargement automatique ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ces sidecars ; la commande n'accepte pas d'entrée pipeline.
+Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs ; Faster-Whisper/Kotoba produisent un sidecar par modèle, chaque modèle Sherpa en produit deux (`.silero` / `.ten`) à partir d'un WAV temporaire commun ; les distributions Purfview et Sherpa-ONNX se posent respectivement dans `Purfview-Whisper-Faster` et `SherpaOnnx`, dossiers non versionnés hors README ; jamais de téléchargement automatique ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ces sidecars ; la commande n'accepte pas d'entrée pipeline ; le success stream renvoie les `FileInfo` des sidecars générés.
 
 ## RELATED LINKS
