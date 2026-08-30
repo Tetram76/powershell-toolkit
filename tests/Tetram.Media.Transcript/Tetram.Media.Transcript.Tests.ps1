@@ -482,6 +482,46 @@ Describe 'Get-MediaTranscript orchestration' {
             $Transcript.model -eq 'reazon-k2-v2'
         }
     }
+
+    It 'journalise chaque sidecar publié via Write-InfoLog -Force' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'log-sidecars'
+        Get-MediaTranscript -LiteralPath $media
+        $expected = Join-Path (Split-Path -LiteralPath $media) 'Episode.track 1.ja.large-v2.json'
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 1 -ParameterFilter {
+            $Force -and $Text -eq $expected
+        }
+    }
+
+    It 'journalise tous les sidecars quand plusieurs transcripts sont publiés' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'log-multi-sidecars'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend {
+            param($MediaPath, $Model, $Cmdlet, $AudioTrack, $UseLanguage, $WhatIf, $Result)
+            foreach ($vad in @('silero', 'ten')) {
+                [void]$Result.Transcripts.Add([pscustomobject]@{
+                        language   = 'ja'
+                        model      = 'reazon-k2-v2'
+                        vad        = $vad
+                        audioTrack = 1
+                        segments   = @()
+                    })
+            }
+        }
+        Get-MediaTranscript -LiteralPath $media -Model reazon-k2-v2
+        $dir = Split-Path -LiteralPath $media
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 1 -ParameterFilter {
+            $Force -and $Text -eq (Join-Path $dir 'Episode.track 1.ja.reazon-k2-v2.silero.json')
+        }
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 1 -ParameterFilter {
+            $Force -and $Text -eq (Join-Path $dir 'Episode.track 1.ja.reazon-k2-v2.ten.json')
+        }
+    }
+
+    It 'ne journalise aucun sidecar si rien n''a été publié' {
+        $media = New-TranscriptTestMedia -Name 'Episode.mkv' -Folder 'log-none'
+        Mock -ModuleName Tetram.Media.Transcript Invoke-TranscriptBackend { }
+        Get-MediaTranscript -LiteralPath $media
+        Should -Invoke -ModuleName Tetram.Media.Transcript Write-InfoLog -Times 0
+    }
 }
 
 Describe 'Get-MediaTranscript bout en bout' -Tag 'Integration' {
