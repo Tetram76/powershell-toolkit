@@ -78,6 +78,17 @@ Describe 'Get-SherpaOnnxFfmpegArguments' {
             $got[-1] | Should -Be $wav
         }
     }
+
+    It 'réduit le journal FFmpeg mais conserve la barre de progression' {
+        InModuleScope 'Tetram.Media.Transcript' {
+            $got = Get-SherpaOnnxFfmpegArguments -MediaPath 'a.mkv' -AudioTrack 1 -OutputPath 'audio.wav'
+            $logAt = [array]::IndexOf(@($got), '-loglevel')
+            $logAt | Should -BeGreaterThan -1
+            $got[$logAt + 1] | Should -Be 'error'
+            $got | Should -Contain '-stats'
+            $got | Should -Not -Contain '-nostats'
+        }
+    }
 }
 
 Describe 'Get-SherpaOnnxTimelineOffset' {
