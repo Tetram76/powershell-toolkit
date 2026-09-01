@@ -1498,19 +1498,7 @@ Absent : tri par nom.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>SubTitlesToKeep</maml:name>
         <maml:description>
-          <maml:para>Langues de sous-titres à conserver (codes `tags.language`). Les pistes sans
-langue, `un` et `und` sont toujours gardées. Défaut : `fr`, `fre`, `fr-FR`,
-`en`, `eng`, `en-US`, `en-GB`.
-Langues de sous-titres à conserver (codes `tags.language`).
-Les pistes sans
-langue, `un` et `und` sont toujours gardées.
-Défaut : `fr`, `fre`, `fr-FR`,
-`en`, `eng`, `en-US`, `en-GB`.
-Langues de sous-titres à conserver (codes `tags.language`).
-Les pistes sans
-langue, `un` et `und` sont toujours gardées.
-Défaut : `fr`, `fre`, `fr-FR`,
-`en`, `eng`, `en-US`, `en-GB`.</maml:para>
+          <maml:para>Langues de sous-titres à conserver (codes `tags.language`). Une piste sans langue affectée, ou taguée `unk`, est traitée comme indéterminée (`und`) et toujours gardée, comme `un` et `und`. Défaut : `fr`, `fre`, `fr-FR`, `en`, `eng`, `en-US`, `en-GB`.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
         <dev:type>

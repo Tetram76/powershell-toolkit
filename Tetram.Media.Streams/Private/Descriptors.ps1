@@ -1,10 +1,21 @@
 Set-StrictMode -Version 3.0
 
+# OrderedHashtable (ConvertFrom-Json -AsHashtable) : ContainsKey/indexeur sensibles à la casse ;
+# ffprobe émet parfois LANGUAGE. -eq PowerShell est insensible.
+function Resolve-ProbeMapKey {
+    param([System.Collections.IDictionary] $Map, [string] $Name)
+    foreach ($key in @($Map.Keys)) {
+        if ($key -eq $Name) { return $key }
+    }
+    return $null
+}
+
 function Get-ProbeProperty {
     param($Object, [string] $Name)
     if ($null -eq $Object) { return $null }
-    if ($Object -is [hashtable]) {
-        if ($Object.ContainsKey($Name)) { return $Object[$Name] }
+    if ($Object -is [System.Collections.IDictionary]) {
+        $key = Resolve-ProbeMapKey $Object $Name
+        if ($null -ne $key) { return $Object[$key] }
         return $null
     }
     $p = $Object.PSObject.Properties[$Name]
@@ -21,12 +32,9 @@ function ConvertTo-IntOrNull {
 }
 
 function Get-StreamLanguage {
-    param($Tags)
+    param($Tags, [string] $Class)
     $raw = [string](Get-ProbeProperty $Tags 'language')
-    if ([string]::IsNullOrWhiteSpace($raw)) { return '' }
-    $low = $raw.ToLowerInvariant()
-    if ($low -in @('und', 'unk')) { return '' }
-    return $raw
+    return Resolve-ElementaryStreamLanguage -Language $raw -Class $Class
 }
 
 function Get-StreamFlags {
@@ -96,7 +104,7 @@ function Get-MediaStreamDescriptors {
         }
         $mapped = Get-ElementaryExtension -CodecName $codecName -CodecType $codecType -AttachedPic $attached
         if ($null -eq $mapped) { continue }
-        $d = New-StreamDescriptorObject -Class $mapped.Class -Language (Get-StreamLanguage $tags) `
+        $d = New-StreamDescriptorObject -Class $mapped.Class -Language (Get-StreamLanguage $tags $mapped.Class) `
             -Flags (Get-StreamFlags $disp $mapped.Class) -Extension $mapped.Extension `
             -StreamIndex $index -Codec $codecName
         $list.Add($d)

@@ -239,8 +239,9 @@ function Get-FFmpegArgs
     }
 
     $ffmpegArgs = @()
+    $undeterminedLanguageArgs = @()
 
-    $SelectedVideoTracks = ($VideoTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __deinterlace, __upscale, color_space
+    $SelectedVideoTracks = ($VideoTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __recode, __deinterlace, __upscale, color_space, __assignUndeterminedLanguage
     Write-Verbose "SelectedVideoTracks:`n $( $SelectedVideoTracks | Format-List | Out-String )"
     $new_index = 0
     foreach ($stream in $SelectedVideoTracks)
@@ -248,7 +249,7 @@ function Get-FFmpegArgs
         $ffmpegArgs += @(
             '-map', "0:v:$( $stream._index )"
         )
-        if ($stream.__process)
+        if ([bool]$stream.__recode -or [bool]$stream.__deinterlace -or [bool]$stream.__upscale)
         {
             $filters = @()
             if ($stream.__deinterlace)
@@ -287,10 +288,14 @@ function Get-FFmpegArgs
         {
             $ffmpegArgs += @("-c:v:$new_index", 'copy')
         }
+        if ($stream.__assignUndeterminedLanguage)
+        {
+            $undeterminedLanguageArgs += @("-metadata:s:v:$new_index", 'language=und')
+        }
         $new_index++
     }
 
-    $SelectedAudioTracks = ($AudioTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __targetAudioCodec, __targetAudioBitrate, __targetAudioFilter
+    $SelectedAudioTracks = ($AudioTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __recode, __targetAudioCodec, __targetAudioBitrate, __targetAudioFilter, __assignUndeterminedLanguage
     Write-Verbose "SelectedAudioTracks:`n $( $SelectedAudioTracks | Format-List | Out-String )"
     $new_index = 0
     foreach ($stream in $SelectedAudioTracks)
@@ -298,23 +303,31 @@ function Get-FFmpegArgs
         $ffmpegArgs += @('-map', "0:a:$( $stream._index )")
         $ffmpegArgs += Get-AudioEncoderArgs `
             -StreamIndex $new_index `
-            -Process ([bool]$stream.__process) `
+            -Process ([bool]$stream.__recode) `
             -TargetCodec ([string]$stream.__targetAudioCodec) `
             -TargetBitrate ([string]$stream.__targetAudioBitrate) `
             -ChannelMapFilter ([string]$stream.__targetAudioFilter)
 
+        if ($stream.__assignUndeterminedLanguage)
+        {
+            $undeterminedLanguageArgs += @("-metadata:s:a:$new_index", 'language=und')
+        }
         $new_index++
     }
 
-    $SelectedSubtitleTracks = ($SubtitleTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process
+    $SelectedSubtitleTracks = ($SubtitleTracks ?? @()) | Where-Object { $_.__process -or $_.__copy } | Select-Object _index, __process, __recode, __assignUndeterminedLanguage
     Write-Verbose "SelectedSubtitleTracks:`n $( $SelectedSubtitleTracks | Format-List | Out-String )"
     $new_index = 0
     foreach ($stream in $SelectedSubtitleTracks)
     {
         $ffmpegArgs += @(
             '-map', "0:s:$( $stream._index )"
-            "-c:s:$new_index", ($stream.__process ? 'mov_text' : 'copy')
+            "-c:s:$new_index", ($stream.__recode ? 'mov_text' : 'copy')
         )
+        if ($stream.__assignUndeterminedLanguage)
+        {
+            $undeterminedLanguageArgs += @("-metadata:s:s:$new_index", 'language=und')
+        }
         $new_index++
     }
 
@@ -370,6 +383,7 @@ function Get-FFmpegArgs
         '-metadata:s', 'encoder='
     )
     $ffmpegArgs += $attachmentMimetypeArgs
+    $ffmpegArgs += $undeterminedLanguageArgs
 
     $ffmpegArgs += @(
         '-map_chapters', '0'

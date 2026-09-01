@@ -414,7 +414,9 @@ function Invoke-ReencodeFile
 
         if ($Config.Rewrite)
         {
-            if (-not $hasTracksDropped)
+            if (-not $hasTracksDropped -and
+                ($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and
+                ($hasSubtitlesToConvert -eq 0) -and ($hasAttachmentsToConvert -eq 0))
             {
                 Write-InfoLog "No stream filtering needed for '$Filename'"
                 return
