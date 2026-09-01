@@ -362,6 +362,7 @@ function Get-FFmpegArgs
         '-metadata', 'MINOR_VERSION='
         '-metadata', 'COMPATIBLE_BRANDS='
         '-metadata', 'ENCODER='
+        '-metadata', 'SOFTWARE='
         $( if ($ClearStreamsTitle)
         {
             @('-metadata:s', 'title=')
