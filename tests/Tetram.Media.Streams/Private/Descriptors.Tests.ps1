@@ -136,6 +136,36 @@ Describe 'Get-MediaStreamDescriptors collision' {
         }
     }
 
+    It 'normalise langue absente, und et unk en und pour Video/Audio/Subtitle' {
+        $probe = @{
+            streams = @(
+                @{ index = 0; codec_type = 'video'; codec_name = 'h264'; tags = @{}; disposition = @{ attached_pic = 0 } }
+                @{ index = 1; codec_type = 'audio'; codec_name = 'aac'; tags = @{ language = 'UND' }; disposition = @{} }
+                @{ index = 2; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'unk' }; disposition = @{} }
+                @{ index = 3; codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fra' }; disposition = @{} }
+            )
+        }
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $all = @(Get-MediaStreamDescriptors -Probe $Probe)
+            ($all | Where-Object { $_.StreamIndex -eq 0 }).Language | Should -Be 'und'
+            (ConvertTo-StreamFileName -Basename 'film' -Descriptor ($all | Where-Object { $_.StreamIndex -eq 0 })) | Should -Be 'film.und.h264'
+            ($all | Where-Object { $_.StreamIndex -eq 1 }).Language | Should -Be 'und'
+            ($all | Where-Object { $_.StreamIndex -eq 2 }).Language | Should -Be 'und'
+            ($all | Where-Object { $_.StreamIndex -eq 3 }).Language | Should -Be 'fra'
+        }
+    }
+
+    It 'lit LANGUAGE (casse OrderedHashtable ffprobe) comme language — jpn n''est pas und' {
+        $probe = ConvertFrom-Json -AsHashtable -InputObject '{"streams":[{"index":2,"codec_type":"subtitle","codec_name":"subrip","tags":{"LANGUAGE":"jpn"},"disposition":{}}]}'
+        InModuleScope 'Tetram.Media.Streams' -Parameters @{ Probe = $probe } {
+            param($Probe)
+            $all = @(Get-MediaStreamDescriptors -Probe $Probe)
+            $all[0].Language | Should -Be 'jpn'
+            (ConvertTo-StreamFileName -Basename 'film' -Descriptor $all[0]) | Should -Be 'film.jpn.srt'
+        }
+    }
+
     It 'ne liste pas un flux data comme codec A/V/S non mappé' {
         $probe = @{
             streams = @(

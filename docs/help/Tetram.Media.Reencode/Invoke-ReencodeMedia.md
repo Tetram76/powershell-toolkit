@@ -1200,19 +1200,7 @@ HelpMessage: ''
 
 ### -SubTitlesToKeep
 
-Langues de sous-titres à conserver (codes `tags.language`). Les pistes sans
-langue, `un` et `und` sont toujours gardées. Défaut : `fr`, `fre`, `fr-FR`,
-`en`, `eng`, `en-US`, `en-GB`.
-Langues de sous-titres à conserver (codes `tags.language`).
-Les pistes sans
-langue, `un` et `und` sont toujours gardées.
-Défaut : `fr`, `fre`, `fr-FR`,
-`en`, `eng`, `en-US`, `en-GB`.
-Langues de sous-titres à conserver (codes `tags.language`).
-Les pistes sans
-langue, `un` et `und` sont toujours gardées.
-Défaut : `fr`, `fre`, `fr-FR`,
-`en`, `eng`, `en-US`, `en-GB`.
+Langues de sous-titres à conserver (codes `tags.language`). Une piste sans langue affectée, ou taguée `unk`, est traitée comme indéterminée (`und`) et toujours gardée, comme `un` et `und`. Défaut : `fr`, `fre`, `fr-FR`, `en`, `eng`, `en-US`, `en-GB`.
 
 ```yaml
 Type: System.String[]

@@ -64,6 +64,34 @@ function Test-ProbeHasProperty
     return [bool]$Object.PSObject.Properties[$Name]
 }
 
+function Test-ProbeHasAssignedLanguage
+{
+    param($Tags)
+    if (-not (Test-ProbeHasProperty $Tags 'language'))
+    {
+        return $false
+    }
+    $raw = Get-ProbeProperty $Tags 'language'
+    if ($null -eq $raw)
+    {
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$raw))
+    {
+        return $false
+    }
+    # unk = ISO « unknown », pas une langue réelle ; Streams le normalise en und.
+    # Sans ça le keep sous-titres (un/und + liste) écarte la piste.
+    return -not [string]::Equals([string]$raw, 'unk', [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Set-UndeterminedLanguageAssignment
+{
+    param($stream, $Tags, [bool] $KeepStream)
+    $assign = $KeepStream -and -not (Test-ProbeHasAssignedLanguage $Tags)
+    $stream | Add-Member -NotePropertyName '__assignUndeterminedLanguage' -NotePropertyValue $assign -Force
+}
+
 function Set-StreamProcessingState
 {
     param(
@@ -102,7 +130,7 @@ function Select-VideoStreams
     try
     {
         $videoStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'video' }
-        $VideoTracks = $videoStreams | Select-Object codec_name, profile, height, width, disposition, color_space
+        $VideoTracks = $videoStreams | Select-Object codec_name, profile, height, width, disposition, color_space, tags
         $i = -1
 
         foreach ($stream in $VideoTracks)
@@ -159,6 +187,7 @@ function Select-VideoStreams
                 $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue ($keepStream -and -not $keepVideoCodec) -Force
             }
 
+            Set-UndeterminedLanguageAssignment $stream (Get-ProbeProperty $stream 'tags') $keepStream
             Set-StreamProcessingState $stream $keepStream | Out-Null
         }
 
@@ -201,7 +230,7 @@ function Select-AudioStreams
     try
     {
         $audioStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'audio' }
-        $AudioTracks = $audioStreams | Select-Object codec_name, channels, channel_layout, bit_rate
+        $AudioTracks = $audioStreams | Select-Object codec_name, channels, channel_layout, bit_rate, tags
         $targetAudioCodec = Get-TargetAudioCodec -FinalExtension $FinalExtension
         $i = -1
 
@@ -323,6 +352,7 @@ function Select-AudioStreams
                 }
             }
 
+            Set-UndeterminedLanguageAssignment $stream (Get-ProbeProperty $stream 'tags') $true
             Set-StreamProcessingState $stream $true | Out-Null
         }
 
@@ -380,14 +410,12 @@ function Select-SubtitleStreams
         {
             $stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
             $tags = Get-ProbeProperty $stream 'tags'
-            if (-not (Test-ProbeHasProperty $tags 'language'))
+            $language = Get-ProbeProperty $tags 'language'
+            if (-not (Test-ProbeHasAssignedLanguage $tags))
             {
-                $keepStream = $true
+                $language = 'und'
             }
-            else
-            {
-                $keepStream = [bool]((@('un', 'und') + $SubTitlesToKeep) | Where-Object { $_ -ieq (Get-ProbeProperty $tags 'language') })
-            }
+            $keepStream = [bool]((@('un', 'und') + $SubTitlesToKeep) | Where-Object { $_ -ieq $language })
             if ($RewriteMode -and $FinalExtension -ieq '.mp4')
             {
                 # En rewrite, seul mov_text peut être copié dans un conteneur mp4
@@ -403,6 +431,7 @@ function Select-SubtitleStreams
             }
             $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue ($keepStream -and $recode) -Force
 
+            Set-UndeterminedLanguageAssignment $stream $tags $keepStream
             Set-StreamProcessingState $stream $keepStream | Out-Null
         }
 

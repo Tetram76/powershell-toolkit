@@ -43,6 +43,14 @@ function Get-StreamsOrderedFlags {
     return $out
 }
 
+function Resolve-ElementaryStreamLanguage {
+    param([string] $Language, [string] $Class)
+    if ($Class -notin @('Video', 'Audio', 'Subtitle')) { return '' }
+    $low = if ($Language) { $Language.ToLowerInvariant() } else { '' }
+    if ([string]::IsNullOrWhiteSpace($Language) -or $low -in @('und', 'unk')) { return 'und' }
+    return $Language
+}
+
 function Get-StreamCollisionKey {
     param([Parameter(Mandatory)][pscustomobject] $Descriptor)
     $ext = ([string]$Descriptor.Extension).ToLowerInvariant()
@@ -51,8 +59,7 @@ function Get-StreamCollisionKey {
         'Attachment' { return "Attachment|$($Descriptor.AttachmentNameSanitized)|$ext" }
         'Chapter' { return 'Chapter' }
         default {
-            $lang = if ($Descriptor.Language) { ([string]$Descriptor.Language).ToLowerInvariant() } else { '' }
-            if ($lang -in @('und', 'unk')) { $lang = '' }
+            $lang = (Resolve-ElementaryStreamLanguage -Language ([string]$Descriptor.Language) -Class ([string]$Descriptor.Class)).ToLowerInvariant()
             $flags = (Get-StreamsOrderedFlags $Descriptor.Flags) -join ','
             return "$($Descriptor.Class)|$lang|$flags|$ext"
         }
@@ -107,8 +114,8 @@ function ConvertTo-StreamFileName {
             if ([int]$Descriptor.CollisionIndex -ge 2) { $parts.Add([string]$Descriptor.CollisionIndex) }
         }
         default {
-            $lang = [string]$Descriptor.Language
-            if ($lang -and $lang.ToLowerInvariant() -notin @('und', 'unk')) { $parts.Add($lang) }
+            $lang = Resolve-ElementaryStreamLanguage -Language ([string]$Descriptor.Language) -Class ([string]$Descriptor.Class)
+            if ($lang) { $parts.Add($lang) }
             foreach ($f in Get-StreamsOrderedFlags $Descriptor.Flags) { $parts.Add($f) }
             if ([int]$Descriptor.CollisionIndex -ge 2) { $parts.Add([string]$Descriptor.CollisionIndex) }
         }
@@ -179,10 +186,8 @@ function ConvertFrom-StreamFileName {
     }
     if ($queue.Count -gt 1) { return $null }
     $language = ''
-    if ($queue.Count -eq 1) {
-        $tok = $queue[0]
-        if ($tok.ToLowerInvariant() -notin @('und', 'unk')) { $language = $tok }
-    }
+    if ($queue.Count -eq 1) { $language = $queue[0] }
+    $language = Resolve-ElementaryStreamLanguage -Language $language -Class $classHint
     return New-StreamDescriptorObject -Class $classHint -Language $language -Flags $flags -Extension $extLower -CollisionIndex $collision
 }
 

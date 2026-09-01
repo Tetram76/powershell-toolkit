@@ -64,15 +64,33 @@ Describe 'ConvertTo / ConvertFrom-StreamFileName' {
             $ordinal | Should -BeNullOrEmpty
         }
     }
-    It 'omet la langue und / vide' {
+    It 'écrit und pour Video/Audio/Subtitle si langue vide, und ou unk' {
         InModuleScope 'Tetram.Media.Streams' {
             foreach ($lang in @('', 'und', 'UNK')) {
-                $d = [pscustomobject]@{
+                $audio = [pscustomobject]@{
                     Class = 'Audio'; Language = $lang; Flags = @(); Extension = '.aac'
                     CollisionIndex = 1; AttachmentNameSanitized = ''
                 }
-                ConvertTo-StreamFileName -Basename 'film' -Descriptor $d | Should -Be 'film.aac'
+                ConvertTo-StreamFileName -Basename 'film' -Descriptor $audio | Should -Be 'film.und.aac'
+                $video = [pscustomobject]@{
+                    Class = 'Video'; Language = $lang; Flags = @(); Extension = '.hevc'
+                    CollisionIndex = 1; AttachmentNameSanitized = ''
+                }
+                ConvertTo-StreamFileName -Basename 'film' -Descriptor $video | Should -Be 'film.und.hevc'
+                $sub = [pscustomobject]@{
+                    Class = 'Subtitle'; Language = $lang; Flags = @(); Extension = '.srt'
+                    CollisionIndex = 1; AttachmentNameSanitized = ''
+                }
+                ConvertTo-StreamFileName -Basename 'film' -Descriptor $sub | Should -Be 'film.und.srt'
             }
+        }
+    }
+    It 'parse un sidecar sans jeton langue ou und/unk comme und' {
+        InModuleScope 'Tetram.Media.Streams' {
+            (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.srt').Language | Should -Be 'und'
+            (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.hevc').Language | Should -Be 'und'
+            (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.und.aac').Language | Should -Be 'und'
+            (ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.UNK.srt').Language | Should -Be 'und'
         }
     }
     It 'écrit les flags dans l''ordre spec même si Flags est dans le désordre' {
@@ -94,7 +112,7 @@ Describe 'ConvertTo / ConvertFrom-StreamFileName' {
     It 'ne traite pas dub comme langue' {
         InModuleScope 'Tetram.Media.Streams' {
             $p = ConvertFrom-StreamFileName -Basename 'film' -FileName 'film.dub.aac'
-            $p.Language | Should -Be ''
+            $p.Language | Should -Be 'und'
             $p.Flags | Should -Be @('dub')
         }
     }
