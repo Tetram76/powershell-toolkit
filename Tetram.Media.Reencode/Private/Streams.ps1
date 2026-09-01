@@ -9,6 +9,61 @@ Set-StrictMode -Version 3.0
 # Pas d'Export-ModuleMember : les fonctions restent dans le scope du module.
 # -----------------------------------------------------------------------------
 
+# StrictMode 3 : Select-Object crée tags/disposition même si ffprobe les omet ($null).
+# .Keys / .mimetype sur $null ou PSCustomObject lève ; IDictionary n'a pas les mêmes NoteProperties.
+# OrderedHashtable (ConvertFrom-Json -AsHashtable) : Contains/indexeur sensibles à la casse ;
+# l'ancien garde était Keys -contains (insensible). On résout la clé réelle via -eq.
+function Resolve-ProbeMapKey
+{
+    param([System.Collections.IDictionary] $Map, [string] $Name)
+    foreach ($key in @($Map.Keys))
+    {
+        if ($key -eq $Name)
+        {
+            return $key
+        }
+    }
+    return $null
+}
+
+function Get-ProbeProperty
+{
+    param($Object, [string] $Name)
+    if ($null -eq $Object)
+    {
+        return $null
+    }
+    if ($Object -is [System.Collections.IDictionary])
+    {
+        $key = Resolve-ProbeMapKey $Object $Name
+        if ($null -ne $key)
+        {
+            return $Object[$key]
+        }
+        return $null
+    }
+    $p = $Object.PSObject.Properties[$Name]
+    if ($p)
+    {
+        return $p.Value
+    }
+    return $null
+}
+
+function Test-ProbeHasProperty
+{
+    param($Object, [string] $Name)
+    if ($null -eq $Object)
+    {
+        return $false
+    }
+    if ($Object -is [System.Collections.IDictionary])
+    {
+        return $null -ne (Resolve-ProbeMapKey $Object $Name)
+    }
+    return [bool]$Object.PSObject.Properties[$Name]
+}
+
 function Set-StreamProcessingState
 {
     param(
@@ -53,7 +108,8 @@ function Select-VideoStreams
         foreach ($stream in $VideoTracks)
         {
             $stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
-            $keepStream = -not (($stream.disposition.attached_pic -eq 1) -or ($stream.codec_name -eq 'mjpeg'))
+            $attachedPic = Get-ProbeProperty (Get-ProbeProperty $stream 'disposition') 'attached_pic'
+            $keepStream = -not (($attachedPic -eq 1) -or ($stream.codec_name -eq 'mjpeg'))
             $isHEVC = ($stream.codec_name -ieq 'hevc') -and ($stream.profile -like 'main*')
             $keepVideoCodec = $isHEVC -or ($stream.codec_name -ieq 'av1') -or ($stream.codec_name -ieq 'vc1')
             if ($VideoCodec -eq 'AV1' -and $AllowVideoCodecUpgrade -and $isHEVC)
@@ -323,13 +379,14 @@ function Select-SubtitleStreams
         foreach ($stream in $SubtitleTracks)
         {
             $stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
-            if (-not ($stream.PSObject.Properties.Name -contains "tags") -or -not ($stream.tags.Keys -contains "language"))
+            $tags = Get-ProbeProperty $stream 'tags'
+            if (-not (Test-ProbeHasProperty $tags 'language'))
             {
                 $keepStream = $true
             }
             else
             {
-                $keepStream = [bool]((@('un', 'und') + $SubTitlesToKeep) | Where-Object { $_ -ieq $stream.tags.language })
+                $keepStream = [bool]((@('un', 'und') + $SubTitlesToKeep) | Where-Object { $_ -ieq (Get-ProbeProperty $tags 'language') })
             }
             if ($RewriteMode -and $FinalExtension -ieq '.mp4')
             {
@@ -410,9 +467,10 @@ function Select-AttachmentStreams
         foreach ($stream in $AttachmentTracks)
         {
             $stream | Add-Member -NotePropertyName '_index' -NotePropertyValue (++$i)
+            $tags = Get-ProbeProperty $stream 'tags'
             $isFontByCodec = $stream.codec_name -in @('ttf', 'otf')
-            $isFontByMetadata = ($stream.tags.mimetype -match '\bfont\b|truetype|opentype') -or
-                    ($stream.tags.filename -match '\.(ttf|otf|woff2?|ttc)$')
+            $isFontByMetadata = ((Get-ProbeProperty $tags 'mimetype') -match '\bfont\b|truetype|opentype') -or
+                    ((Get-ProbeProperty $tags 'filename') -match '\.(ttf|otf|woff2?|ttc)$')
             $isFont = $isFontByCodec -or $isFontByMetadata
             $keepStream = (-not $isFont) -or $HasAssSubtitles
 
@@ -421,7 +479,7 @@ function Select-AttachmentStreams
                 # Matroska n'a pas de codec_id sur les attachments : ffprobe ne remplit
                 # codec_name (ttf/otf) que depuis FileMediaType via mkv_mime_tags.
                 # Doc FFmpeg (-attach) : -c copy + -metadata:s:t mimetype=...
-                $filename = [string]$stream.tags.filename
+                $filename = [string](Get-ProbeProperty $tags 'filename')
                 $codec = [string]$stream.codec_name
                 $filenameDisagreesWithCodec =
                     ($codec -eq 'ttf' -and $filename -match '\.otf$') -or
@@ -430,7 +488,7 @@ function Select-AttachmentStreams
                 if ((-not $isFontByCodec) -or $filenameDisagreesWithCodec)
                 {
                     $targetMimetype = Get-FontAttachmentTargetMimetype `
-                        -Mimetype ([string]$stream.tags.mimetype) `
+                        -Mimetype ([string](Get-ProbeProperty $tags 'mimetype')) `
                         -Filename $filename `
                         -Codec $codec
                     if ($targetMimetype)

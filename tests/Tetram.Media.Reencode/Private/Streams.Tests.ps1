@@ -9,6 +9,58 @@ BeforeAll {
     Set-StrictMode -Version Latest
     $script:RepoRootStreams = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
     Import-Module -Name (Join-Path $script:RepoRootStreams 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+
+    function script:Invoke-SelectSubtitleStreamsUnderTest {
+        param(
+            [Parameter(Mandatory)] [hashtable] $FfprobeOutput,
+            [string[]] $SubTitlesToKeep = @('fr', 'en'),
+            [Parameter(Mandatory)] [string] $DirectoryName
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+            FfprobeOutput   = $FfprobeOutput
+            SubTitlesToKeep = $SubTitlesToKeep
+            DirectoryName   = $DirectoryName
+        } {
+            param($FfprobeOutput, $SubTitlesToKeep, $DirectoryName)
+
+            Select-SubtitleStreams `
+                -FfprobeOutput $FfprobeOutput `
+                -FinalExtension '.mkv' `
+                -AllowSubTitlesConversion $false `
+                -RewriteMode $false `
+                -SubTitlesToKeep $SubTitlesToKeep `
+                -Filename 'episode.mkv' `
+                -DirectoryName $DirectoryName
+        }
+    }
+
+    function script:Invoke-SelectVideoStreamsUnderTest {
+        param(
+            [Parameter(Mandatory)] [hashtable] $FfprobeOutput,
+            [bool] $ForceRecodeVideo = $false
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+            FfprobeOutput    = $FfprobeOutput
+            ForceRecodeVideo = $ForceRecodeVideo
+        } {
+            param($FfprobeOutput, $ForceRecodeVideo)
+
+            Select-VideoStreams `
+                -FfprobeOutput $FfprobeOutput `
+                -ForceRecodeVideo $ForceRecodeVideo `
+                -VideoCodec 'HEVC' `
+                -AllowVideoCodecUpgrade $false `
+                -Deinterlace $false `
+                -Upscale '' `
+                -UpscaleWidth 0 `
+                -UpscaleHeight 0 `
+                -UpscaleFit '' `
+                -ConfigUpscaleWidth 0 `
+                -RewriteMode $false
+        }
+    }
 }
 
 AfterAll {
@@ -306,6 +358,250 @@ Describe 'Select-VideoStreams — color_space' {
 
             $result.VideoTracks[0].color_space | Should -BeExactly 'gbr'
             $result.SourceChroma | Should -BeExactly '420'
+        }
+    }
+}
+
+Describe 'Select-SubtitleStreams' {
+
+    It 'conserve une piste subrip sans tags (ffprobe omet la map) sans lever StrictMode' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'subtitle'; codec_name = 'subrip' }
+            )
+        }
+
+        $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+        $result.SubtitleTracks[0].__process | Should -BeFalse
+    }
+
+    It 'conserve une piste dont tags n''a pas de clé language' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ title = 'Signs' } }
+            )
+        }
+
+        $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+    }
+
+    It 'écarte une langue hors SubTitlesToKeep' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'jpn' } }
+            )
+        }
+
+        $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en') -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeFalse
+        $result.SubtitleTracks[0].__process | Should -BeFalse
+    }
+
+    It 'conserve language=fre listé dans SubTitlesToKeep' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fre' } }
+            )
+        }
+
+        $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en', 'fre') -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+    }
+
+    It 'filtre LANGUAGE (casse JSON OrderedHashtable) comme language — écarte jpn' {
+        # ConvertFrom-Json -AsHashtable : Contains('language') est faux pour LANGUAGE ; Keys -contains ne l'est pas.
+        $ffprobe = ConvertFrom-Json -AsHashtable -InputObject '{"streams":[{"codec_type":"subtitle","codec_name":"subrip","tags":{"LANGUAGE":"jpn"}}]}'
+
+        $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en') -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeFalse
+        $result.SubtitleTracks[0].__process | Should -BeFalse
+    }
+
+    It 'filtre LANGUAGE (casse JSON OrderedHashtable) comme language — conserve fre' {
+        $ffprobe = ConvertFrom-Json -AsHashtable -InputObject '{"streams":[{"codec_type":"subtitle","codec_name":"subrip","tags":{"LANGUAGE":"fre"}}]}'
+
+        $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en', 'fre') -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+    }
+
+    It 'conserve language=eng quand tags est un PSCustomObject (pas de Keys)' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type = 'subtitle'
+                    codec_name = 'subrip'
+                    tags       = [pscustomobject]@{ language = 'eng' }
+                }
+            )
+        }
+
+        $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en', 'eng') -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+    }
+
+    It 'écarte language présent à $null (clé JSON, pas une map omise)' {
+        $ffprobe = ConvertFrom-Json -AsHashtable -InputObject '{"streams":[{"codec_type":"subtitle","codec_name":"subrip","tags":{"language":null}}]}'
+
+        $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en') -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeFalse
+        $result.SubtitleTracks[0].__process | Should -BeFalse
+    }
+
+    It 'conserve language un et und même hors SubTitlesToKeep' {
+        foreach ($lang in @('un', 'und', 'UND'))
+        {
+            $ffprobe = @{
+                streams = @(
+                    @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = $lang } }
+                )
+            }
+
+            $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en') -DirectoryName $TestDrive
+            $result.SubtitleTracks[0].__copy | Should -BeTrue -Because "language=$lang"
+        }
+    }
+}
+
+Describe 'Select-AttachmentStreams — tags optionnels' {
+
+    It 'ne lève pas si tags est omis (pas une police)' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = 'mjpeg' }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $false
+            $tracks[0].__copy | Should -BeTrue
+        }
+    }
+}
+
+Describe 'Select-VideoStreams — disposition optionnelle' {
+
+    It 'ne lève pas si disposition est omise' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type  = 'video'
+                    codec_name  = 'hevc'
+                    profile     = 'Main'
+                    height      = 1080
+                    width       = 1920
+                    pix_fmt     = 'yuv420p'
+                    color_space = 'bt709'
+                }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $result = Select-VideoStreams `
+                -FfprobeOutput $FfprobeOutput `
+                -ForceRecodeVideo $false `
+                -VideoCodec 'HEVC' `
+                -AllowVideoCodecUpgrade $false `
+                -Deinterlace $false `
+                -Upscale '' `
+                -UpscaleWidth 0 `
+                -UpscaleHeight 0 `
+                -UpscaleFit '' `
+                -ConfigUpscaleWidth 0 `
+                -RewriteMode $false
+
+            $result.VideoTracks[0].__copy | Should -BeTrue
+        }
+    }
+
+    It 'écarte une piste attached_pic=1 (cover) sans lever StrictMode' {
+        $ffprobe = ConvertFrom-Json -AsHashtable -InputObject @'
+{
+  "streams": [
+    {
+      "codec_type": "video",
+      "codec_name": "h264",
+      "profile": "High",
+      "height": 720,
+      "width": 1280,
+      "pix_fmt": "yuv420p",
+      "color_space": "bt709",
+      "disposition": { "attached_pic": 1 }
+    }
+  ]
+}
+'@
+
+        $result = Invoke-SelectVideoStreamsUnderTest -FfprobeOutput $ffprobe
+        $result.VideoTracks[0].__copy | Should -BeFalse
+        $result.VideoTracks[0].__process | Should -BeFalse
+    }
+}
+
+Describe 'Select-* — sonde ConvertFrom-Json -AsHashtable (type Get-FFprobeJson)' {
+
+    It 'enchaîne vidéo sans disposition, sous-titre sans tags, sous-titre language=fre' {
+        $ffprobe = ConvertFrom-Json -AsHashtable -InputObject @'
+{
+  "streams": [
+    {
+      "codec_type": "video",
+      "codec_name": "hevc",
+      "profile": "Main",
+      "height": 1080,
+      "width": 1920,
+      "pix_fmt": "yuv420p",
+      "color_space": "bt709"
+    },
+    { "codec_type": "subtitle", "codec_name": "subrip" },
+    { "codec_type": "subtitle", "codec_name": "subrip", "tags": { "language": "fre" } }
+  ]
+}
+'@
+
+        $video = Invoke-SelectVideoStreamsUnderTest -FfprobeOutput $ffprobe
+        $video.VideoTracks[0].__copy | Should -BeTrue
+
+        $subs = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en', 'fre') -DirectoryName $TestDrive
+        @($subs.SubtitleTracks).Count | Should -Be 2
+        $subs.SubtitleTracks[0].__copy | Should -BeTrue
+        $subs.SubtitleTracks[1].__copy | Should -BeTrue
+    }
+}
+
+Describe 'Get-ProbeProperty / Test-ProbeHasProperty / Resolve-ProbeMapKey' {
+
+    It 'Get-ProbeProperty retourne null sur objet null ou clé absente' {
+        InModuleScope 'Tetram.Media.Reencode' {
+            Get-ProbeProperty $null 'language' | Should -BeNullOrEmpty
+            Get-ProbeProperty @{ title = 'x' } 'language' | Should -BeNullOrEmpty
+            Test-ProbeHasProperty $null 'language' | Should -BeFalse
+            Test-ProbeHasProperty @{ title = 'x' } 'language' | Should -BeFalse
+        }
+    }
+
+    It 'résout LANGUAGE en language sur OrderedHashtable et lit la valeur' {
+        $map = ConvertFrom-Json -AsHashtable -InputObject '{"LANGUAGE":"fre"}'
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Map = $map } {
+            param($Map)
+            Test-ProbeHasProperty $Map 'language' | Should -BeTrue
+            Get-ProbeProperty $Map 'language' | Should -BeExactly 'fre'
+            (Resolve-ProbeMapKey $Map 'language') | Should -BeExactly 'LANGUAGE'
+        }
+    }
+
+    It 'lit une NoteProperty PSCustomObject (hors IDictionary)' {
+        $obj = [pscustomobject]@{ mimetype = 'font/ttf' }
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Obj = $obj } {
+            param($Obj)
+            Test-ProbeHasProperty $Obj 'mimetype' | Should -BeTrue
+            Get-ProbeProperty $Obj 'mimetype' | Should -BeExactly 'font/ttf'
+            Test-ProbeHasProperty $Obj 'filename' | Should -BeFalse
         }
     }
 }
