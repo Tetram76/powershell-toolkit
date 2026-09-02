@@ -85,13 +85,6 @@ function Test-ProbeHasAssignedLanguage
     return -not [string]::Equals([string]$raw, 'unk', [StringComparison]::OrdinalIgnoreCase)
 }
 
-function Set-UndeterminedLanguageAssignment
-{
-    param($stream, $Tags, [bool] $KeepStream)
-    $assign = $KeepStream -and -not (Test-ProbeHasAssignedLanguage $Tags)
-    $stream | Add-Member -NotePropertyName '__assignUndeterminedLanguage' -NotePropertyValue $assign -Force
-}
-
 function Set-StreamProcessingState
 {
     param(
@@ -187,7 +180,6 @@ function Select-VideoStreams
                 $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue ($keepStream -and -not $keepVideoCodec) -Force
             }
 
-            Set-UndeterminedLanguageAssignment $stream (Get-ProbeProperty $stream 'tags') $keepStream
             Set-StreamProcessingState $stream $keepStream | Out-Null
         }
 
@@ -352,7 +344,6 @@ function Select-AudioStreams
                 }
             }
 
-            Set-UndeterminedLanguageAssignment $stream (Get-ProbeProperty $stream 'tags') $true
             Set-StreamProcessingState $stream $true | Out-Null
         }
 
@@ -431,7 +422,6 @@ function Select-SubtitleStreams
             }
             $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue ($keepStream -and $recode) -Force
 
-            Set-UndeterminedLanguageAssignment $stream $tags $keepStream
             Set-StreamProcessingState $stream $keepStream | Out-Null
         }
 

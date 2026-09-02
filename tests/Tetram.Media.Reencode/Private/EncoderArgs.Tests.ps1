@@ -236,35 +236,32 @@ Describe 'Get-FFmpegArgs — pièces jointes police' {
     }
 }
 
-Describe 'Get-FFmpegArgs — langue indéterminée' {
+Describe 'Get-FFmpegArgs — __recode' {
 
-    It 'pose language=und après map_metadata pour v/a/s sans langue affectée' {
+    It 'copie v/a/s quand __recode est faux même si __process est vrai' {
         $video = [pscustomobject]@{
-            _index                         = 0
-            __process                      = $true
-            __copy                         = $false
-            __recode                       = $false
-            __deinterlace                  = $false
-            __upscale                      = $false
-            color_space                    = 'bt709'
-            __assignUndeterminedLanguage   = $true
+            _index        = 0
+            __process     = $true
+            __copy        = $false
+            __recode      = $false
+            __deinterlace = $false
+            __upscale     = $false
+            color_space   = 'bt709'
         }
         $audio = [pscustomobject]@{
-            _index                         = 0
-            __process                      = $true
-            __copy                         = $false
-            __recode                       = $false
-            __targetAudioCodec             = $null
-            __targetAudioBitrate           = $null
-            __targetAudioFilter            = $null
-            __assignUndeterminedLanguage   = $true
+            _index               = 0
+            __process            = $true
+            __copy               = $false
+            __recode             = $false
+            __targetAudioCodec   = $null
+            __targetAudioBitrate = $null
+            __targetAudioFilter  = $null
         }
         $sub = [pscustomobject]@{
-            _index                       = 0
-            __process                    = $true
-            __copy                       = $false
-            __recode                     = $false
-            __assignUndeterminedLanguage = $true
+            _index    = 0
+            __process = $true
+            __copy    = $false
+            __recode  = $false
         }
 
         InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Video = $video; Audio = $audio; Sub = $sub } {
@@ -285,78 +282,11 @@ Describe 'Get-FFmpegArgs — langue indéterminée' {
                 -AudioTracks @($Audio) `
                 -SubtitleTracks @($Sub) `
                 -AttachmentTracks @()
-
-            $mapMeta = [array]::IndexOf($args, '-map_metadata')
-            $mapMeta | Should -BeGreaterThan -1
-
-            $vIdx = [array]::IndexOf($args, '-metadata:s:v:0')
-            $vIdx | Should -BeGreaterThan $mapMeta
-            $args[$vIdx + 1] | Should -BeExactly 'language=und'
-
-            $aIdx = [array]::IndexOf($args, '-metadata:s:a:0')
-            $aIdx | Should -BeGreaterThan $mapMeta
-            $args[$aIdx + 1] | Should -BeExactly 'language=und'
-
-            $sIdx = [array]::IndexOf($args, '-metadata:s:s:0')
-            $sIdx | Should -BeGreaterThan $mapMeta
-            $args[$sIdx + 1] | Should -BeExactly 'language=und'
 
             $args[[array]::IndexOf($args, '-c:v:0') + 1] | Should -BeExactly 'copy'
             $args[[array]::IndexOf($args, '-c:a:0') + 1] | Should -BeExactly 'copy'
             $args[[array]::IndexOf($args, '-c:s:0') + 1] | Should -BeExactly 'copy'
             $args | Should -Not -Contain 'libsvtav1'
-        }
-    }
-
-    It 'n''ajoute aucun language= si la piste a déjà une langue affectée' {
-        $video = [pscustomobject]@{
-            _index                         = 0
-            __process                      = $false
-            __copy                         = $true
-            __deinterlace                  = $false
-            __upscale                      = $false
-            color_space                    = 'bt709'
-            __assignUndeterminedLanguage   = $false
-        }
-        $audio = [pscustomobject]@{
-            _index                         = 0
-            __process                      = $false
-            __copy                         = $true
-            __targetAudioCodec             = $null
-            __targetAudioBitrate           = $null
-            __targetAudioFilter            = $null
-            __assignUndeterminedLanguage   = $false
-        }
-        $sub = [pscustomobject]@{
-            _index                       = 0
-            __process                    = $false
-            __copy                       = $true
-            __assignUndeterminedLanguage = $false
-        }
-
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Video = $video; Audio = $audio; Sub = $sub } {
-            param($Video, $Audio, $Sub)
-
-            $args = Get-FFmpegArgs `
-                -VideoCodec 'AV1' `
-                -Quality 'Low' `
-                -Upscale '' `
-                -UpscaleWidth 0 `
-                -UpscaleHeight 0 `
-                -UpscaleFit '' `
-                -ConfigUpscaleWidth 0 `
-                -ClearStreamsTitle $false `
-                -VideoTracks @($Video) `
-                -IsSource10Bit $false `
-                -SourceChroma '420' `
-                -AudioTracks @($Audio) `
-                -SubtitleTracks @($Sub) `
-                -AttachmentTracks @()
-
-            $args | Should -Not -Contain '-metadata:s:v:0'
-            $args | Should -Not -Contain '-metadata:s:a:0'
-            $args | Should -Not -Contain '-metadata:s:s:0'
-            @($args | Where-Object { $_ -like 'language=*' }).Count | Should -Be 0
         }
     }
 }
