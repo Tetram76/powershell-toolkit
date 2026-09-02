@@ -87,31 +87,8 @@ Describe 'Select-AudioStreams' {
 
             $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -RewriteMode $false
             $tracks[0].__recode | Should -BeFalse
-            $tracks[0].__copy | Should -BeFalse
-            $tracks[0].__assignUndeterminedLanguage | Should -BeTrue
-            $tracks[0].__process | Should -BeTrue
-        }
-    }
-
-    It 'ne pose pas __assignUndeterminedLanguage si tags.language est déjà affecté' {
-        $ffprobe = @{
-            streams = @(
-                [pscustomobject]@{
-                    codec_type     = 'audio'
-                    codec_name     = 'opus'
-                    channels       = 2
-                    channel_layout = 'stereo'
-                    bit_rate       = '96000'
-                    tags           = @{ language = 'eng' }
-                }
-            )
-        }
-
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
-            param($FfprobeOutput)
-
-            $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -RewriteMode $false
-            $tracks[0].__assignUndeterminedLanguage | Should -BeFalse
+            $tracks[0].__copy | Should -BeTrue
+            $tracks[0].__process | Should -BeFalse
         }
     }
 
@@ -395,10 +372,9 @@ Describe 'Select-SubtitleStreams' {
         }
 
         $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -DirectoryName $TestDrive
-        $result.SubtitleTracks[0].__copy | Should -BeFalse
-        $result.SubtitleTracks[0].__process | Should -BeTrue
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+        $result.SubtitleTracks[0].__process | Should -BeFalse
         $result.SubtitleTracks[0].__recode | Should -BeFalse
-        $result.SubtitleTracks[0].__assignUndeterminedLanguage | Should -BeTrue
     }
 
     It 'conserve une piste dont tags n''a pas de clé language' {
@@ -409,9 +385,8 @@ Describe 'Select-SubtitleStreams' {
         }
 
         $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -DirectoryName $TestDrive
-        $result.SubtitleTracks[0].__copy | Should -BeFalse
-        $result.SubtitleTracks[0].__process | Should -BeTrue
-        $result.SubtitleTracks[0].__assignUndeterminedLanguage | Should -BeTrue
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+        $result.SubtitleTracks[0].__process | Should -BeFalse
     }
 
     It 'écarte une langue hors SubTitlesToKeep' {
@@ -424,7 +399,6 @@ Describe 'Select-SubtitleStreams' {
         $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en') -DirectoryName $TestDrive
         $result.SubtitleTracks[0].__copy | Should -BeFalse
         $result.SubtitleTracks[0].__process | Should -BeFalse
-        $result.SubtitleTracks[0].__assignUndeterminedLanguage | Should -BeFalse
     }
 
     It 'conserve language=fre listé dans SubTitlesToKeep' {
@@ -436,7 +410,6 @@ Describe 'Select-SubtitleStreams' {
 
         $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en', 'fre') -DirectoryName $TestDrive
         $result.SubtitleTracks[0].__copy | Should -BeTrue
-        $result.SubtitleTracks[0].__assignUndeterminedLanguage | Should -BeFalse
     }
 
     It 'filtre LANGUAGE (casse JSON OrderedHashtable) comme language — écarte jpn' {
@@ -474,9 +447,8 @@ Describe 'Select-SubtitleStreams' {
         $ffprobe = ConvertFrom-Json -AsHashtable -InputObject '{"streams":[{"codec_type":"subtitle","codec_name":"subrip","tags":{"language":null}}]}'
 
         $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en') -DirectoryName $TestDrive
-        $result.SubtitleTracks[0].__copy | Should -BeFalse
-        $result.SubtitleTracks[0].__process | Should -BeTrue
-        $result.SubtitleTracks[0].__assignUndeterminedLanguage | Should -BeTrue
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+        $result.SubtitleTracks[0].__process | Should -BeFalse
     }
 
     It 'conserve language un et und même hors SubTitlesToKeep' {
@@ -490,7 +462,6 @@ Describe 'Select-SubtitleStreams' {
 
             $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en') -DirectoryName $TestDrive
             $result.SubtitleTracks[0].__copy | Should -BeTrue -Because "language=$lang"
-            $result.SubtitleTracks[0].__assignUndeterminedLanguage | Should -BeFalse -Because "language=$lang"
         }
     }
 
@@ -504,9 +475,8 @@ Describe 'Select-SubtitleStreams' {
             }
 
             $result = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en') -DirectoryName $TestDrive
-            $result.SubtitleTracks[0].__copy | Should -BeFalse -Because "language=$lang"
-            $result.SubtitleTracks[0].__process | Should -BeTrue -Because "language=$lang"
-            $result.SubtitleTracks[0].__assignUndeterminedLanguage | Should -BeTrue -Because "language=$lang"
+            $result.SubtitleTracks[0].__copy | Should -BeTrue -Because "language=$lang"
+            $result.SubtitleTracks[0].__process | Should -BeFalse -Because "language=$lang"
         }
     }
 }
@@ -562,32 +532,10 @@ Describe 'Select-VideoStreams — disposition optionnelle' {
                 -ConfigUpscaleWidth 0 `
                 -RewriteMode $false
 
-            $result.VideoTracks[0].__copy | Should -BeFalse
-            $result.VideoTracks[0].__process | Should -BeTrue
+            $result.VideoTracks[0].__copy | Should -BeTrue
+            $result.VideoTracks[0].__process | Should -BeFalse
             $result.VideoTracks[0].__recode | Should -BeFalse
-            $result.VideoTracks[0].__assignUndeterminedLanguage | Should -BeTrue
         }
-    }
-
-    It 'ne pose pas __assignUndeterminedLanguage si tags.language est déjà affecté' {
-        $ffprobe = @{
-            streams = @(
-                [pscustomobject]@{
-                    codec_type  = 'video'
-                    codec_name  = 'hevc'
-                    profile     = 'Main'
-                    height      = 1080
-                    width       = 1920
-                    pix_fmt     = 'yuv420p'
-                    color_space = 'bt709'
-                    tags        = @{ language = 'jpn' }
-                    disposition = @{ attached_pic = 0 }
-                }
-            )
-        }
-
-        $result = Invoke-SelectVideoStreamsUnderTest -FfprobeOutput $ffprobe
-        $result.VideoTracks[0].__assignUndeterminedLanguage | Should -BeFalse
     }
 
     It 'écarte une piste attached_pic=1 (cover) sans lever StrictMode' {
@@ -636,16 +584,14 @@ Describe 'Select-* — sonde ConvertFrom-Json -AsHashtable (type Get-FFprobeJson
 '@
 
         $video = Invoke-SelectVideoStreamsUnderTest -FfprobeOutput $ffprobe
-        $video.VideoTracks[0].__copy | Should -BeFalse
-        $video.VideoTracks[0].__process | Should -BeTrue
-        $video.VideoTracks[0].__assignUndeterminedLanguage | Should -BeTrue
+        $video.VideoTracks[0].__copy | Should -BeTrue
+        $video.VideoTracks[0].__process | Should -BeFalse
 
         $subs = Invoke-SelectSubtitleStreamsUnderTest -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en', 'fre') -DirectoryName $TestDrive
         @($subs.SubtitleTracks).Count | Should -Be 2
-        $subs.SubtitleTracks[0].__copy | Should -BeFalse
-        $subs.SubtitleTracks[0].__assignUndeterminedLanguage | Should -BeTrue
+        $subs.SubtitleTracks[0].__copy | Should -BeTrue
+        $subs.SubtitleTracks[0].__process | Should -BeFalse
         $subs.SubtitleTracks[1].__copy | Should -BeTrue
-        $subs.SubtitleTracks[1].__assignUndeterminedLanguage | Should -BeFalse
     }
 }
 
