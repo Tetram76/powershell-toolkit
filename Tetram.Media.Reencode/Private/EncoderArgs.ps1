@@ -361,11 +361,12 @@ function Get-FFmpegArgs
         '-metadata', 'MAJOR_BRAND='
         '-metadata', 'MINOR_VERSION='
         '-metadata', 'COMPATIBLE_BRANDS='
-        '-metadata', 'ENCODER='
         '-metadata', 'SOFTWARE='
+        '-metadata', 'ENCODER='
         '-metadata', 'ENCODERTYPE='
         '-metadata', 'ENCODERPARAMETERS='
         '-metadata', 'ENCODEROPTIONS='
+        '-metadata', 'ENCODER_OPTIONS='
         $( if ($ClearStreamsTitle)
         {
             @('-metadata:s', 'title=')
@@ -388,6 +389,7 @@ function Get-FFmpegArgs
         '-metadata:s', 'ENCODERTYPE='
         '-metadata:s', 'ENCODERPARAMETERS='
         '-metadata:s', 'ENCODEROPTIONS='
+        '-metadata:s', 'ENCODER_OPTIONS='
     )
     $ffmpegArgs += $attachmentMimetypeArgs
 
