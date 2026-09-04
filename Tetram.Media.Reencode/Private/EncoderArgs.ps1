@@ -397,7 +397,7 @@ function Get-FFmpegArgs
     $encodingTool = 'Tetram.Media.Reencode {0}' -f $ExecutionContext.SessionState.Module.Version
     $ffmpegArgs += @(
         '-metadata', 'creation_time=now'
-        '-metadata', "encoding_tool=`"$encodingTool`""
+        '-metadata', "encoding_tool=$encodingTool"
     )
     $ffmpegArgs += $attachmentMimetypeArgs
 

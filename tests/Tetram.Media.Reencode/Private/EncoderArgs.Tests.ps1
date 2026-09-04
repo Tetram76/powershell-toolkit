@@ -438,7 +438,7 @@ Describe 'Get-FFmpegArgs — encoding_tool' {
         $manifest = Import-PowerShellDataFile -LiteralPath (
             Join-Path $script:RepoRootEncoderArgs 'Tetram.Media.Reencode' 'Tetram.Media.Reencode.psd1'
         )
-        $expected = 'encoding_tool="Tetram.Media.Reencode {0}"' -f $manifest.ModuleVersion
+        $expected = 'encoding_tool=Tetram.Media.Reencode {0}' -f $manifest.ModuleVersion
 
         InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Expected = $expected } {
             param($Expected)
