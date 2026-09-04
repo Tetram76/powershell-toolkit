@@ -417,24 +417,14 @@ function Invoke-ReencodeFile
             @(@($AttachmentTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0
         )
 
-        if ($Config.NoTranscode)
+        $hasStreamWork = $hasTracksDropped -or
+            ($hasVideoToConvert + $hasAudioToConvert + $hasSubtitlesToConvert + $hasAttachmentsToConvert) -gt 0
+        $hasContainerChange = -not $Config.NoTranscode -and ($OriginalFile.Extension -ine $FinalExtension)
+        if (-not $hasStreamWork -and -not $hasContainerChange)
         {
-            if (-not $hasTracksDropped -and
-                ($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and
-                ($hasSubtitlesToConvert -eq 0) -and ($hasAttachmentsToConvert -eq 0))
-            {
-                Write-InfoLog "No stream filtering needed for '$Filename'"
-                return
-            }
-        }
-        else
-        {
-            if (($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and ($hasSubtitlesToConvert -eq 0) -and ($hasAttachmentsToConvert -eq 0) -and
-                    ($OriginalFile.Extension -ieq $FinalExtension) -and -not $hasTracksDropped)
-            {
-                Write-InfoLog "No reencoding needed for '$Filename'"
-                return
-            }
+            $skipReason = $Config.NoTranscode ? 'No stream filtering needed' : 'No reencoding needed'
+            Write-InfoLog "$skipReason for '$Filename'"
+            return
         }
 
         $mediaDurationSeconds = ($ffprobeOutput.format.Keys -contains "duration") ? $ffprobeOutput.format.duration : 0
