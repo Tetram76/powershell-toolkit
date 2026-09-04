@@ -22,22 +22,8 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          # ubuntu-latest n'enregistre plus PSGallery pour PowerShellGet :
-          # Set-PSRepository lève alors une erreur terminante que -ErrorAction
-          # SilentlyContinue n'avale pas, et Pester n'est jamais installé.
-          if (Get-Command -Name Install-PSResource -ErrorAction SilentlyContinue) {
-            if (-not (Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-              Register-PSResourceRepository -PSGallery
-            }
-            Install-PSResource -Name Pester -Scope CurrentUser -TrustRepository
-          }
-          else {
-            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-              Register-PSRepository -Default
-            }
-            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-            Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck
-          }
+          # ubuntu-latest : PowerShellGet n'a plus PSGallery ; PSResourceGet si.
+          Install-PSResource -Name Pester -Scope CurrentUser -TrustRepository
 
       - name: Run Pester
         shell: pwsh
