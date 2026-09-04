@@ -366,11 +366,16 @@ function Invoke-ReencodeFile
             -ConfigUpscaleWidth $Config.UpscaleWidth `
             -RewriteMode $Config.Rewrite
 
+        $FinalVideoIsAV1 = Test-FinalVideoIsAV1 `
+            -VideoTracks $videoResult.VideoTracks `
+            -VideoCodec $Config.VideoCodec
+
         $AudioTracks = Select-AudioStreams `
             -FfprobeOutput $ffprobeOutput `
             -FinalExtension $FinalExtension `
             -Quality $Config.Quality `
-            -RewriteMode $Config.Rewrite
+            -RewriteMode $Config.Rewrite `
+            -FinalVideoIsAV1 $FinalVideoIsAV1
 
         $subtitleResult = Select-SubtitleStreams `
             -FfprobeOutput $ffprobeOutput `

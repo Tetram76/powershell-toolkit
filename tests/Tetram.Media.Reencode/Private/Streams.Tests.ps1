@@ -61,6 +61,33 @@ BeforeAll {
                 -RewriteMode $false
         }
     }
+
+    function script:Invoke-SelectAudioStreamsUnderTest {
+        param(
+            [Parameter(Mandatory)] [hashtable] $FfprobeOutput,
+            [string] $FinalExtension = '.mkv',
+            [string] $Quality = 'High',
+            [bool] $RewriteMode = $false,
+            [bool] $FinalVideoIsAV1 = $false
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+            FfprobeOutput   = $FfprobeOutput
+            FinalExtension  = $FinalExtension
+            Quality         = $Quality
+            RewriteMode     = $RewriteMode
+            FinalVideoIsAV1 = $FinalVideoIsAV1
+        } {
+            param($FfprobeOutput, $FinalExtension, $Quality, $RewriteMode, $FinalVideoIsAV1)
+
+            Select-AudioStreams `
+                -FfprobeOutput $FfprobeOutput `
+                -FinalExtension $FinalExtension `
+                -Quality $Quality `
+                -RewriteMode $RewriteMode `
+                -FinalVideoIsAV1 $FinalVideoIsAV1
+        }
+    }
 }
 
 AfterAll {
@@ -111,6 +138,473 @@ Describe 'Select-AudioStreams' {
             $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -RewriteMode $false
             $tracks[0].__recode | Should -BeTrue
             $tracks[0].__targetAudioCodec | Should -BeExactly 'opus'
+        }
+    }
+
+    It 'force AAC vers EAC3 quand la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '192000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Low' -FinalVideoIsAV1 $true
+        $tracks[0].codec_name | Should -BeExactly 'aac'
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__copy | Should -BeFalse
+        $tracks[0].__process | Should -BeTrue
+        $tracks[0].__targetAudioBitrate | Should -BeNullOrEmpty
+    }
+
+    It 'applique la contrainte AV1+AAC à toutes les pistes AAC conservées' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{ codec_type = 'audio'; codec_name = 'aac'; channels = 2; channel_layout = 'stereo'; bit_rate = '192000' }
+                [pscustomobject]@{ codec_type = 'audio'; codec_name = 'aac'; channels = 2; channel_layout = 'stereo'; bit_rate = '128000' }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -FinalVideoIsAV1 $true
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[1].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[1].__recode | Should -BeTrue
+    }
+
+    It 'ne force vers EAC3 par la règle AV1 que les pistes AAC dans un mélange' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{ codec_type = 'audio'; codec_name = 'aac'; channels = 2; channel_layout = 'stereo'; bit_rate = '192000' }
+                [pscustomobject]@{ codec_type = 'audio'; codec_name = 'opus'; channels = 2; channel_layout = 'stereo'; bit_rate = '96000' }
+                [pscustomobject]@{ codec_type = 'audio'; codec_name = 'aac'; channels = 2; channel_layout = 'stereo'; bit_rate = '160000' }
+                [pscustomobject]@{ codec_type = 'audio'; codec_name = 'eac3'; channels = 6; channel_layout = '5.1'; bit_rate = '448000' }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $true
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[1].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[1].__recode | Should -BeTrue
+        $tracks[2].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[2].__recode | Should -BeTrue
+        $tracks[3].__recode | Should -BeFalse
+        $tracks[3].__copy | Should -BeTrue
+    }
+
+    It 'ne force pas AAC vers EAC3 en HEVC final High (politique normale)' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '192000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeFalse
+        $tracks[0].__copy | Should -BeTrue
+    }
+
+    It 'cible eac3 quand un lossless est réencodé en HEVC final High' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__targetAudioBitrate | Should -BeNullOrEmpty
+    }
+
+    It 'cible eac3 quand un lossless est réencodé en HEVC final Medium' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Medium' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+    }
+
+    It 'cible opus quand un lossless est réencodé en HEVC final Low' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Low' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'opus'
+    }
+
+    It 'réencode Opus vers EAC3 en High non-MP4 même sans gain de bitrate' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'opus'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '64000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__copy | Should -BeFalse
+        $tracks[0].__process | Should -BeTrue
+        $tracks[0].__targetAudioBitrate | Should -BeNullOrEmpty
+    }
+
+    It 'réencode Opus vers EAC3 en Medium non-MP4' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'opus'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '64000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Medium' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__copy | Should -BeFalse
+        $tracks[0].__process | Should -BeTrue
+    }
+
+    It 'ne migre pas Opus vers EAC3 en Rewrite même en High non-MP4' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'opus'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '64000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -RewriteMode $true
+        $tracks[0].__recode | Should -BeFalse
+        $tracks[0].__copy | Should -BeTrue
+    }
+
+    It 'force AAC vers EAC3 sur une sortie MP4 si la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '192000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -FinalExtension '.mp4' -Quality 'High' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__copy | Should -BeFalse
+        $tracks[0].__process | Should -BeTrue
+    }
+
+    It 'ne force pas AAC vers EAC3 en Rewrite même si la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '192000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -RewriteMode $true -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeFalse
+        $tracks[0].__copy | Should -BeTrue
+    }
+
+    It 'ne force pas AC3 vers EAC3 uniquement parce que la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'ac3'
+                    channels       = 6
+                    channel_layout = '5.1'
+                    bit_rate       = '448000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeFalse
+        $tracks[0].__copy | Should -BeTrue
+    }
+
+    It 'ne réencode pas une piste EAC3 uniquement parce que la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'eac3'
+                    channels       = 6
+                    channel_layout = '5.1'
+                    bit_rate       = '448000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeFalse
+        $tracks[0].__copy | Should -BeTrue
+    }
+
+    It 'migre Opus vers EAC3 en High même si la vidéo finale est AV1 (politique normale, pas AAC)' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'opus'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '96000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+    }
+
+    It 'cible eac3 (pas aac) quand un lossless MP4 est recodé et que la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -FinalExtension '.mp4' -Quality 'High' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__copy | Should -BeFalse
+        $tracks[0].__process | Should -BeTrue
+    }
+
+    It 'conserve aac pour un lossless MP4 recodé sans AV1 final' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -FinalExtension '.mp4' -Quality 'High' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'aac'
+    }
+
+    It 'downmixe en 5.1 une piste EAC3 à plus de 6 canaux' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'truehd'
+                    channels       = 8
+                    channel_layout = '7.1'
+                    bit_rate       = '4000000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__targetAudioFilter | Should -BeExactly 'aformat=channel_layouts=5.1'
+    }
+
+    It 'ne downmixe pas une piste EAC3 5.1 (6 canaux)' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 6
+                    channel_layout = '5.1'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].PSObject.Properties['__targetAudioFilter'] | Should -BeNullOrEmpty
+    }
+
+    It 'downmixe en 5.1 un AAC 7.1 forcé EAC3 par AV1 final' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 8
+                    channel_layout = '7.1'
+                    bit_rate       = '512000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Low' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__targetAudioFilter | Should -BeExactly 'aformat=channel_layouts=5.1'
+    }
+}
+
+Describe 'Test-FinalVideoIsAV1' {
+
+    function script:New-FinalVideoTrack {
+        param(
+            [string] $CodecName,
+            [bool] $Copy = $false,
+            [bool] $Process = $false,
+            [bool] $Recode = $false,
+            [bool] $Deinterlace = $false,
+            [bool] $Upscale = $false
+        )
+
+        [pscustomobject]@{
+            codec_name    = $CodecName
+            __copy        = $Copy
+            __process     = $Process
+            __recode      = $Recode
+            __deinterlace = $Deinterlace
+            __upscale     = $Upscale
+        }
+    }
+
+    It 'reconnaît une piste AV1 source copiée (VideoCodec HEVC, aucun recodage)' {
+        $tracks = @(
+            (New-FinalVideoTrack -CodecName 'av1' -Copy $true)
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+            param($VideoTracks)
+            Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'HEVC' | Should -BeTrue
+        }
+    }
+
+    It 'ignore une cible AV1 configurée si la piste HEVC est copiée' {
+        $tracks = @(
+            (New-FinalVideoTrack -CodecName 'hevc' -Copy $true)
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+            param($VideoTracks)
+            Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'AV1' | Should -BeFalse
+        }
+    }
+
+    It 'reconnaît un H264 réellement réencodé en AV1' {
+        $tracks = @(
+            (New-FinalVideoTrack -CodecName 'h264' -Process $true -Recode $true)
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+            param($VideoTracks)
+            Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'AV1' | Should -BeTrue
+        }
+    }
+
+    It 'reconnaît un HEVC réencodé AV1 uniquement par __deinterlace' {
+        $tracks = @(
+            (New-FinalVideoTrack -CodecName 'hevc' -Process $true -Deinterlace $true)
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+            param($VideoTracks)
+            Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'AV1' | Should -BeTrue
+        }
+    }
+
+    It 'reconnaît un HEVC réencodé AV1 uniquement par __upscale' {
+        $tracks = @(
+            (New-FinalVideoTrack -CodecName 'hevc' -Process $true -Upscale $true)
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+            param($VideoTracks)
+            Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'AV1' | Should -BeTrue
+        }
+    }
+
+    It 'ignore une piste AV1 supprimée si aucune autre piste finale n''est AV1' {
+        $tracks = @(
+            (New-FinalVideoTrack -CodecName 'av1')
+            (New-FinalVideoTrack -CodecName 'hevc' -Copy $true)
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+            param($VideoTracks)
+            Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'HEVC' | Should -BeFalse
         }
     }
 }

@@ -37,7 +37,8 @@ function Test-IsLosslessAudioCodec
 function Get-TargetAudioCodec
 {
     param(
-        [Parameter(Mandatory)] [string]$FinalExtension
+        [Parameter(Mandatory)] [string]$FinalExtension,
+        [Parameter(Mandatory)] [ValidateSet('High', 'Medium', 'Low')] [string]$Quality
     )
 
     switch ( $FinalExtension.ToLowerInvariant())
@@ -46,7 +47,12 @@ function Get-TargetAudioCodec
             return 'aac'
         }
         default {
-            return 'opus'
+            # Hors MP4, Opus n'est plus la cible High/Medium : EAC3 prend le relais.
+            if ($Quality -eq 'Low')
+            {
+                return 'opus'
+            }
+            return 'eac3'
         }
     }
 }
