@@ -83,11 +83,11 @@ class EncodingResult
         }
         $saved = $this.OriginalSize - $this.ReencodedSize
         return ("{0} reencoded into {1} ({2:0.00}:1, {3:0.00} %, {4} disk space saved)" -f
-        (Format-FileSize -Size $this.OriginalSize),
-        (Format-FileSize -Size $this.ReencodedSize),
-        ($this.OriginalSize / $this.ReencodedSize),
-        ($saved / $this.OriginalSize * 100),
-        (Format-FileSize -Size $saved))
+            (Format-FileSize -Size $this.OriginalSize),
+            (Format-FileSize -Size $this.ReencodedSize),
+            ($this.OriginalSize / $this.ReencodedSize),
+            ($saved / $this.OriginalSize * 100),
+            (Format-FileSize -Size $saved))
     }
 
     [string]
@@ -98,9 +98,9 @@ class EncodingResult
             return ''
         }
         return ("{0} reencoded in {1} (Speed: x{2:0.00})" -f
-        (Format-Duration -TimeSpan $this.Duration),
-        (Format-Duration -TimeSpan $this.ElapsedTime),
-        ($this.Duration / $this.ElapsedTime))
+            (Format-Duration -TimeSpan $this.Duration),
+            (Format-Duration -TimeSpan $this.ElapsedTime),
+            ($this.Duration / $this.ElapsedTime))
     }
 
     [void]
@@ -482,12 +482,12 @@ function Invoke-ReencodeFile
         if (-not $WhatIfPreference -and (Test-Path -LiteralPath $TempFilename -PathType Leaf))
         {
             $keptSourceVideoIndices = @(
-            $videoResult.VideoTracks |
+                $videoResult.VideoTracks |
                     Where-Object { $_.__copy -or $_.__process } |
                     ForEach-Object { [int]$_._index }
             )
             $keptSourceAudioIndices = @(
-            $AudioTracks |
+                $AudioTracks |
                     Where-Object { $_.__copy -or $_.__process } |
                     ForEach-Object { [int]$_._index }
             )
@@ -595,10 +595,10 @@ function Invoke-ReencodeMedia
 .EXTERNALHELP Tetram.Media.Reencode-Help.xml
 #>
     [CmdletBinding(
-            PositionalBinding = $false,
-            DefaultParametersetName = 'ReencodeFromPath',
-            SupportsShouldProcess = $true,
-            ConfirmImpact = 'Medium'
+        PositionalBinding = $false,
+        DefaultParametersetName = 'ReencodeFromPath',
+        SupportsShouldProcess = $true,
+        ConfirmImpact = 'Medium'
     )]
     param (
         [Parameter(Position = 0, ParameterSetName = 'CheckFromPath')]
@@ -771,7 +771,7 @@ function Invoke-ReencodeMedia
     }
 
     $config = @{
-    # Parcours / sélection
+        # Parcours / sélection
         Recurse = $Recurse
         Sort = $Sort
         ScanReadOnlyDirectory = $ScanReadOnlyDirectory
