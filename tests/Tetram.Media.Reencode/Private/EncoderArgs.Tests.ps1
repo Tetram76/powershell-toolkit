@@ -384,6 +384,53 @@ Describe 'Get-AudioEncoderArgs' {
 
 Describe 'Get-FFmpegArgs — AV1 copiée + AAC vers EAC3' {
 
+    It 'copie la vidéo AV1 et encode l''audio Low déjà ciblé Opus sans downmix EAC3' {
+        $video = [pscustomobject]@{
+            _index        = 0
+            __process     = $false
+            __copy        = $true
+            __recode      = $false
+            __deinterlace = $false
+            __upscale     = $false
+            color_space   = 'bt709'
+        }
+        $audio = [pscustomobject]@{
+            _index               = 0
+            __process            = $true
+            __copy               = $false
+            __recode             = $true
+            __targetAudioCodec   = 'opus'
+            __targetAudioBitrate = '96k'
+            __targetAudioFilter  = $null
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Video = $video; Audio = $audio } {
+            param($Video, $Audio)
+
+            $args = Get-FFmpegArgs `
+                -VideoCodec 'AV1' `
+                -Quality 'Low' `
+                -Upscale '' `
+                -UpscaleWidth 0 `
+                -UpscaleHeight 0 `
+                -UpscaleFit '' `
+                -ConfigUpscaleWidth 0 `
+                -ClearStreamsTitle $false `
+                -VideoTracks @($Video) `
+                -IsSource10Bit $false `
+                -SourceChroma '420' `
+                -AudioTracks @($Audio) `
+                -SubtitleTracks @() `
+                -AttachmentTracks @()
+
+            $args[[array]::IndexOf($args, '-c:v:0') + 1] | Should -BeExactly 'copy'
+            $args[[array]::IndexOf($args, '-c:a:0') + 1] | Should -BeExactly 'libopus'
+            $args[[array]::IndexOf($args, '-b:a:0') + 1] | Should -BeExactly '96k'
+            $args | Should -Not -Contain 'eac3'
+            $args | Should -Not -Contain 'aformat=channel_layouts=5.1'
+        }
+    }
+
     It 'copie la vidéo AV1 et encode l''audio en eac3 sans bitrate' {
         $video = [pscustomobject]@{
             _index        = 0
