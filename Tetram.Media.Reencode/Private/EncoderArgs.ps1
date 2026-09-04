@@ -363,12 +363,19 @@ function Get-FFmpegArgs
         '-metadata', 'COMPATIBLE_BRANDS='
         '-metadata', 'ENCODER='
         '-metadata', 'SOFTWARE='
+        '-metadata', 'ENCODERTYPE='
+        '-metadata', 'ENCODERPARAMETERS='
+        '-metadata', 'ENCODEROPTIONS='
         $( if ($ClearStreamsTitle)
         {
             @('-metadata:s', 'title=')
         } )
         '-metadata:s', '_STATISTICS_TAGS='
         '-metadata:s', '_STATISTICS_TAGS-eng='
+        '-metadata:s', '_STATISTICS_WRITING_APP='
+        '-metadata:s', '_STATISTICS_WRITING_APP-eng='
+        '-metadata:s', '_STATISTICS_WRITING_DATE_UTC='
+        '-metadata:s', '_STATISTICS_WRITING_DATE_UTC-eng='
         '-metadata:s', 'HANDLER_NAME='
         '-metadata:s', 'VENDOR_ID='
         '-metadata:s', 'BPS='
@@ -377,11 +384,10 @@ function Get-FFmpegArgs
         '-metadata:s', 'NUMBER_OF_FRAMES-eng='
         '-metadata:s', 'NUMBER_OF_BYTES='
         '-metadata:s', 'NUMBER_OF_BYTES-eng='
-        '-metadata:s', '_STATISTICS_WRITING_APP='
-        '-metadata:s', '_STATISTICS_WRITING_APP-eng='
-        '-metadata:s', '_STATISTICS_WRITING_DATE_UTC='
-        '-metadata:s', '_STATISTICS_WRITING_DATE_UTC-eng='
-        '-metadata:s', 'encoder='
+        '-metadata:s', 'ENCODER='
+        '-metadata:s', 'ENCODERTYPE='
+        '-metadata:s', 'ENCODERPARAMETERS='
+        '-metadata:s', 'ENCODEROPTIONS='
     )
     $ffmpegArgs += $attachmentMimetypeArgs
 
