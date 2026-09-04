@@ -422,6 +422,63 @@ Describe 'Select-AudioStreams' {
         $tracks[0].__recode | Should -BeTrue
         $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
     }
+
+    It 'downmixe en 5.1 une piste EAC3 à plus de 6 canaux' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'truehd'
+                    channels       = 8
+                    channel_layout = '7.1'
+                    bit_rate       = '4000000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__targetAudioFilter | Should -BeExactly 'aformat=channel_layouts=5.1'
+    }
+
+    It 'ne downmixe pas une piste EAC3 5.1 (6 canaux)' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 6
+                    channel_layout = '5.1'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].PSObject.Properties['__targetAudioFilter'] | Should -BeNullOrEmpty
+    }
+
+    It 'downmixe en 5.1 un AAC 7.1 forcé EAC3 par AV1 final' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 8
+                    channel_layout = '7.1'
+                    bit_rate       = '512000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Low' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__targetAudioFilter | Should -BeExactly 'aformat=channel_layouts=5.1'
+    }
 }
 
 Describe 'Test-FinalVideoIsAV1' {

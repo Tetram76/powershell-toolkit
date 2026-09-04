@@ -312,6 +312,21 @@ Describe 'Get-AudioEncoderArgs' {
         }
     }
 
+    It 'applique le filtre de downmix 5.1 sur eac3 sans ajouter de bitrate' {
+        InModuleScope 'Tetram.Media.Reencode' {
+            $args = Get-AudioEncoderArgs `
+                -StreamIndex 0 `
+                -Process $true `
+                -TargetCodec 'eac3' `
+                -TargetBitrate $null `
+                -ChannelMapFilter 'aformat=channel_layouts=5.1'
+
+            $args[[array]::IndexOf($args, '-c:a:0') + 1] | Should -BeExactly 'eac3'
+            $args[[array]::IndexOf($args, '-filter:a:0') + 1] | Should -BeExactly 'aformat=channel_layouts=5.1'
+            $args | Should -Not -Contain '-b:a:0'
+        }
+    }
+
     It 'conserve libopus, bitrate et options VBR pour Opus' {
         InModuleScope 'Tetram.Media.Reencode' {
             $args = Get-AudioEncoderArgs `

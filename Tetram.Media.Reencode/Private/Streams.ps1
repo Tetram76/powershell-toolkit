@@ -386,6 +386,13 @@ function Select-AudioStreams
                 }
             }
 
+            # Encodeur natif eac3 : layouts jusqu'à 5.1 seulement ; au-delà FFmpeg refuse d'ouvrir le flux.
+            $eac3DownmixFilter = $null
+            if ($effectiveTargetCodec -ieq 'eac3' -and $channels -gt 6)
+            {
+                $eac3DownmixFilter = 'aformat=channel_layouts=5.1'
+            }
+
             $recode = if ($RewriteMode)
             {
                 $false
@@ -401,9 +408,14 @@ function Select-AudioStreams
                 $stream | Add-Member -NotePropertyName '__targetAudioCodec' -NotePropertyValue $effectiveTargetCodec -Force
                 $stream | Add-Member -NotePropertyName '__targetAudioBitrate' -NotePropertyValue $targetBitrateLabel -Force
 
-                if ($opusLayoutFix)
+                $audioFilter = $opusLayoutFix
+                if ($eac3DownmixFilter)
                 {
-                    $stream | Add-Member -NotePropertyName '__targetAudioFilter' -NotePropertyValue $opusLayoutFix -Force
+                    $audioFilter = $eac3DownmixFilter
+                }
+                if ($audioFilter)
+                {
+                    $stream | Add-Member -NotePropertyName '__targetAudioFilter' -NotePropertyValue $audioFilter -Force
                 }
             }
 
