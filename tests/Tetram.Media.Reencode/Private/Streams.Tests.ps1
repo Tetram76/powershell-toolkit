@@ -28,7 +28,7 @@ BeforeAll {
                 -FfprobeOutput $FfprobeOutput `
                 -FinalExtension '.mkv' `
                 -AllowSubTitlesConversion $false `
-                -RewriteMode $false `
+                -NoTranscodeMode $false `
                 -SubTitlesToKeep $SubTitlesToKeep `
                 -Filename 'episode.mkv' `
                 -DirectoryName $DirectoryName
@@ -58,7 +58,7 @@ BeforeAll {
                 -UpscaleHeight 0 `
                 -UpscaleFit '' `
                 -ConfigUpscaleWidth 0 `
-                -RewriteMode $false
+                -NoTranscodeMode $false
         }
     }
 
@@ -67,7 +67,7 @@ BeforeAll {
             [Parameter(Mandatory)] [hashtable] $FfprobeOutput,
             [string] $FinalExtension = '.mkv',
             [string] $Quality = 'High',
-            [bool] $RewriteMode = $false,
+            [bool] $NoTranscodeMode = $false,
             [bool] $FinalVideoIsAV1 = $false
         )
 
@@ -75,16 +75,16 @@ BeforeAll {
             FfprobeOutput   = $FfprobeOutput
             FinalExtension  = $FinalExtension
             Quality         = $Quality
-            RewriteMode     = $RewriteMode
+            NoTranscodeMode     = $NoTranscodeMode
             FinalVideoIsAV1 = $FinalVideoIsAV1
         } {
-            param($FfprobeOutput, $FinalExtension, $Quality, $RewriteMode, $FinalVideoIsAV1)
+            param($FfprobeOutput, $FinalExtension, $Quality, $NoTranscodeMode, $FinalVideoIsAV1)
 
             Select-AudioStreams `
                 -FfprobeOutput $FfprobeOutput `
                 -FinalExtension $FinalExtension `
                 -Quality $Quality `
-                -RewriteMode $RewriteMode `
+                -NoTranscodeMode $NoTranscodeMode `
                 -FinalVideoIsAV1 $FinalVideoIsAV1
         }
     }
@@ -112,7 +112,7 @@ Describe 'Select-AudioStreams' {
         InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
-            $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -RewriteMode $false
+            $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -NoTranscodeMode $false
             $tracks[0].__recode | Should -BeFalse
             $tracks[0].__copy | Should -BeTrue
             $tracks[0].__process | Should -BeFalse
@@ -135,7 +135,7 @@ Describe 'Select-AudioStreams' {
         InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
-            $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -RewriteMode $false
+            $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -NoTranscodeMode $false
             $tracks[0].__recode | Should -BeTrue
             $tracks[0].__targetAudioCodec | Should -BeExactly 'opus'
         }
@@ -313,7 +313,7 @@ Describe 'Select-AudioStreams' {
         $tracks[0].__process | Should -BeTrue
     }
 
-    It 'ne migre pas Opus vers EAC3 en Rewrite même en High non-MP4' {
+    It 'ne migre pas Opus vers EAC3 en NoTranscode même en High non-MP4' {
         $ffprobe = @{
             streams = @(
                 [pscustomobject]@{
@@ -326,7 +326,7 @@ Describe 'Select-AudioStreams' {
             )
         }
 
-        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -RewriteMode $true
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -NoTranscodeMode $true
         $tracks[0].__recode | Should -BeFalse
         $tracks[0].__copy | Should -BeTrue
     }
@@ -351,7 +351,7 @@ Describe 'Select-AudioStreams' {
         $tracks[0].__process | Should -BeTrue
     }
 
-    It 'ne force pas AAC vers EAC3 en Rewrite même si la vidéo finale est AV1' {
+    It 'ne force pas AAC vers EAC3 en NoTranscode même si la vidéo finale est AV1' {
         $ffprobe = @{
             streams = @(
                 [pscustomobject]@{
@@ -364,7 +364,7 @@ Describe 'Select-AudioStreams' {
             )
         }
 
-        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -RewriteMode $true -FinalVideoIsAV1 $true
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -NoTranscodeMode $true -FinalVideoIsAV1 $true
         $tracks[0].__recode | Should -BeFalse
         $tracks[0].__copy | Should -BeTrue
     }
@@ -848,7 +848,7 @@ Describe 'Select-VideoStreams — color_space' {
                 -UpscaleHeight 0 `
                 -UpscaleFit '' `
                 -ConfigUpscaleWidth 0 `
-                -RewriteMode $false
+                -NoTranscodeMode $false
 
             $result.VideoTracks[0].color_space | Should -BeExactly 'gbr'
             $result.SourceChroma | Should -BeExactly '420'
@@ -1024,7 +1024,7 @@ Describe 'Select-VideoStreams — disposition optionnelle' {
                 -UpscaleHeight 0 `
                 -UpscaleFit '' `
                 -ConfigUpscaleWidth 0 `
-                -RewriteMode $false
+                -NoTranscodeMode $false
 
             $result.VideoTracks[0].__copy | Should -BeTrue
             $result.VideoTracks[0].__process | Should -BeFalse
@@ -1126,6 +1126,408 @@ Describe 'Get-ProbeProperty / Test-ProbeHasProperty / Resolve-ProbeMapKey' {
             Test-ProbeHasProperty $Obj 'mimetype' | Should -BeTrue
             Get-ProbeProperty $Obj 'mimetype' | Should -BeExactly 'font/ttf'
             Test-ProbeHasProperty $Obj 'filename' | Should -BeFalse
+        }
+    }
+}
+
+function script:Invoke-SelectVideoStreamsNoTranscode {
+    param(
+        [Parameter(Mandatory)] [hashtable] $FfprobeOutput,
+        [bool] $NoTranscodeMode = $true,
+        [bool] $ForceRecodeVideo = $false,
+        [string] $VideoCodec = 'HEVC',
+        [bool] $AllowVideoCodecUpgrade = $false,
+        [bool] $Deinterlace = $false,
+        [string] $Upscale = ''
+    )
+
+    InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+        FfprobeOutput           = $FfprobeOutput
+        NoTranscodeMode         = $NoTranscodeMode
+        ForceRecodeVideo        = $ForceRecodeVideo
+        VideoCodec              = $VideoCodec
+        AllowVideoCodecUpgrade  = $AllowVideoCodecUpgrade
+        Deinterlace             = $Deinterlace
+        Upscale                 = $Upscale
+    } {
+        param($FfprobeOutput, $NoTranscodeMode, $ForceRecodeVideo, $VideoCodec, $AllowVideoCodecUpgrade, $Deinterlace, $Upscale)
+
+        Select-VideoStreams `
+            -FfprobeOutput $FfprobeOutput `
+            -ForceRecodeVideo $ForceRecodeVideo `
+            -VideoCodec $VideoCodec `
+            -AllowVideoCodecUpgrade $AllowVideoCodecUpgrade `
+            -Deinterlace $Deinterlace `
+            -Upscale $Upscale `
+            -UpscaleWidth 0 `
+            -UpscaleHeight 0 `
+            -UpscaleFit '' `
+            -ConfigUpscaleWidth 0 `
+            -NoTranscodeMode $NoTranscodeMode
+    }
+}
+
+function script:Invoke-SelectAudioStreamsNoTranscode {
+    param(
+        [Parameter(Mandatory)] [hashtable] $FfprobeOutput,
+        [bool] $NoTranscodeMode = $true,
+        [string] $FinalExtension = '.mkv',
+        [string] $Quality = 'High',
+        [bool] $FinalVideoIsAV1 = $false
+    )
+
+    InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+        FfprobeOutput   = $FfprobeOutput
+        NoTranscodeMode = $NoTranscodeMode
+        FinalExtension  = $FinalExtension
+        Quality         = $Quality
+        FinalVideoIsAV1 = $FinalVideoIsAV1
+    } {
+        param($FfprobeOutput, $NoTranscodeMode, $FinalExtension, $Quality, $FinalVideoIsAV1)
+
+        Select-AudioStreams `
+            -FfprobeOutput $FfprobeOutput `
+            -FinalExtension $FinalExtension `
+            -Quality $Quality `
+            -NoTranscodeMode $NoTranscodeMode `
+            -FinalVideoIsAV1 $FinalVideoIsAV1
+    }
+}
+
+function script:Invoke-SelectSubtitleStreamsNoTranscode {
+    param(
+        [Parameter(Mandatory)] [hashtable] $FfprobeOutput,
+        [bool] $NoTranscodeMode = $true,
+        [string] $FinalExtension = '.mkv',
+        [bool] $AllowSubTitlesConversion = $false,
+        [string[]] $SubTitlesToKeep = @('fr', 'en'),
+        [Parameter(Mandatory)] [string] $DirectoryName
+    )
+
+    InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+        FfprobeOutput              = $FfprobeOutput
+        NoTranscodeMode            = $NoTranscodeMode
+        FinalExtension             = $FinalExtension
+        AllowSubTitlesConversion   = $AllowSubTitlesConversion
+        SubTitlesToKeep            = $SubTitlesToKeep
+        DirectoryName              = $DirectoryName
+    } {
+        param($FfprobeOutput, $NoTranscodeMode, $FinalExtension, $AllowSubTitlesConversion, $SubTitlesToKeep, $DirectoryName)
+
+        Select-SubtitleStreams `
+            -FfprobeOutput $FfprobeOutput `
+            -FinalExtension $FinalExtension `
+            -AllowSubTitlesConversion $AllowSubTitlesConversion `
+            -NoTranscodeMode $NoTranscodeMode `
+            -SubTitlesToKeep $SubTitlesToKeep `
+            -Filename 'episode.mkv' `
+            -DirectoryName $DirectoryName
+    }
+}
+
+function script:New-VideoProbeStream {
+    param(
+        [string] $CodecName,
+        [string] $Profile = 'High',
+        [int] $Width = 1920,
+        [int] $Height = 1080,
+        [hashtable] $Disposition = @{ attached_pic = 0 }
+    )
+
+    @{
+        codec_type  = 'video'
+        codec_name  = $CodecName
+        profile     = $Profile
+        width       = $Width
+        height      = $Height
+        pix_fmt     = 'yuv420p'
+        color_space = 'bt709'
+        disposition = $Disposition
+    }
+}
+
+function script:New-AudioProbeStream {
+    param(
+        [string] $CodecName,
+        [int] $Channels = 2,
+        [string] $Layout = 'stereo',
+        [string] $BitRate = '192000'
+    )
+
+    [pscustomobject]@{
+        codec_type     = 'audio'
+        codec_name     = $CodecName
+        channels       = $Channels
+        channel_layout = $Layout
+        bit_rate       = $BitRate
+    }
+}
+
+Describe 'Select-VideoStreams — NoTranscodeMode' {
+
+    It 'copie H.264 sans transformation' {
+        $ffprobe = @{ streams = @(New-VideoProbeStream -CodecName 'h264') }
+        $track = (Invoke-SelectVideoStreamsNoTranscode -FfprobeOutput $ffprobe).VideoTracks[0]
+        $track.__copy | Should -BeTrue
+        $track.__process | Should -BeFalse
+        $track.__recode | Should -BeFalse
+        $track.__deinterlace | Should -BeFalse
+        $track.__upscale | Should -BeFalse
+    }
+
+    It 'copie HEVC sans transformation' {
+        $ffprobe = @{ streams = @(New-VideoProbeStream -CodecName 'hevc' -Profile 'Main') }
+        $track = (Invoke-SelectVideoStreamsNoTranscode -FfprobeOutput $ffprobe).VideoTracks[0]
+        $track.__copy | Should -BeTrue
+        $track.__process | Should -BeFalse
+        $track.__recode | Should -BeFalse
+        $track.__deinterlace | Should -BeFalse
+        $track.__upscale | Should -BeFalse
+    }
+
+    It 'copie AV1 sans transformation' {
+        $ffprobe = @{ streams = @(New-VideoProbeStream -CodecName 'av1') }
+        $track = (Invoke-SelectVideoStreamsNoTranscode -FfprobeOutput $ffprobe).VideoTracks[0]
+        $track.__copy | Should -BeTrue
+        $track.__process | Should -BeFalse
+        $track.__recode | Should -BeFalse
+        $track.__deinterlace | Should -BeFalse
+        $track.__upscale | Should -BeFalse
+    }
+
+    It 'écarte une attached-picture' {
+        $ffprobe = @{ streams = @(New-VideoProbeStream -CodecName 'h264' -Disposition @{ attached_pic = 1 }) }
+        $track = (Invoke-SelectVideoStreamsNoTranscode -FfprobeOutput $ffprobe).VideoTracks[0]
+        $track.__copy | Should -BeFalse
+        $track.__process | Should -BeFalse
+    }
+
+    It 'écarte une vignette MJPEG' {
+        $ffprobe = @{ streams = @(New-VideoProbeStream -CodecName 'mjpeg' -Width 640 -Height 360) }
+        $track = (Invoke-SelectVideoStreamsNoTranscode -FfprobeOutput $ffprobe).VideoTracks[0]
+        $track.__copy | Should -BeFalse
+        $track.__process | Should -BeFalse
+    }
+
+    It 'ignore ForceRecodeVideo / Deinterlace / Upscale sur une piste conservée' {
+        $ffprobe = @{ streams = @(New-VideoProbeStream -CodecName 'h264' -Width 640 -Height 360) }
+        $track = (Invoke-SelectVideoStreamsNoTranscode `
+                -FfprobeOutput $ffprobe `
+                -ForceRecodeVideo $true `
+                -Deinterlace $true `
+                -Upscale '1080p').VideoTracks[0]
+        $track.__copy | Should -BeTrue
+        $track.__recode | Should -BeFalse
+        $track.__deinterlace | Should -BeFalse
+        $track.__upscale | Should -BeFalse
+    }
+}
+
+Describe 'Select-AudioStreams — NoTranscodeMode' {
+
+    It 'conserve AAC même si la vidéo finale est AV1' {
+        $ffprobe = @{ streams = @(New-AudioProbeStream -CodecName 'aac') }
+        $track = (Invoke-SelectAudioStreamsNoTranscode -FfprobeOutput $ffprobe -FinalVideoIsAV1 $true -Quality 'High')[0]
+        $track.__copy | Should -BeTrue
+        $track.__process | Should -BeFalse
+        $track.__recode | Should -BeFalse
+        $track.codec_name | Should -BeExactly 'aac'
+    }
+
+    It 'conserve Opus en High hors MP4' {
+        $ffprobe = @{ streams = @(New-AudioProbeStream -CodecName 'opus' -BitRate '64000') }
+        $track = (Invoke-SelectAudioStreamsNoTranscode -FfprobeOutput $ffprobe -Quality 'High')[0]
+        $track.__copy | Should -BeTrue
+        $track.__process | Should -BeFalse
+        $track.__recode | Should -BeFalse
+        $track.codec_name | Should -BeExactly 'opus'
+    }
+
+    It 'conserve Opus en Medium hors MP4' {
+        $ffprobe = @{ streams = @(New-AudioProbeStream -CodecName 'opus' -BitRate '64000') }
+        $track = (Invoke-SelectAudioStreamsNoTranscode -FfprobeOutput $ffprobe -Quality 'Medium')[0]
+        $track.__copy | Should -BeTrue
+        $track.__process | Should -BeFalse
+        $track.__recode | Should -BeFalse
+        $track.codec_name | Should -BeExactly 'opus'
+    }
+
+    It 'conserve FLAC' {
+        $ffprobe = @{ streams = @(New-AudioProbeStream -CodecName 'flac') }
+        $track = (Invoke-SelectAudioStreamsNoTranscode -FfprobeOutput $ffprobe -Quality 'High')[0]
+        $track.__copy | Should -BeTrue
+        $track.__process | Should -BeFalse
+        $track.__recode | Should -BeFalse
+        $track.codec_name | Should -BeExactly 'flac'
+    }
+
+    It 'conserve TrueHD' {
+        $ffprobe = @{ streams = @(New-AudioProbeStream -CodecName 'truehd' -Channels 8 -Layout '7.1') }
+        $track = (Invoke-SelectAudioStreamsNoTranscode -FfprobeOutput $ffprobe -Quality 'High')[0]
+        $track.__copy | Should -BeTrue
+        $track.__process | Should -BeFalse
+        $track.__recode | Should -BeFalse
+        $track.codec_name | Should -BeExactly 'truehd'
+    }
+
+    It 'conserve AC3 et EAC3' {
+        $ffprobe = @{
+            streams = @(
+                (New-AudioProbeStream -CodecName 'ac3' -Channels 6 -Layout '5.1' -BitRate '448000')
+                (New-AudioProbeStream -CodecName 'eac3' -Channels 6 -Layout '5.1' -BitRate '448000')
+            )
+        }
+        $tracks = Invoke-SelectAudioStreamsNoTranscode -FfprobeOutput $ffprobe -Quality 'Low'
+        $tracks[0].__copy | Should -BeTrue
+        $tracks[0].__recode | Should -BeFalse
+        $tracks[0].codec_name | Should -BeExactly 'ac3'
+        $tracks[1].__copy | Should -BeTrue
+        $tracks[1].__recode | Should -BeFalse
+        $tracks[1].codec_name | Should -BeExactly 'eac3'
+    }
+
+    It 'copie chaque piste d''un fichier multi-audio sans transcodage' {
+        $ffprobe = @{
+            streams = @(
+                (New-AudioProbeStream -CodecName 'aac')
+                (New-AudioProbeStream -CodecName 'ac3' -Channels 6 -Layout '5.1')
+                (New-AudioProbeStream -CodecName 'flac')
+            )
+        }
+        $tracks = Invoke-SelectAudioStreamsNoTranscode -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $true
+        @($tracks).Count | Should -Be 3
+        foreach ($track in $tracks)
+        {
+            $track.__copy | Should -BeTrue
+            $track.__process | Should -BeFalse
+            $track.__recode | Should -BeFalse
+        }
+        $tracks[0].codec_name | Should -BeExactly 'aac'
+        $tracks[1].codec_name | Should -BeExactly 'ac3'
+        $tracks[2].codec_name | Should -BeExactly 'flac'
+    }
+}
+
+Describe 'Select-SubtitleStreams — NoTranscodeMode' {
+
+    It 'conserve une langue listée et n''annonce aucune conversion' {
+        $ffprobe = @{ streams = @(@{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fre' } }) }
+        $result = Invoke-SelectSubtitleStreamsNoTranscode -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en', 'fre') -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+        $result.SubtitleTracks[0].__process | Should -BeFalse
+        $result.SubtitleTracks[0].__recode | Should -BeFalse
+    }
+
+    It 'filtre une langue hors SubTitlesToKeep' {
+        $ffprobe = @{ streams = @(@{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'jpn' } }) }
+        $result = Invoke-SelectSubtitleStreamsNoTranscode -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr', 'en') -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeFalse
+        $result.SubtitleTracks[0].__process | Should -BeFalse
+        $result.SubtitleTracks[0].__recode | Should -BeFalse
+    }
+
+    It 'conserve und et unk comme indéterminées' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'und' } }
+                @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'unk' } }
+                @{ codec_type = 'subtitle'; codec_name = 'subrip' }
+            )
+        }
+        $result = Invoke-SelectSubtitleStreamsNoTranscode -FfprobeOutput $ffprobe -SubTitlesToKeep @('fr') -DirectoryName $TestDrive
+        foreach ($track in $result.SubtitleTracks)
+        {
+            $track.__copy | Should -BeTrue
+            $track.__recode | Should -BeFalse
+        }
+    }
+
+    It 'copie mov_text dans un MP4 et écarte un subrip non copiable' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'subtitle'; codec_name = 'mov_text'; tags = @{ language = 'eng' } }
+                @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fre' } }
+            )
+        }
+        $result = Invoke-SelectSubtitleStreamsNoTranscode `
+            -FfprobeOutput $ffprobe `
+            -FinalExtension '.mp4' `
+            -SubTitlesToKeep @('eng', 'fre') `
+            -DirectoryName $TestDrive
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+        $result.SubtitleTracks[0].__recode | Should -BeFalse
+        $result.SubtitleTracks[1].__copy | Should -BeFalse
+        $result.SubtitleTracks[1].__recode | Should -BeFalse
+    }
+
+    It 'ne skippe pas tout le fichier MP4 quand un sous-titre non copiable peut être écarté' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fre' } }
+            )
+        }
+        $result = Invoke-SelectSubtitleStreamsNoTranscode `
+            -FfprobeOutput $ffprobe `
+            -FinalExtension '.mp4' `
+            -AllowSubTitlesConversion $false `
+            -SubTitlesToKeep @('fre') `
+            -DirectoryName $TestDrive
+        $result | Should -Not -BeNullOrEmpty
+        $result.SubtitleTracks[0].__copy | Should -BeFalse
+    }
+
+    It 'signale HasAssSubtitles pour les attachments utiles' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'subtitle'; codec_name = 'ass'; tags = @{ language = 'fre' } }
+            )
+        }
+        $result = Invoke-SelectSubtitleStreamsNoTranscode -FfprobeOutput $ffprobe -SubTitlesToKeep @('fre') -DirectoryName $TestDrive
+        $result.HasAssSubtitles | Should -BeTrue
+        $result.SubtitleTracks[0].__copy | Should -BeTrue
+        $result.SubtitleTracks[0].__recode | Should -BeFalse
+    }
+}
+
+Describe 'Filtrage commun au réencodage et à NoTranscode' {
+
+    It 'écarte la même vignette MJPEG dans les deux modes' {
+        $ffprobe = @{ streams = @(New-VideoProbeStream -CodecName 'mjpeg') }
+        $normal = (Invoke-SelectVideoStreamsNoTranscode -FfprobeOutput $ffprobe -NoTranscodeMode $false).VideoTracks[0]
+        $copy = (Invoke-SelectVideoStreamsNoTranscode -FfprobeOutput $ffprobe -NoTranscodeMode $true).VideoTracks[0]
+        $normal.__copy | Should -BeFalse
+        $copy.__copy | Should -BeFalse
+    }
+
+    It 'filtre la même langue de sous-titre dans les deux modes' {
+        $ffprobe = @{ streams = @(@{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'jpn' } }) }
+        $normal = Invoke-SelectSubtitleStreamsNoTranscode -FfprobeOutput $ffprobe -NoTranscodeMode $false -DirectoryName $TestDrive
+        $copy = Invoke-SelectSubtitleStreamsNoTranscode -FfprobeOutput $ffprobe -NoTranscodeMode $true -DirectoryName $TestDrive
+        $normal.SubtitleTracks[0].__copy | Should -BeFalse
+        $copy.SubtitleTracks[0].__copy | Should -BeFalse
+    }
+
+    It 'conserve la même piste H.264 mais ne la transforme qu''en réencodage' {
+        $ffprobe = @{ streams = @(New-VideoProbeStream -CodecName 'h264') }
+        $normal = (Invoke-SelectVideoStreamsNoTranscode -FfprobeOutput $ffprobe -NoTranscodeMode $false).VideoTracks[0]
+        $copy = (Invoke-SelectVideoStreamsNoTranscode -FfprobeOutput $ffprobe -NoTranscodeMode $true).VideoTracks[0]
+        $normal.__copy | Should -BeFalse
+        $normal.__recode | Should -BeTrue
+        $copy.__copy | Should -BeTrue
+        $copy.__recode | Should -BeFalse
+    }
+
+    It 'filtre une police inutile aux ASS dans les deux modes' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = 'ttf'; tags = @{ filename = 'Unused.ttf'; mimetype = 'application/x-truetype-font' } }
+            )
+        }
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+            $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $false
+            $tracks[0].__copy | Should -BeFalse
+            $tracks[0].__process | Should -BeFalse
         }
     }
 }

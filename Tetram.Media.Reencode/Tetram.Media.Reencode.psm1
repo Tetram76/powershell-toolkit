@@ -207,7 +207,7 @@ function Invoke-FFmpeg
     }
 
     $State.Attempts++
-    Show-CommandLine $FFMPEG $ffmpegArgs -NoPathDetectionParameters 'metadata*'
+    Show-CommandLine $FFMPEG $ffmpegArgs -NoPathDetectionParameters 'metadata*', 'filter:a:*'
 
     if ( $PSCmdlet.ShouldProcess($TargetLabel, "ffmpeg $( $IsCheckMode ? 'check' : 'run' ) on $TargetLabel"))
     {
@@ -331,7 +331,7 @@ function Invoke-ReencodeFile
             return
         }
 
-        if (-not ($ffprobeOutput.format.Keys -contains "duration") -and -not $Config.ForceRecodeVideo -and -not $Config.Rewrite)
+        if (-not ($ffprobeOutput.format.Keys -contains "duration") -and -not $Config.ForceRecodeVideo -and -not $Config.NoTranscode)
         {
             Write-InfoLog "Skip '$Filename' that does not look like a convertable format"
             return
@@ -351,7 +351,7 @@ function Invoke-ReencodeFile
             return
         }
 
-        $FinalExtension = ($Config.KeepExtension ? $OriginalFile.Extension : $Config.OutputExtension)
+        $FinalExtension = if ($Config.NoTranscode) { $OriginalFile.Extension } else { '.mkv' }
 
         $videoResult = Select-VideoStreams `
             -FfprobeOutput $ffprobeOutput `
@@ -364,7 +364,7 @@ function Invoke-ReencodeFile
             -UpscaleHeight $Config.UpscaleHeight `
             -UpscaleFit $Config.UpscaleFit `
             -ConfigUpscaleWidth $Config.UpscaleWidth `
-            -RewriteMode $Config.Rewrite
+            -NoTranscodeMode $Config.NoTranscode
 
         $FinalVideoIsAV1 = Test-FinalVideoIsAV1 `
             -VideoTracks $videoResult.VideoTracks `
@@ -374,14 +374,14 @@ function Invoke-ReencodeFile
             -FfprobeOutput $ffprobeOutput `
             -FinalExtension $FinalExtension `
             -Quality $Config.Quality `
-            -RewriteMode $Config.Rewrite `
+            -NoTranscodeMode $Config.NoTranscode `
             -FinalVideoIsAV1 $FinalVideoIsAV1
 
         $subtitleResult = Select-SubtitleStreams `
             -FfprobeOutput $ffprobeOutput `
             -FinalExtension $FinalExtension `
             -AllowSubTitlesConversion $Config.AllowSubTitlesConversion `
-            -RewriteMode $Config.Rewrite `
+            -NoTranscodeMode $Config.NoTranscode `
             -SubTitlesToKeep $Config.SubTitlesToKeep `
             -Filename $Filename `
             -DirectoryName $OriginalFile.DirectoryName
@@ -417,7 +417,7 @@ function Invoke-ReencodeFile
             @(@($AttachmentTracks) | Where-Object { -not $_.__copy -and -not $_.__process }).Count -gt 0
         )
 
-        if ($Config.Rewrite)
+        if ($Config.NoTranscode)
         {
             if (-not $hasTracksDropped -and
                 ($hasVideoToConvert -eq 0) -and ($hasAudioToConvert -eq 0) -and
@@ -606,158 +606,115 @@ function Invoke-ReencodeMedia
 #>
     [CmdletBinding(
             PositionalBinding = $false,
-            DefaultParametersetName = 'SetExtensionFromPath',
+            DefaultParametersetName = 'ReencodeFromPath',
             SupportsShouldProcess = $true,
             ConfirmImpact = 'Medium'
     )]
     param (
         [Parameter(Position = 0, ParameterSetName = 'CheckFromPath')]
-        [Parameter(Position = 0, ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(Position = 0, ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(Position = 0, ParameterSetName = 'RewriteFromPath')]
+        [Parameter(Position = 0, ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(Position = 0, ParameterSetName = 'NoTranscodeFromPath')]
         [string[]] $Path = ".",
         [Parameter(ParameterSetName = 'CheckFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [switch] $Recurse,
 
         [Parameter(Mandatory, ParameterSetName = 'CheckFromFile')]
-        [Parameter(Mandatory, ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(Mandatory, ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(Mandatory, ParameterSetName = 'RewriteFromFile')]
+        [Parameter(Mandatory, ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(Mandatory, ParameterSetName = 'NoTranscodeFromFile')]
         [ValidateScript({ [File]::Exists($_) }, ErrorMessage = "{0} is not a valid filename")]
         [string] $ListFile,
         [Parameter(ParameterSetName = 'CheckFromFile')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [switch] $UpdateList,
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [ValidateSet('NewestFirst', 'OldestFirst', 'SmallerFirst', 'LargerFirst')]
         [string] $Sort,
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [switch] $ScanReadOnlyDirectory,
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [ValidateNotNullOrEmpty()]
         [string[]] $InputMasks = @('*.mkv', '*.mp4', '*.avi', '*.wmv', '*.mov', '*.flv', '*.mpeg', '*.mpg', '*.heic', '*.ts', '*.webm'),
 
-        [Parameter(Mandatory, ParameterSetName = 'RewriteFromPath')]
-        [Parameter(Mandatory, ParameterSetName = 'RewriteFromFile')]
-        [switch] $Rewrite,
+        [Parameter(Mandatory, ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(Mandatory, ParameterSetName = 'NoTranscodeFromFile')]
+        [switch] $NoTranscode,
 
         [Parameter(Mandatory, ParameterSetName = 'CheckFromPath')]
         [Parameter(Mandatory, ParameterSetName = 'CheckFromFile')]
         [switch] $CheckOnly,
 
-        [Parameter(Mandatory, ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(Mandatory, ParameterSetName = 'KeepExtensionFromFile')]
-        [switch] $KeepExtension,
-
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [ValidateScript({ $_ -match '^\.[^.\\/:*?"<>|\r\n]+$' }, ErrorMessage = "{0} is not a valid extension with a leading point")]
-        [string] $OutputExtension = '.mkv',
-
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
         [ValidateSet('HEVC', 'AV1')]
         [string] $VideoCodec = 'HEVC',
 
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [switch] $ClearStreamsTitle,
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
         [switch] $ForceRecodeVideo,
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
         [switch] $AllowVideoCodecUpgrade,
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
         [ValidateSet('Low', 'Medium', 'High')]
         [string] $Quality = 'Medium',
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
         [ValidateSet('720p', '1080p', '2160p', '4320p')]
         [string] $Upscale,
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
         [ValidateScript({ ($_ -eq -1) -or ($_ -gt 0) })]
         [int] $UpscaleWidth = -1,
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath', Mandatory = $false)]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile', Mandatory = $false)]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath', Mandatory = $false)]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile', Mandatory = $false)]
+        [Parameter(ParameterSetName = 'ReencodeFromPath', Mandatory = $false)]
+        [Parameter(ParameterSetName = 'ReencodeFromFile', Mandatory = $false)]
         [ValidatePattern('^\d+[xX]\d+$')]
         [string] $UpscaleFit,
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
         [switch] $Deinterlace,
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
         [switch] $AllowSubTitlesConversion,
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [string[]] $SubTitlesToKeep = @('fr', 'fre', 'fr-FR', 'en', 'eng', 'en-US', 'en-GB'),
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [ValidateScript({ [Directory]::Exists($_) }, ErrorMessage = "{0} is not a valid path")]
         # Linux CI (GHA) n'a souvent pas $env:TEMP (seulement TMPDIR) — "" cassait Join-Path dans Initialize-ReencodeState.
         [string] $TempPath = $(
@@ -777,33 +734,27 @@ function Invoke-ReencodeMedia
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [ValidateScript({ [System.IO.Directory]::Exists($_) }, ErrorMessage = "{0} is not a valid folder")]
         [string] $FFToolsBase = '.\',
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [string] $FFMPEGPath = '',
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromPath')]
-        [Parameter(ParameterSetName = 'KeepExtensionFromFile')]
-        [Parameter(ParameterSetName = 'SetExtensionFromPath')]
-        [Parameter(ParameterSetName = 'SetExtensionFromFile')]
-        [Parameter(ParameterSetName = 'RewriteFromPath')]
-        [Parameter(ParameterSetName = 'RewriteFromFile')]
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [string] $FFPROBEPath = ''
     )
 
@@ -838,9 +789,7 @@ function Invoke-ReencodeMedia
 
         # Mode / format cible
         CheckOnly = $CheckOnly
-        Rewrite = [bool]$Rewrite
-        KeepExtension = [bool]$Rewrite -or [bool]$KeepExtension
-        OutputExtension = $OutputExtension
+        NoTranscode = [bool]$NoTranscode
 
         # Vidéo
         VideoCodec = $VideoCodec

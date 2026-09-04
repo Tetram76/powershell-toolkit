@@ -117,7 +117,7 @@ function Select-VideoStreams
         [int] $UpscaleHeight,
         [string] $UpscaleFit,
         [int] $ConfigUpscaleWidth,
-        [bool] $RewriteMode
+        [bool] $NoTranscodeMode
     )
     Write-Verbose ">> Select-VideoStreams"
     try
@@ -167,7 +167,7 @@ function Select-VideoStreams
                 }
             }
 
-            if ($RewriteMode)
+            if ($NoTranscodeMode)
             {
                 $stream | Add-Member -NotePropertyName '__deinterlace' -NotePropertyValue $false -Force
                 $stream | Add-Member -NotePropertyName '__upscale' -NotePropertyValue $false -Force
@@ -256,7 +256,7 @@ function Select-AudioStreams
         [hashtable] $FfprobeOutput,
         [string] $FinalExtension,
         [string] $Quality,
-        [bool] $RewriteMode,
+        [bool] $NoTranscodeMode,
         [bool] $FinalVideoIsAV1
     )
     Write-Verbose ">> Select-AudioStreams"
@@ -302,13 +302,13 @@ function Select-AudioStreams
 
             $isLossless = Test-IsLosslessAudioCodec $codec
 
-            $forceAacToEac3 = $FinalVideoIsAV1 -and ($codec -ieq 'aac') -and -not $RewriteMode
+            $forceAacToEac3 = $FinalVideoIsAV1 -and ($codec -ieq 'aac') -and -not $NoTranscodeMode
             # High/Medium hors MP4 n'acceptent plus Opus : alreadyTargetNoGain ne doit pas figer une copie.
             $forceOpusToEac3 =
                 ($FinalExtension -ine '.mp4') -and
                 ($Quality -in @('High', 'Medium')) -and
                 ($codec -ieq 'opus') -and
-                -not $RewriteMode
+                -not $NoTranscodeMode
 
             $effectiveTargetCodec = if ($forceAacToEac3)
             {
@@ -319,7 +319,7 @@ function Select-AudioStreams
                 $targetAudioCodec
             }
             # Sinon un FLAC/TrueHD recodé en AAC sous AV1 recréerait le couple AV1+AAC évité pour l'AAC source.
-            if ($FinalVideoIsAV1 -and -not $RewriteMode -and $isLossless)
+            if ($FinalVideoIsAV1 -and -not $NoTranscodeMode -and $isLossless)
             {
                 $effectiveTargetCodec = 'eac3'
             }
@@ -398,7 +398,7 @@ function Select-AudioStreams
                 $eac3DownmixFilter = 'aformat=channel_layouts=5.1'
             }
 
-            $recode = if ($RewriteMode)
+            $recode = if ($NoTranscodeMode)
             {
                 $false
             }
@@ -443,7 +443,7 @@ function Select-SubtitleStreams
         [hashtable] $FfprobeOutput,
         [string] $FinalExtension,
         [bool] $AllowSubTitlesConversion,
-        [bool] $RewriteMode,
+        [bool] $NoTranscodeMode,
         [string[]] $SubTitlesToKeep,
         [string] $Filename,
         [string] $DirectoryName
@@ -454,7 +454,7 @@ function Select-SubtitleStreams
         $subtitleStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'subtitle' }
         $SubtitleTracks = $subtitleStreams | Select-Object codec_name, tags
 
-        if (-not $RewriteMode)
+        if (-not $NoTranscodeMode)
         {
             if ($SubtitleTracks -and $FinalExtension -ieq '.mp4' -and -not $AllowSubTitlesConversion)
             {
@@ -468,7 +468,7 @@ function Select-SubtitleStreams
             $BaseName = [Path]::GetFileNameWithoutExtension($Filename)
             $assSubtitles = Get-ChildItem -Path $DirectoryName -Filter "$BaseName.*.ass"
         }
-        if (-not $RewriteMode)
+        if (-not $NoTranscodeMode)
         {
             if ($assSubtitles -and $FinalExtension -ieq '.mp4' -and $AllowSubTitlesConversion)
             {
@@ -487,12 +487,12 @@ function Select-SubtitleStreams
                 $language = 'und'
             }
             $keepStream = [bool]((@('un', 'und') + $SubTitlesToKeep) | Where-Object { $_ -ieq $language })
-            if ($RewriteMode -and $FinalExtension -ieq '.mp4')
+            if ($NoTranscodeMode -and $FinalExtension -ieq '.mp4')
             {
-                # En rewrite, seul mov_text peut être copié dans un conteneur mp4
+                # En NoTranscode, seul mov_text peut être copié dans un conteneur mp4
                 $keepStream = $keepStream -and ($stream.codec_name -ieq 'mov_text')
             }
-            $recode = if ($RewriteMode)
+            $recode = if ($NoTranscodeMode)
             {
                 $false
             }
