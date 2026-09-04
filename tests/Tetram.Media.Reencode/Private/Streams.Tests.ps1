@@ -141,7 +141,49 @@ Describe 'Select-AudioStreams' {
         }
     }
 
-    It 'force AAC vers EAC3 quand la vidéo finale est AV1' {
+    It 'force AAC vers EAC3 en High quand la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '192000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $true
+        $tracks[0].codec_name | Should -BeExactly 'aac'
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__copy | Should -BeFalse
+        $tracks[0].__process | Should -BeTrue
+        $tracks[0].__targetAudioBitrate | Should -BeNullOrEmpty
+    }
+
+    It 'force AAC vers EAC3 en Medium quand la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '192000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Medium' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__copy | Should -BeFalse
+        $tracks[0].__process | Should -BeTrue
+    }
+
+    It 'cible Opus (pas EAC3) quand un AAC Low est réencodé malgré une vidéo finale AV1' {
         $ffprobe = @{
             streams = @(
                 [pscustomobject]@{
@@ -155,12 +197,51 @@ Describe 'Select-AudioStreams' {
         }
 
         $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Low' -FinalVideoIsAV1 $true
-        $tracks[0].codec_name | Should -BeExactly 'aac'
         $tracks[0].__recode | Should -BeTrue
-        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'opus'
+        $tracks[0].__targetAudioCodec | Should -Not -BeExactly 'eac3'
+        $tracks[0].__targetAudioBitrate | Should -BeExactly '96k'
         $tracks[0].__copy | Should -BeFalse
         $tracks[0].__process | Should -BeTrue
-        $tracks[0].__targetAudioBitrate | Should -BeNullOrEmpty
+    }
+
+    It 'ne convertit pas AAC Low uniquement parce que la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '96000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Low' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeFalse
+        $tracks[0].__copy | Should -BeTrue
+        $tracks[0].PSObject.Properties['__targetAudioCodec'] | Should -BeNullOrEmpty
+    }
+
+    It 'cible Opus (pas EAC3) quand un lossless Low est réencodé malgré une vidéo finale AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Low' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'opus'
+        $tracks[0].__targetAudioCodec | Should -Not -BeExactly 'eac3'
+        $tracks[0].__targetAudioBitrate | Should -BeExactly '96k'
     }
 
     It 'applique la contrainte AV1+AAC à toutes les pistes AAC conservées' {
@@ -499,7 +580,45 @@ Describe 'Select-AudioStreams' {
         $tracks[0].PSObject.Properties['__targetAudioFilter'] | Should -BeNullOrEmpty
     }
 
-    It 'downmixe en 5.1 un AAC 7.1 forcé EAC3 par AV1 final' {
+    It 'downmixe en 5.1 un AAC 7.1 forcé EAC3 par AV1 final High' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 8
+                    channel_layout = '7.1'
+                    bit_rate       = '512000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'High' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__targetAudioFilter | Should -BeExactly 'aformat=channel_layouts=5.1'
+    }
+
+    It 'downmixe en 5.1 un AAC 7.1 forcé EAC3 par AV1 final Medium' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'aac'
+                    channels       = 8
+                    channel_layout = '7.1'
+                    bit_rate       = '512000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Medium' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__targetAudioFilter | Should -BeExactly 'aformat=channel_layouts=5.1'
+    }
+
+    It 'ne downmixe pas un AAC 7.1 Low vers Opus malgré une vidéo finale AV1' {
         $ffprobe = @{
             streams = @(
                 [pscustomobject]@{
@@ -514,8 +633,9 @@ Describe 'Select-AudioStreams' {
 
         $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -Quality 'Low' -FinalVideoIsAV1 $true
         $tracks[0].__recode | Should -BeTrue
-        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
-        $tracks[0].__targetAudioFilter | Should -BeExactly 'aformat=channel_layouts=5.1'
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'opus'
+        $tracks[0].__targetAudioBitrate | Should -BeExactly '320k'
+        $tracks[0].PSObject.Properties['__targetAudioFilter'] | Should -BeNullOrEmpty
     }
 }
 

@@ -659,7 +659,9 @@ HelpMessage: ''
 ### -Quality
 
 Politique de qualité audio/vidéo (`Low` / `Medium` / `High`). Réservée au réencodage
-normal (absente de `-NoTranscode` et `-CheckOnly`).
+normal (absente de `-NoTranscode` et `-CheckOnly`). Hors MP4, High et Medium ciblent
+EAC3 ; Low cible Opus, y compris lorsque la vidéo finale est AV1. La contrainte
+AV1 + AAC → EAC3 ne s'applique qu'en High et Medium.
 
 ```yaml
 Type: System.String
@@ -1093,6 +1095,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## NOTES
 
 Prérequis : PowerShell 7+, module chargé depuis son `.psd1`. ffmpeg/ffprobe >= 9.0.1.
+
+Audio hors MP4 : High/Medium → EAC3 ; Low → Opus (y compris avec une vidéo finale AV1).
+AV1 + AAC n'impose EAC3 qu'en High et Medium.
 
 Ne pas faire : passer `-FFToolsBase` pour changer les binaires ; combiner `-Path` et `-ListFile` ; combiner les modes `-CheckOnly` / `-NoTranscode` ; prendre `-CheckOnly` pour un dry-run ; prendre `-WhatIf` pour « aucune écriture disque » (`reencode-errors.log` reste possible) ; attendre un code de retour par fichier (la commande continue).
 

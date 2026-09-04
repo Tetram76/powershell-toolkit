@@ -302,7 +302,12 @@ function Select-AudioStreams
 
             $isLossless = Test-IsLosslessAudioCodec $codec
 
-            $forceAacToEac3 = $FinalVideoIsAV1 -and ($codec -ieq 'aac') -and -not $NoTranscodeMode
+            # Low reste sur la politique Opus : AV1 n'impose AAC→EAC3 qu'en High/Medium.
+            $forceAacToEac3 =
+                $FinalVideoIsAV1 -and
+                ($codec -ieq 'aac') -and
+                ($Quality -in @('High', 'Medium')) -and
+                -not $NoTranscodeMode
             # High/Medium hors MP4 n'acceptent plus Opus : alreadyTargetNoGain ne doit pas figer une copie.
             $forceOpusToEac3 =
                 ($FinalExtension -ine '.mp4') -and
@@ -318,8 +323,9 @@ function Select-AudioStreams
             {
                 $targetAudioCodec
             }
-            # Sinon un FLAC/TrueHD recodé en AAC sous AV1 recréerait le couple AV1+AAC évité pour l'AAC source.
-            if ($FinalVideoIsAV1 -and -not $NoTranscodeMode -and $isLossless)
+            # High/Medium seulement : un FLAC/TrueHD recodé en AAC sous AV1 recréerait le couple évité.
+            # En Low la cible reste Opus (Get-TargetAudioCodec), y compris avec une vidéo finale AV1.
+            if ($FinalVideoIsAV1 -and -not $NoTranscodeMode -and $isLossless -and ($Quality -in @('High', 'Medium')))
             {
                 $effectiveTargetCodec = 'eac3'
             }

@@ -22,8 +22,8 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue | Out-Null
-          Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck
+          # ubuntu-latest : PowerShellGet n'a plus PSGallery ; PSResourceGet si.
+          Install-PSResource -Name Pester -Scope CurrentUser -TrustRepository
 
       - name: Run Pester
         shell: pwsh
