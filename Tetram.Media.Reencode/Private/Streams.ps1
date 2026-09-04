@@ -318,6 +318,11 @@ function Select-AudioStreams
             {
                 $targetAudioCodec
             }
+            # Sinon un FLAC/TrueHD recodé en AAC sous AV1 recréerait le couple AV1+AAC évité pour l'AAC source.
+            if ($FinalVideoIsAV1 -and -not $RewriteMode -and $isLossless)
+            {
+                $effectiveTargetCodec = 'eac3'
+            }
 
             $targetBitrateLabel = $null
             $targetBps = 0

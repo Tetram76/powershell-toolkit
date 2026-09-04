@@ -423,6 +423,44 @@ Describe 'Select-AudioStreams' {
         $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
     }
 
+    It 'cible eac3 (pas aac) quand un lossless MP4 est recodé et que la vidéo finale est AV1' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -FinalExtension '.mp4' -Quality 'High' -FinalVideoIsAV1 $true
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'eac3'
+        $tracks[0].__copy | Should -BeFalse
+        $tracks[0].__process | Should -BeTrue
+    }
+
+    It 'conserve aac pour un lossless MP4 recodé sans AV1 final' {
+        $ffprobe = @{
+            streams = @(
+                [pscustomobject]@{
+                    codec_type     = 'audio'
+                    codec_name     = 'flac'
+                    channels       = 2
+                    channel_layout = 'stereo'
+                    bit_rate       = '900000'
+                }
+            )
+        }
+
+        $tracks = Invoke-SelectAudioStreamsUnderTest -FfprobeOutput $ffprobe -FinalExtension '.mp4' -Quality 'High' -FinalVideoIsAV1 $false
+        $tracks[0].__recode | Should -BeTrue
+        $tracks[0].__targetAudioCodec | Should -BeExactly 'aac'
+    }
+
     It 'downmixe en 5.1 une piste EAC3 à plus de 6 canaux' {
         $ffprobe = @{
             streams = @(
