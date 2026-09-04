@@ -431,3 +431,35 @@ Describe 'Get-FFmpegArgs — AV1 copiée + AAC vers EAC3' {
         }
     }
 }
+
+Describe 'Get-FFmpegArgs — encoding_tool' {
+
+    It 'inclut le nom du module et la version du manifeste' {
+        $manifest = Import-PowerShellDataFile -LiteralPath (
+            Join-Path $script:RepoRootEncoderArgs 'Tetram.Media.Reencode' 'Tetram.Media.Reencode.psd1'
+        )
+        $expected = 'encoding_tool="Tetram.Media.Reencode {0}"' -f $manifest.ModuleVersion
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Expected = $expected } {
+            param($Expected)
+
+            $args = Get-FFmpegArgs `
+                -VideoCodec 'AV1' `
+                -Quality 'Low' `
+                -Upscale '' `
+                -UpscaleWidth 0 `
+                -UpscaleHeight 0 `
+                -UpscaleFit '' `
+                -ConfigUpscaleWidth 0 `
+                -ClearStreamsTitle $false `
+                -VideoTracks @() `
+                -IsSource10Bit $false `
+                -SourceChroma '420' `
+                -AudioTracks @() `
+                -SubtitleTracks @() `
+                -AttachmentTracks @()
+
+            $args | Should -Contain $Expected
+        }
+    }
+}

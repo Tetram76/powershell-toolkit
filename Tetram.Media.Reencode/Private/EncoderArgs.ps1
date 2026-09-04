@@ -355,7 +355,7 @@ function Get-FFmpegArgs
     $ffmpegArgs += @(
         '-map_metadata', '0'
     )
-    # and then, override with custom metadata
+    # then, erase unwanted metadata
     $ffmpegArgs += @(
         '-metadata', 'MOVIE/ENCODER='
         '-metadata', 'MAJOR_BRAND='
@@ -381,6 +381,7 @@ function Get-FFmpegArgs
         '-metadata:s', 'VENDOR_ID='
         '-metadata:s', 'BPS='
         '-metadata:s', 'BPS-eng='
+        '-metadata:s', 'DURATION=' # to enforce lowercase, will be forced to lowercase by ffmpeg
         '-metadata:s', 'DURATION-eng='
         '-metadata:s', 'NUMBER_OF_FRAMES-eng='
         '-metadata:s', 'NUMBER_OF_BYTES='
@@ -390,6 +391,13 @@ function Get-FFmpegArgs
         '-metadata:s', 'ENCODERPARAMETERS='
         '-metadata:s', 'ENCODEROPTIONS='
         '-metadata:s', 'ENCODER_OPTIONS='
+    )
+
+    # and then, override with custom metadata
+    $encodingTool = 'Tetram.Media.Reencode {0}' -f $ExecutionContext.SessionState.Module.Version
+    $ffmpegArgs += @(
+        '-metadata', 'creation_time=now'
+        '-metadata', "encoding_tool=`"$encodingTool`""
     )
     $ffmpegArgs += $attachmentMimetypeArgs
 
