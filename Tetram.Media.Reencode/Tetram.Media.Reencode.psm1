@@ -351,7 +351,7 @@ function Invoke-ReencodeFile
             return
         }
 
-        $FinalExtension = if ($Config.NoTranscode) { $OriginalFile.Extension } else { '.mkv' }
+        $FinalExtension = ($Config.NoTranscode ? $OriginalFile.Extension : '.mkv')
 
         $videoResult = Select-VideoStreams `
             -FfprobeOutput $ffprobeOutput `
