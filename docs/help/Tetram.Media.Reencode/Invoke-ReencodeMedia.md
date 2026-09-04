@@ -1,10 +1,10 @@
-﻿---
+---
 document type: cmdlet
 external help file: Tetram.Media.Reencode-Help.xml
 HelpUri: ''
 Locale: fr-FR
 Module Name: Tetram.Media.Reencode
-ms.date: 08/14/2026
+ms.date: 09/04/2026
 PlatyPS schema version: 2024-05-01
 title: Invoke-ReencodeMedia
 ---
@@ -13,37 +13,46 @@ title: Invoke-ReencodeMedia
 
 ## SYNOPSIS
 
-Remplace in-place des fichiers média : réencodage HEVC/AV1, remux (`-Rewrite`) ou contrôle ffmpeg (`-CheckOnly`, pas un dry-run).
+Remplace in-place des fichiers média : réencodage HEVC/AV1 vers MKV, `-NoTranscode` (filtrage sans transcodage) ou contrôle ffmpeg (`-CheckOnly`, pas un dry-run).
 
 ## SYNTAX
 
-### SetExtensionFromPath (Default)
+### ReencodeFromPath (Default)
 
 ```
 Invoke-ReencodeMedia [[-Path] <string[]>] [-Recurse] [-Sort <string>] [-ScanReadOnlyDirectory]
- [-InputMasks <string[]>] [-OutputExtension <string>] [-VideoCodec <string>] [-ClearStreamsTitle]
- [-ForceRecodeVideo] [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>]
- [-UpscaleWidth <int>] [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion]
- [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
- [-FFPROBEPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+ [-InputMasks <string[]>] [-VideoCodec <string>] [-ClearStreamsTitle] [-ForceRecodeVideo]
+ [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>] [-UpscaleWidth <int>]
+ [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion] [-SubTitlesToKeep <string[]>]
+ [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>] [-FFPROBEPath <string>]
+ [-WhatIf] [-Confirm]
 ```
 
-### RewriteFromPath
+### ReencodeFromFile
 
 ```
-Invoke-ReencodeMedia [[-Path] <string[]>] -Rewrite [-Recurse] [-Sort <string>]
+Invoke-ReencodeMedia -ListFile <string> [-UpdateList] [-Sort <string>] [-ScanReadOnlyDirectory]
+ [-InputMasks <string[]>] [-VideoCodec <string>] [-ClearStreamsTitle] [-ForceRecodeVideo]
+ [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>] [-UpscaleWidth <int>]
+ [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion] [-SubTitlesToKeep <string[]>]
+ [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>] [-FFPROBEPath <string>]
+ [-WhatIf] [-Confirm]
+```
+
+### NoTranscodeFromPath
+
+```
+Invoke-ReencodeMedia [[-Path] <string[]>] -NoTranscode [-Recurse] [-Sort <string>]
  [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-ClearStreamsTitle]
  [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
  [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
 ```
 
-### KeepExtensionFromPath
+### NoTranscodeFromFile
 
 ```
-Invoke-ReencodeMedia [[-Path] <string[]>] -KeepExtension [-Recurse] [-Sort <string>]
- [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-VideoCodec <string>] [-ClearStreamsTitle]
- [-ForceRecodeVideo] [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>]
- [-UpscaleWidth <int>] [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion]
+Invoke-ReencodeMedia -ListFile <string> -NoTranscode [-Recurse] [-UpdateList] [-Sort <string>]
+ [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-ClearStreamsTitle]
  [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
  [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
 ```
@@ -54,37 +63,6 @@ Invoke-ReencodeMedia [[-Path] <string[]>] -KeepExtension [-Recurse] [-Sort <stri
 Invoke-ReencodeMedia [[-Path] <string[]>] -CheckOnly [-Recurse] [-Sort <string>]
  [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-TempPath <string>] [-FFToolsBase <string>]
  [-FFMPEGPath <string>] [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
-```
-
-### RewriteFromFile
-
-```
-Invoke-ReencodeMedia -ListFile <string> -Rewrite [-Recurse] [-UpdateList] [-Sort <string>]
- [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-ClearStreamsTitle]
- [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
- [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
-```
-
-### SetExtensionFromFile
-
-```
-Invoke-ReencodeMedia -ListFile <string> [-UpdateList] [-Sort <string>] [-ScanReadOnlyDirectory]
- [-InputMasks <string[]>] [-OutputExtension <string>] [-VideoCodec <string>] [-ClearStreamsTitle]
- [-ForceRecodeVideo] [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>]
- [-UpscaleWidth <int>] [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion]
- [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
- [-FFPROBEPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
-```
-
-### KeepExtensionFromFile
-
-```
-Invoke-ReencodeMedia -ListFile <string> -KeepExtension [-UpdateList] [-Sort <string>]
- [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-VideoCodec <string>] [-ClearStreamsTitle]
- [-ForceRecodeVideo] [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>]
- [-UpscaleWidth <int>] [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion]
- [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
- [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
 ```
 
 ### CheckFromFile
@@ -103,9 +81,8 @@ Point d'entrée unique du module. Importer `.\Tetram.Media.Reencode` (PowerShell
 
 Choisir exactement un mode (jeux de paramètres exclusifs) :
 
-- défaut (ni `-KeepExtension` ni `-Rewrite` ni `-CheckOnly`) : réencodage vers `-OutputExtension` (défaut `.mkv`), codec `-VideoCodec` (défaut HEVC / libx265), qualité `-Quality` (défaut Medium).
-- `-KeepExtension` : même réencodage, mais l'extension source est conservée.
-- `-Rewrite` : remux uniquement (`-c:v`/`-c:a copy`). Pas de réencodage, pas d'upscale, pas de désentrelacement. Ne s'exécute que s'il y a des pistes à retirer.
+- réencodage normal (ni `-NoTranscode` ni `-CheckOnly`) : filtrage des flux indésirables et politiques de transformation habituelles ; le conteneur final est toujours `.mkv`.
+- `-NoTranscode` : même filtrage, métadonnées et attachments, mais aucun flux conservé n'est transcodé ; l'extension source est conservée. Ce n'est pas un « garder tous les flux » ni une immuabilité du fichier : des pistes peuvent être retirées, des métadonnées corrigées, et le fichier peut ne pas être réécrit s'il n'y a rien à faire.
 - `-CheckOnly` : intermédiaire entre `-WhatIf` et un réencodage. Vérifie que ffmpeg peut décoder (muxer `null`) sans réencoder, remuxer ni remplacer le fichier média. Ce n'est pas un dry-run : les horodatages NFO (`premiered`) sont posés sur le fichier et éventuellement les dossiers, comme sur un run normal.
 
 Choisir exactement une source : `-Path` (défaut `.`) ou `-ListFile` (fichier texte, une entrée par ligne). Un chemin préfixé par `+` est parcouru récursivement même sans `-Recurse`.
@@ -114,9 +91,9 @@ Effet disque :
 
 - `-WhatIf` : pas de réécriture média, pas de timestamps NFO. N'est pas un silence disque total : une exception fichier (catch de `Invoke-ReencodeFile`) append `reencode-errors.log` dans le répertoire courant, sans `ShouldProcess`.
 - `-CheckOnly` (sans `-WhatIf`) : pas de temporaire ffmpeg, pas de `Move-Item` / `Rename-Item` sur le média. Les timestamps NFO (`premiered`) sont malgré tout appliqués. Un échec ffmpeg est journalisé dans `reencode-errors.log`.
-- réencodage / remux : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin. Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). Un écart de durée au-delà de max(1 s, 0,5 %) conserve l'original (le temporaire est jeté).
+- réencodage / `-NoTranscode` : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin (réencodage vers `.mkv`). Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). Un écart de durée au-delà de max(1 s, 0,5 %) conserve l'original (le temporaire est jeté).
 
-Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-Rewrite`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion`. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
+Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-NoTranscode`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion` en réencodage normal. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
 
 ffmpeg/ffprobe : `-FFMPEGPath` / `-FFPROBEPath`, sinon dossier `Tetram.Media.FFmpeg\ffmpeg\` (build ffmpeg >= 9.0.1), sinon PATH. Ne pas utiliser `-FFToolsBase` pour pointer les binaires : le paramètre est validé mais ignoré.
 
@@ -148,12 +125,12 @@ Intention : diagnostiquer des fichiers illisibles sans réencoder ni remuxer. Ce
 Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -CheckOnly
 ```
 
-### Example 4: Remux pour retirer des pistes, sans réencoder
+### Example 4: Filtrer des pistes sans transcodage
 
-Intention : filtrer sous-titres / métadonnées en copiant vidéo et audio. Ignoré si aucun filtrage n'est nécessaire.
+Intention : retirer sous-titres / vignettes et nettoyer les métadonnées en copiant les flux conservés. Conserve l'extension source. Ignoré si aucune opération n'est nécessaire.
 
 ```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -Rewrite
+Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode
 ```
 
 ### Example 5: File d'attente + upgrade HEVC vers AV1
@@ -186,25 +163,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -218,18 +183,8 @@ HelpMessage: ''
 ### -AllowVideoCodecUpgrade
 
 Lorsque `-VideoCodec AV1`, force le réencodage des pistes HEVC au profil `main*`
-vers AV1 au lieu de les copier. Sans effet en `-CheckOnly`. Ne s'applique pas
-au mode `-Rewrite`.
-Lorsque `-VideoCodec AV1`, force le réencodage des pistes HEVC au profil `main*`
-vers AV1 au lieu de les copier.
-Sans effet en `-CheckOnly`.
-Ne s'applique pas
-au mode `-Rewrite`.
-Lorsque `-VideoCodec AV1`, force le réencodage des pistes HEVC au profil `main*`
-vers AV1 au lieu de les copier.
-Sans effet en `-CheckOnly`.
-Ne s'applique pas
-au mode `-Rewrite`.
+vers AV1 au lieu de les copier. Sans effet en `-CheckOnly`. Absent du mode
+`-NoTranscode`.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -237,25 +192,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -307,37 +250,25 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -350,7 +281,7 @@ HelpMessage: ''
 
 ### -Confirm
 
-Prompts you for confirmation before running the cmdlet.
+Demande confirmation avant chaque action `ShouldProcess` (ConfirmImpact Medium).
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -372,11 +303,7 @@ HelpMessage: ''
 
 ### -Deinterlace
 
-Applique le filtre `yadif` aux pistes vidéo conservées. Ignoré en `-Rewrite`.
-Applique le filtre `yadif` aux pistes vidéo conservées.
-Ignoré en `-Rewrite`.
-Applique le filtre `yadif` aux pistes vidéo conservées.
-Ignoré en `-Rewrite`.
+Applique le filtre `yadif` aux pistes vidéo conservées. Absent du mode `-NoTranscode`.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -384,25 +311,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -415,14 +330,7 @@ HelpMessage: ''
 
 ### -FFMPEGPath
 
-Chemin explicite vers l'exécutable ffmpeg. Chaîne vide : découverte automatique
-(`Tetram.Media.FFmpeg\ffmpeg\`, puis PATH).
-Chemin explicite vers l'exécutable ffmpeg.
-Chaîne vide : découverte automatique
-(`Tetram.Media.FFmpeg\ffmpeg\`, puis PATH).
-Chemin explicite vers l'exécutable ffmpeg.
-Chaîne vide : découverte automatique
-(`Tetram.Media.FFmpeg\ffmpeg\`, puis PATH).
+Chemin explicite vers `ffmpeg`. Sinon découverte via `Tetram.Media.FFmpeg` puis PATH.
 
 ```yaml
 Type: System.String
@@ -430,37 +338,25 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -485,14 +381,7 @@ HelpMessage: ''
 
 ### -FFPROBEPath
 
-Chemin explicite vers l'exécutable ffprobe. Chaîne vide : même dossier `bin`
-que ffmpeg, ou PATH.
-Chemin explicite vers l'exécutable ffprobe.
-Chaîne vide : même dossier `bin`
-que ffmpeg, ou PATH.
-Chemin explicite vers l'exécutable ffprobe.
-Chaîne vide : même dossier `bin`
-que ffmpeg, ou PATH.
+Chemin explicite vers `ffprobe`. Sinon découverte via `Tetram.Media.FFmpeg` puis PATH.
 
 ```yaml
 Type: System.String
@@ -500,37 +389,25 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -555,14 +432,7 @@ HelpMessage: ''
 
 ### -FFToolsBase
 
-Dossier qui doit exister (défaut : répertoire courant). Validé à l'appel, mais
-non utilisé pour localiser ffmpeg/ffprobe — voir `-FFMPEGPath` et `-FFPROBEPath`.
-Dossier qui doit exister (défaut : répertoire courant).
-Validé à l'appel, mais
-non utilisé pour localiser ffmpeg/ffprobe — voir `-FFMPEGPath` et `-FFPROBEPath`.
-Dossier qui doit exister (défaut : répertoire courant).
-Validé à l'appel, mais
-non utilisé pour localiser ffmpeg/ffprobe — voir `-FFMPEGPath` et `-FFPROBEPath`.
+Validé mais ignoré pour la résolution des binaires (utiliser `-FFMPEGPath` / `-FFPROBEPath`).
 
 ```yaml
 Type: System.String
@@ -570,37 +440,25 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -626,18 +484,8 @@ HelpMessage: ''
 ### -ForceRecodeVideo
 
 Force le réencodage vidéo même si le codec source est déjà HEVC `main*`, AV1 ou
-VC1. Sans ce commutateur, ces pistes sont copiées (sauf upgrade AV1). Ignoré en
-`-Rewrite`.
-Force le réencodage vidéo même si le codec source est déjà HEVC `main*`, AV1 ou
-VC1.
-Sans ce commutateur, ces pistes sont copiées (sauf upgrade AV1).
-Ignoré en
-`-Rewrite`.
-Force le réencodage vidéo même si le codec source est déjà HEVC `main*`, AV1 ou
-VC1.
-Sans ce commutateur, ces pistes sont copiées (sauf upgrade AV1).
-Ignoré en
-`-Rewrite`.
+VC1. Sans ce commutateur, ces pistes sont copiées (sauf upgrade AV1). Absent du
+mode `-NoTranscode`.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -645,25 +493,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -678,12 +514,6 @@ HelpMessage: ''
 
 Masques passés à `Get-ChildItem -Include`. Défaut : `*.mkv`, `*.mp4`, `*.avi`,
 `*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`, `*.heic`, `*.ts`, `*.webm`.
-Masques passés à `Get-ChildItem -Include`.
-Défaut : `*.mkv`, `*.mp4`, `*.avi`,
-`*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`, `*.heic`, `*.ts`, `*.webm`.
-Masques passés à `Get-ChildItem -Include`.
-Défaut : `*.mkv`, `*.mp4`, `*.avi`,
-`*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`, `*.heic`, `*.ts`, `*.webm`.
 
 ```yaml
 Type: System.String[]
@@ -691,37 +521,25 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -744,57 +562,9 @@ AcceptedValues: []
 HelpMessage: ''
 ```
 
-### -KeepExtension
-
-Conserve l'extension du fichier source au lieu d'appliquer `-OutputExtension`.
-Implicite en `-Rewrite`. Jeu de paramètres exclusif.
-Conserve l'extension du fichier source au lieu d'appliquer `-OutputExtension`.
-Implicite en `-Rewrite`.
-Jeu de paramètres exclusif.
-Conserve l'extension du fichier source au lieu d'appliquer `-OutputExtension`.
-Implicite en `-Rewrite`.
-Jeu de paramètres exclusif.
-
-```yaml
-Type: System.Management.Automation.SwitchParameter
-DefaultValue: ''
-SupportsWildcards: false
-Aliases: []
-ParameterSets:
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: true
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
-  Position: Named
-  IsRequired: true
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-DontShow: false
-AcceptedValues: []
-HelpMessage: ''
-```
-
 ### -ListFile
 
-Fichier texte d'entrée : une ligne = un chemin. Un préfixe `+` force la
-récursion pour cette ligne. Le fichier doit exister. Mutuellement exclusif avec
-`-Path`.
-Fichier texte d'entrée : une ligne = un chemin.
-Un préfixe `+` force la
-récursion pour cette ligne.
-Le fichier doit exister.
-Mutuellement exclusif avec
-`-Path`.
-Fichier texte d'entrée : une ligne = un chemin.
-Un préfixe `+` force la
-récursion pour cette ligne.
-Le fichier doit exister.
-Mutuellement exclusif avec
-`-Path`.
+Fichier texte (une entrée par ligne) listant les médias à traiter. Exclut `-Path`.
 
 ```yaml
 Type: System.String
@@ -802,19 +572,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: true
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
-  Position: Named
-  IsRequired: true
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: true
   ValueFromPipeline: false
@@ -831,37 +595,26 @@ AcceptedValues: []
 HelpMessage: ''
 ```
 
-### -OutputExtension
+### -NoTranscode
 
-Extension de sortie, avec le point initial (ex. `.mkv`). Défaut : `.mkv`.
-Uniquement dans le jeu de paramètres par défaut (pas `-KeepExtension` ni
-`-Rewrite`).
-Extension de sortie, avec le point initial (ex.
-`.mkv`).
-Défaut : `.mkv`.
-Uniquement dans le jeu de paramètres par défaut (pas `-KeepExtension` ni
-`-Rewrite`).
-Extension de sortie, avec le point initial (ex.
-`.mkv`).
-Défaut : `.mkv`.
-Uniquement dans le jeu de paramètres par défaut (pas `-KeepExtension` ni
-`-Rewrite`).
+Filtrage, métadonnées et attachments sans transcoder les flux conservés.
+Conserve l'extension source. Jeu de paramètres exclusif.
 
 ```yaml
-Type: System.String
+Type: System.Management.Automation.SwitchParameter
 DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: NoTranscodeFromFile
   Position: Named
-  IsRequired: false
+  IsRequired: true
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
+- Name: NoTranscodeFromPath
   Position: Named
-  IsRequired: false
+  IsRequired: true
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
@@ -872,21 +625,7 @@ HelpMessage: ''
 
 ### -Path
 
-Dossiers ou fichiers à traiter. Défaut : `.`. Un élément préfixé par `+` est
-parcouru récursivement même sans `-Recurse`. Mutuellement exclusif avec
-`-ListFile`.
-Dossiers ou fichiers à traiter.
-Défaut : `.`.
-Un élément préfixé par `+` est
-parcouru récursivement même sans `-Recurse`.
-Mutuellement exclusif avec
-`-ListFile`.
-Dossiers ou fichiers à traiter.
-Défaut : `.`.
-Un élément préfixé par `+` est
-parcouru récursivement même sans `-Recurse`.
-Mutuellement exclusif avec
-`-ListFile`.
+Chemins fichiers ou dossiers à traiter. Défaut `.`. Préfixe `+` = récursion pour cette entrée.
 
 ```yaml
 Type: System.String[]
@@ -894,19 +633,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: 0
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: 0
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: 0
   IsRequired: false
   ValueFromPipeline: false
@@ -925,19 +658,8 @@ HelpMessage: ''
 
 ### -Quality
 
-Cible de qualité `Low`, `Medium` (défaut) ou `High`. Pilote CRF/preset vidéo
-(libx265 ou libsvtav1) et le seuil de réencodage audio (bitrate, codecs
-lossless). Ignoré en `-Rewrite` et `-CheckOnly`.
-Cible de qualité `Low`, `Medium` (défaut) ou `High`.
-Pilote CRF/preset vidéo
-(libx265 ou libsvtav1) et le seuil de réencodage audio (bitrate, codecs
-lossless).
-Ignoré en `-Rewrite` et `-CheckOnly`.
-Cible de qualité `Low`, `Medium` (défaut) ou `High`.
-Pilote CRF/preset vidéo
-(libx265 ou libsvtav1) et le seuil de réencodage audio (bitrate, codecs
-lossless).
-Ignoré en `-Rewrite` et `-CheckOnly`.
+Politique de qualité audio/vidéo (`Low` / `Medium` / `High`). Réservée au réencodage
+normal (absente de `-NoTranscode` et `-CheckOnly`).
 
 ```yaml
 Type: System.String
@@ -945,25 +667,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -976,16 +686,7 @@ HelpMessage: ''
 
 ### -Recurse
 
-Parcourt les sous-dossiers. Peut être combiné avec le préfixe `+` sur un chemin
-individuel. Les dossiers `Plex Versions` et `.deletedByTMM` restent exclus.
-Parcourt les sous-dossiers.
-Peut être combiné avec le préfixe `+` sur un chemin
-individuel.
-Les dossiers `Plex Versions` et `.deletedByTMM` restent exclus.
-Parcourt les sous-dossiers.
-Peut être combiné avec le préfixe `+` sur un chemin
-individuel.
-Les dossiers `Plex Versions` et `.deletedByTMM` restent exclus.
+Parcourt les sous-dossiers. Sur `-ListFile`, disponible uniquement avec `-NoTranscode`.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -993,25 +694,19 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1028,46 +723,9 @@ AcceptedValues: []
 HelpMessage: ''
 ```
 
-### -Rewrite
-
-Remux sans réencodage : copie vidéo/audio, filtre les sous-titres, nettoie les
-métadonnées. Conserve l'extension source. Jeu de paramètres exclusif.
-Remux sans réencodage : copie vidéo/audio, filtre les sous-titres, nettoie les
-métadonnées.
-Conserve l'extension source.
-Jeu de paramètres exclusif.
-Remux sans réencodage : copie vidéo/audio, filtre les sous-titres, nettoie les
-métadonnées.
-Conserve l'extension source.
-Jeu de paramètres exclusif.
-
-```yaml
-Type: System.Management.Automation.SwitchParameter
-DefaultValue: ''
-SupportsWildcards: false
-Aliases: []
-ParameterSets:
-- Name: RewriteFromFile
-  Position: Named
-  IsRequired: true
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: RewriteFromPath
-  Position: Named
-  IsRequired: true
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-DontShow: false
-AcceptedValues: []
-HelpMessage: ''
-```
-
 ### -ScanReadOnlyDirectory
 
 Autorise la descente récursive dans des répertoires marqués en lecture seule.
-Les fichiers en lecture seule ne sont jamais traités.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -1075,37 +733,25 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1130,14 +776,7 @@ HelpMessage: ''
 
 ### -Sort
 
-Ordre de traitement : `NewestFirst`, `OldestFirst`, `SmallerFirst`,
-`LargerFirst`. Absent : tri par nom.
-Ordre de traitement : `NewestFirst`, `OldestFirst`, `SmallerFirst`,
-`LargerFirst`.
-Absent : tri par nom.
-Ordre de traitement : `NewestFirst`, `OldestFirst`, `SmallerFirst`,
-`LargerFirst`.
-Absent : tri par nom.
+Ordre de traitement des fichiers découverts (`NewestFirst`, `OldestFirst`, `SmallerFirst`, `LargerFirst`).
 
 ```yaml
 Type: System.String
@@ -1145,37 +784,25 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1200,7 +827,7 @@ HelpMessage: ''
 
 ### -SubTitlesToKeep
 
-Langues de sous-titres à conserver (codes `tags.language`). Une piste sans langue affectée, ou taguée `unk`, est traitée comme indéterminée (`und`) et toujours gardée, comme `un` et `und`. Défaut : `fr`, `fre`, `fr-FR`, `en`, `eng`, `en-US`, `en-GB`.
+Langues de sous-titres à conserver (avec `un` / `und`). Les autres pistes sous-titres sont retirées.
 
 ```yaml
 Type: System.String[]
@@ -1208,37 +835,25 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1251,16 +866,7 @@ HelpMessage: ''
 
 ### -TempPath
 
-Dossier temporaire de travail. Doit exister. Défaut : `$env:TEMP`, sinon
-`$env:TMPDIR`, `$env:TMP`, sinon `[IO.Path]::GetTempPath()`.
-Dossier temporaire de travail.
-Doit exister.
-Défaut : `$env:TEMP`, sinon
-`$env:TMPDIR`, `$env:TMP`, sinon `[IO.Path]::GetTempPath()`.
-Dossier temporaire de travail.
-Doit exister.
-Défaut : `$env:TEMP`, sinon
-`$env:TMPDIR`, `$env:TMP`, sinon `[IO.Path]::GetTempPath()`.
+Dossier des fichiers temporaires ffmpeg.
 
 ```yaml
 Type: System.String
@@ -1268,37 +874,25 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: RewriteFromPath
+- Name: NoTranscodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1323,14 +917,7 @@ HelpMessage: ''
 
 ### -UpdateList
 
-Après traitement d'une ligne de `-ListFile`, retire cette ligne du fichier
-(sous `-WhatIf`/`-Confirm`). Uniquement avec `-ListFile`.
-Après traitement d'une ligne de `-ListFile`, retire cette ligne du fichier
-(sous `-WhatIf`/`-Confirm`).
-Uniquement avec `-ListFile`.
-Après traitement d'une ligne de `-ListFile`, retire cette ligne du fichier
-(sous `-WhatIf`/`-Confirm`).
-Uniquement avec `-ListFile`.
+Réécrit `-ListFile` après chaque ligne traitée (sous `ShouldProcess`).
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -1338,19 +925,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: RewriteFromFile
+- Name: NoTranscodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1369,21 +950,7 @@ HelpMessage: ''
 
 ### -Upscale
 
-Hauteur cible `720p`, `1080p`, `2160p` ou `4320p`. N'agrandit que si la source
-est plus petite (ou, à hauteur égale, si `-UpscaleWidth` diffère). Combinable
-avec `-UpscaleWidth`. Ignoré en `-Rewrite`.
-Hauteur cible `720p`, `1080p`, `2160p` ou `4320p`.
-N'agrandit que si la source
-est plus petite (ou, à hauteur égale, si `-UpscaleWidth` diffère).
-Combinable
-avec `-UpscaleWidth`.
-Ignoré en `-Rewrite`.
-Hauteur cible `720p`, `1080p`, `2160p` ou `4320p`.
-N'agrandit que si la source
-est plus petite (ou, à hauteur égale, si `-UpscaleWidth` diffère).
-Combinable
-avec `-UpscaleWidth`.
-Ignoré en `-Rewrite`.
+Hauteur cible d'agrandissement (`720p` / `1080p` / `2160p` / `4320p`). Absent du mode `-NoTranscode`.
 
 ```yaml
 Type: System.String
@@ -1391,25 +958,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1422,23 +977,7 @@ HelpMessage: ''
 
 ### -UpscaleFit
 
-Boîte `LARGEURxHAUTEUR` (ex. `1920x1080`). Scale Lanczos avec
-`force_original_aspect_ratio=decrease`. Si présent, remplace `-Upscale` /
-`-UpscaleWidth` pour la décision d'agrandissement. Ignoré en `-Rewrite`.
-Boîte `LARGEURxHAUTEUR` (ex.
-`1920x1080`).
-Scale Lanczos avec
-`force_original_aspect_ratio=decrease`.
-Si présent, remplace `-Upscale` /
-`-UpscaleWidth` pour la décision d'agrandissement.
-Ignoré en `-Rewrite`.
-Boîte `LARGEURxHAUTEUR` (ex.
-`1920x1080`).
-Scale Lanczos avec
-`force_original_aspect_ratio=decrease`.
-Si présent, remplace `-Upscale` /
-`-UpscaleWidth` pour la décision d'agrandissement.
-Ignoré en `-Rewrite`.
+Cible `LargeurxHauteur` pour la décision d'agrandissement. Absent du mode `-NoTranscode`.
 
 ```yaml
 Type: System.String
@@ -1446,25 +985,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1477,24 +1004,7 @@ HelpMessage: ''
 
 ### -UpscaleWidth
 
-Largeur cible en pixels. `-1` (défaut) laisse ffmpeg calculer la largeur
-(`scale=-1:hauteur`). Seules `-1` et les valeurs strictement positives sont
-acceptées. Sans `-Upscale` ni `-UpscaleFit`, un agrandissement n'a lieu que si
-cette largeur est supérieure à celle de la source.
-Largeur cible en pixels.
-`-1` (défaut) laisse ffmpeg calculer la largeur
-(`scale=-1:hauteur`).
-Seules `-1` et les valeurs strictement positives sont
-acceptées.
-Sans `-Upscale` ni `-UpscaleFit`, un agrandissement n'a lieu que si
-cette largeur est supérieure à celle de la source.
-Largeur cible en pixels.
-`-1` (défaut) laisse ffmpeg calculer la largeur
-(`scale=-1:hauteur`).
-Seules `-1` et les valeurs strictement positives sont
-acceptées.
-Sans `-Upscale` ni `-UpscaleFit`, un agrandissement n'a lieu que si
-cette largeur est supérieure à celle de la source.
+Largeur cible complémentaire à `-Upscale`. Absent du mode `-NoTranscode`.
 
 ```yaml
 Type: System.Int32
@@ -1502,25 +1012,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1533,17 +1031,7 @@ HelpMessage: ''
 
 ### -VideoCodec
 
-Codec vidéo cible : `HEVC` (défaut, libx265) ou `AV1` (libsvtav1). Les pistes
-déjà HEVC `main*`, AV1 ou VC1 sont copiées sauf `-ForceRecodeVideo` ou
-`-AllowVideoCodecUpgrade`.
-Codec vidéo cible : `HEVC` (défaut, libx265) ou `AV1` (libsvtav1).
-Les pistes
-déjà HEVC `main*`, AV1 ou VC1 sont copiées sauf `-ForceRecodeVideo` ou
-`-AllowVideoCodecUpgrade`.
-Codec vidéo cible : `HEVC` (défaut, libx265) ou `AV1` (libsvtav1).
-Les pistes
-déjà HEVC `main*`, AV1 ou VC1 sont copiées sauf `-ForceRecodeVideo` ou
-`-AllowVideoCodecUpgrade`.
+Codec vidéo cible `HEVC` ou `AV1`. Absent du mode `-NoTranscode`.
 
 ```yaml
 Type: System.String
@@ -1551,25 +1039,13 @@ DefaultValue: ''
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
-- Name: SetExtensionFromFile
+- Name: ReencodeFromFile
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
-- Name: SetExtensionFromPath
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromFile
-  Position: Named
-  IsRequired: false
-  ValueFromPipeline: false
-  ValueFromPipelineByPropertyName: false
-  ValueFromRemainingArguments: false
-- Name: KeepExtensionFromPath
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -1618,7 +1094,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 Prérequis : PowerShell 7+, module chargé depuis son `.psd1`. ffmpeg/ffprobe >= 9.0.1.
 
-Ne pas faire : passer `-FFToolsBase` pour changer les binaires ; combiner `-Path` et `-ListFile` ; combiner les modes `-CheckOnly` / `-Rewrite` / `-KeepExtension` ; prendre `-CheckOnly` pour un dry-run ; prendre `-WhatIf` pour « aucune écriture disque » (`reencode-errors.log` reste possible) ; attendre un code de retour par fichier (la commande continue).
+Ne pas faire : passer `-FFToolsBase` pour changer les binaires ; combiner `-Path` et `-ListFile` ; combiner les modes `-CheckOnly` / `-NoTranscode` ; prendre `-CheckOnly` pour un dry-run ; prendre `-WhatIf` pour « aucune écriture disque » (`reencode-errors.log` reste possible) ; attendre un code de retour par fichier (la commande continue).
 
 Skip « No reencoding needed » / « No stream filtering needed » = déjà conforme, ce n'est pas une erreur.
 

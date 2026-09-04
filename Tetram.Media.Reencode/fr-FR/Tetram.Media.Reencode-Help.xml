@@ -4,7 +4,7 @@
     <command:details>
       <command:name>Invoke-ReencodeMedia</command:name>
       <maml:description>
-        <maml:para>Remplace in-place des fichiers média : réencodage HEVC/AV1, remux (`-Rewrite`) ou contrôle ffmpeg (`-CheckOnly`, pas un dry-run).</maml:para>
+        <maml:para>Remplace in-place des fichiers média : réencodage HEVC/AV1 vers MKV, `-NoTranscode` (filtrage sans transcodage) ou contrôle ffmpeg (`-CheckOnly`, pas un dry-run).</maml:para>
       </maml:description>
       <command:verb>Invoke</command:verb>
       <command:noun>ReencodeMedia</command:noun>
@@ -14,9 +14,8 @@
 
 Choisir exactement un mode (jeux de paramètres exclusifs) :
 
-- défaut (ni `-KeepExtension` ni `-Rewrite` ni `-CheckOnly`) : réencodage vers `-OutputExtension` (défaut `.mkv`), codec `-VideoCodec` (défaut HEVC / libx265), qualité `-Quality` (défaut Medium).
-- `-KeepExtension` : même réencodage, mais l'extension source est conservée.
-- `-Rewrite` : remux uniquement (`-c:v`/`-c:a copy`). Pas de réencodage, pas d'upscale, pas de désentrelacement. Ne s'exécute que s'il y a des pistes à retirer.
+- réencodage normal (ni `-NoTranscode` ni `-CheckOnly`) : filtrage des flux indésirables et politiques de transformation habituelles ; le conteneur final est toujours `.mkv`.
+- `-NoTranscode` : même filtrage, métadonnées et attachments, mais aucun flux conservé n'est transcodé ; l'extension source est conservée. Ce n'est pas un « garder tous les flux » ni une immuabilité du fichier : des pistes peuvent être retirées, des métadonnées corrigées, et le fichier peut ne pas être réécrit s'il n'y a rien à faire.
 - `-CheckOnly` : intermédiaire entre `-WhatIf` et un réencodage. Vérifie que ffmpeg peut décoder (muxer `null`) sans réencoder, remuxer ni remplacer le fichier média. Ce n'est pas un dry-run : les horodatages NFO (`premiered`) sont posés sur le fichier et éventuellement les dossiers, comme sur un run normal.
 
 Choisir exactement une source : `-Path` (défaut `.`) ou `-ListFile` (fichier texte, une entrée par ligne). Un chemin préfixé par `+` est parcouru récursivement même sans `-Recurse`.
@@ -25,9 +24,9 @@ Effet disque :
 
 - `-WhatIf` : pas de réécriture média, pas de timestamps NFO. N'est pas un silence disque total : une exception fichier (catch de `Invoke-ReencodeFile`) append `reencode-errors.log` dans le répertoire courant, sans `ShouldProcess`.
 - `-CheckOnly` (sans `-WhatIf`) : pas de temporaire ffmpeg, pas de `Move-Item` / `Rename-Item` sur le média. Les timestamps NFO (`premiered`) sont malgré tout appliqués. Un échec ffmpeg est journalisé dans `reencode-errors.log`.
-- réencodage / remux : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin. Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). Un écart de durée au-delà de max(1 s, 0,5 %) conserve l'original (le temporaire est jeté).
+- réencodage / `-NoTranscode` : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin (réencodage vers `.mkv`). Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). Un écart de durée au-delà de max(1 s, 0,5 %) conserve l'original (le temporaire est jeté).
 
-Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-Rewrite`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion`. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
+Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-NoTranscode`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion` en réencodage normal. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
 
 ffmpeg/ffprobe : `-FFMPEGPath` / `-FFPROBEPath`, sinon dossier `Tetram.Media.FFmpeg\ffmpeg\` (build ffmpeg &gt;= 9.0.1), sinon PATH. Ne pas utiliser `-FFToolsBase` pour pointer les binaires : le paramètre est validé mais ignoré.
 
@@ -75,11 +74,173 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>OutputExtension</maml:name>
+          <maml:name>VideoCodec</maml:name>
           <maml:description />
           <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
           <dev:type>
             <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>ClearStreamsTitle</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>ForceRecodeVideo</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>AllowVideoCodecUpgrade</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Quality</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Upscale</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>UpscaleWidth</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>UpscaleFit</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Deinterlace</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>AllowSubTitlesConversion</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>SubTitlesToKeep</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String[]</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>TempPath</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>FFToolsBase</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>FFMPEGPath</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>FFPROBEPath</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>WhatIf</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Confirm</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem>
+        <maml:name>Invoke-ReencodeMedia</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>ListFile</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>UpdateList</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Sort</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>ScanReadOnlyDirectory</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>InputMasks</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String[]</maml:name>
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
@@ -223,7 +384,7 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
           </dev:type>
         </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Rewrite</maml:name>
+          <maml:name>NoTranscode</maml:name>
           <maml:description />
           <dev:type>
             <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -323,16 +484,16 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
       </command:syntaxItem>
       <command:syntaxItem>
         <maml:name>Invoke-ReencodeMedia</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
-          <maml:name>Path</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>ListFile</maml:name>
           <maml:description />
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
           <dev:type>
-            <maml:name>System.String[]</maml:name>
+            <maml:name>System.String</maml:name>
           </dev:type>
         </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>KeepExtension</maml:name>
+          <maml:name>NoTranscode</maml:name>
           <maml:description />
           <dev:type>
             <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -340,6 +501,13 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>Recurse</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>UpdateList</maml:name>
           <maml:description />
           <dev:type>
             <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -369,75 +537,7 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>VideoCodec</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>ClearStreamsTitle</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ForceRecodeVideo</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>AllowVideoCodecUpgrade</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Quality</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Upscale</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>UpscaleWidth</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
-          <dev:type>
-            <maml:name>System.Int32</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>UpscaleFit</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Deinterlace</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>AllowSubTitlesConversion</maml:name>
           <maml:description />
           <dev:type>
             <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -539,477 +639,6 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>InputMasks</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String[]</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>TempPath</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>FFToolsBase</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>FFMPEGPath</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>FFPROBEPath</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>WhatIf</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Confirm</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-      </command:syntaxItem>
-      <command:syntaxItem>
-        <maml:name>Invoke-ReencodeMedia</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ListFile</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Rewrite</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Recurse</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>UpdateList</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Sort</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ScanReadOnlyDirectory</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>InputMasks</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String[]</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ClearStreamsTitle</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>SubTitlesToKeep</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String[]</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>TempPath</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>FFToolsBase</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>FFMPEGPath</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>FFPROBEPath</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>WhatIf</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Confirm</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-      </command:syntaxItem>
-      <command:syntaxItem>
-        <maml:name>Invoke-ReencodeMedia</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ListFile</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>UpdateList</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Sort</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ScanReadOnlyDirectory</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>InputMasks</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String[]</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>OutputExtension</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>VideoCodec</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ClearStreamsTitle</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ForceRecodeVideo</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>AllowVideoCodecUpgrade</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Quality</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Upscale</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>UpscaleWidth</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
-          <dev:type>
-            <maml:name>System.Int32</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>UpscaleFit</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Deinterlace</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>AllowSubTitlesConversion</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>SubTitlesToKeep</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String[]</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>TempPath</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>FFToolsBase</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>FFMPEGPath</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>FFPROBEPath</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>WhatIf</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Confirm</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-      </command:syntaxItem>
-      <command:syntaxItem>
-        <maml:name>Invoke-ReencodeMedia</maml:name>
-        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ListFile</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>KeepExtension</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>UpdateList</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Sort</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ScanReadOnlyDirectory</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>InputMasks</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String[]</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>VideoCodec</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ClearStreamsTitle</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>ForceRecodeVideo</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>AllowVideoCodecUpgrade</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Quality</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Upscale</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>UpscaleWidth</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
-          <dev:type>
-            <maml:name>System.Int32</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>UpscaleFit</maml:name>
-          <maml:description />
-          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
-          <dev:type>
-            <maml:name>System.String</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>Deinterlace</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>AllowSubTitlesConversion</maml:name>
-          <maml:description />
-          <dev:type>
-            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-          </dev:type>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
-          <maml:name>SubTitlesToKeep</maml:name>
           <maml:description />
           <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
           <dev:type>
@@ -1174,18 +803,8 @@ sidecar `.ass`) est ignoré plutôt que de perdre ou de mal convertir les pistes
         <maml:name>AllowVideoCodecUpgrade</maml:name>
         <maml:description>
           <maml:para>Lorsque `-VideoCodec AV1`, force le réencodage des pistes HEVC au profil `main*`
-vers AV1 au lieu de les copier. Sans effet en `-CheckOnly`. Ne s'applique pas
-au mode `-Rewrite`.
-Lorsque `-VideoCodec AV1`, force le réencodage des pistes HEVC au profil `main*`
-vers AV1 au lieu de les copier.
-Sans effet en `-CheckOnly`.
-Ne s'applique pas
-au mode `-Rewrite`.
-Lorsque `-VideoCodec AV1`, force le réencodage des pistes HEVC au profil `main*`
-vers AV1 au lieu de les copier.
-Sans effet en `-CheckOnly`.
-Ne s'applique pas
-au mode `-Rewrite`.</maml:para>
+vers AV1 au lieu de les copier. Sans effet en `-CheckOnly`. Absent du mode
+`-NoTranscode`.</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -1216,7 +835,7 @@ dates, pas le journal d'erreur. Jeu de paramètres exclusif.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="cf">
         <maml:name>Confirm</maml:name>
         <maml:description>
-          <maml:para>Prompts you for confirmation before running the cmdlet.</maml:para>
+          <maml:para>Demande confirmation avant chaque action `ShouldProcess` (ConfirmImpact Medium).</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -1225,11 +844,7 @@ dates, pas le journal d'erreur. Jeu de paramètres exclusif.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Deinterlace</maml:name>
         <maml:description>
-          <maml:para>Applique le filtre `yadif` aux pistes vidéo conservées. Ignoré en `-Rewrite`.
-Applique le filtre `yadif` aux pistes vidéo conservées.
-Ignoré en `-Rewrite`.
-Applique le filtre `yadif` aux pistes vidéo conservées.
-Ignoré en `-Rewrite`.</maml:para>
+          <maml:para>Applique le filtre `yadif` aux pistes vidéo conservées. Absent du mode `-NoTranscode`.</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -1238,14 +853,7 @@ Ignoré en `-Rewrite`.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>FFMPEGPath</maml:name>
         <maml:description>
-          <maml:para>Chemin explicite vers l'exécutable ffmpeg. Chaîne vide : découverte automatique
-(`Tetram.Media.FFmpeg\ffmpeg\`, puis PATH).
-Chemin explicite vers l'exécutable ffmpeg.
-Chaîne vide : découverte automatique
-(`Tetram.Media.FFmpeg\ffmpeg\`, puis PATH).
-Chemin explicite vers l'exécutable ffmpeg.
-Chaîne vide : découverte automatique
-(`Tetram.Media.FFmpeg\ffmpeg\`, puis PATH).</maml:para>
+          <maml:para>Chemin explicite vers `ffmpeg`. Sinon découverte via `Tetram.Media.FFmpeg` puis PATH.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -1255,14 +863,7 @@ Chaîne vide : découverte automatique
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>FFPROBEPath</maml:name>
         <maml:description>
-          <maml:para>Chemin explicite vers l'exécutable ffprobe. Chaîne vide : même dossier `bin`
-que ffmpeg, ou PATH.
-Chemin explicite vers l'exécutable ffprobe.
-Chaîne vide : même dossier `bin`
-que ffmpeg, ou PATH.
-Chemin explicite vers l'exécutable ffprobe.
-Chaîne vide : même dossier `bin`
-que ffmpeg, ou PATH.</maml:para>
+          <maml:para>Chemin explicite vers `ffprobe`. Sinon découverte via `Tetram.Media.FFmpeg` puis PATH.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -1272,14 +873,7 @@ que ffmpeg, ou PATH.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>FFToolsBase</maml:name>
         <maml:description>
-          <maml:para>Dossier qui doit exister (défaut : répertoire courant). Validé à l'appel, mais
-non utilisé pour localiser ffmpeg/ffprobe — voir `-FFMPEGPath` et `-FFPROBEPath`.
-Dossier qui doit exister (défaut : répertoire courant).
-Validé à l'appel, mais
-non utilisé pour localiser ffmpeg/ffprobe — voir `-FFMPEGPath` et `-FFPROBEPath`.
-Dossier qui doit exister (défaut : répertoire courant).
-Validé à l'appel, mais
-non utilisé pour localiser ffmpeg/ffprobe — voir `-FFMPEGPath` et `-FFPROBEPath`.</maml:para>
+          <maml:para>Validé mais ignoré pour la résolution des binaires (utiliser `-FFMPEGPath` / `-FFPROBEPath`).</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -1290,18 +884,8 @@ non utilisé pour localiser ffmpeg/ffprobe — voir `-FFMPEGPath` et `-FFPROBEPa
         <maml:name>ForceRecodeVideo</maml:name>
         <maml:description>
           <maml:para>Force le réencodage vidéo même si le codec source est déjà HEVC `main*`, AV1 ou
-VC1. Sans ce commutateur, ces pistes sont copiées (sauf upgrade AV1). Ignoré en
-`-Rewrite`.
-Force le réencodage vidéo même si le codec source est déjà HEVC `main*`, AV1 ou
-VC1.
-Sans ce commutateur, ces pistes sont copiées (sauf upgrade AV1).
-Ignoré en
-`-Rewrite`.
-Force le réencodage vidéo même si le codec source est déjà HEVC `main*`, AV1 ou
-VC1.
-Sans ce commutateur, ces pistes sont copiées (sauf upgrade AV1).
-Ignoré en
-`-Rewrite`.</maml:para>
+VC1. Sans ce commutateur, ces pistes sont copiées (sauf upgrade AV1). Absent du
+mode `-NoTranscode`.</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -1311,12 +895,6 @@ Ignoré en
         <maml:name>InputMasks</maml:name>
         <maml:description>
           <maml:para>Masques passés à `Get-ChildItem -Include`. Défaut : `*.mkv`, `*.mp4`, `*.avi`,
-`*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`, `*.heic`, `*.ts`, `*.webm`.
-Masques passés à `Get-ChildItem -Include`.
-Défaut : `*.mkv`, `*.mp4`, `*.avi`,
-`*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`, `*.heic`, `*.ts`, `*.webm`.
-Masques passés à `Get-ChildItem -Include`.
-Défaut : `*.mkv`, `*.mp4`, `*.avi`,
 `*.wmv`, `*.mov`, `*.flv`, `*.mpeg`, `*.mpg`, `*.heic`, `*.ts`, `*.webm`.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
@@ -1325,85 +903,29 @@ Défaut : `*.mkv`, `*.mp4`, `*.avi`,
         </dev:type>
       </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
-        <maml:name>KeepExtension</maml:name>
+        <maml:name>ListFile</maml:name>
         <maml:description>
-          <maml:para>Conserve l'extension du fichier source au lieu d'appliquer `-OutputExtension`.
-Implicite en `-Rewrite`. Jeu de paramètres exclusif.
-Conserve l'extension du fichier source au lieu d'appliquer `-OutputExtension`.
-Implicite en `-Rewrite`.
-Jeu de paramètres exclusif.
-Conserve l'extension du fichier source au lieu d'appliquer `-OutputExtension`.
-Implicite en `-Rewrite`.
-Jeu de paramètres exclusif.</maml:para>
+          <maml:para>Fichier texte (une entrée par ligne) listant les médias à traiter. Exclut `-Path`.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>NoTranscode</maml:name>
+        <maml:description>
+          <maml:para>Filtrage, métadonnées et attachments sans transcoder les flux conservés.
+Conserve l'extension source. Jeu de paramètres exclusif.</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
         </dev:type>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
-        <maml:name>ListFile</maml:name>
-        <maml:description>
-          <maml:para>Fichier texte d'entrée : une ligne = un chemin. Un préfixe `+` force la
-récursion pour cette ligne. Le fichier doit exister. Mutuellement exclusif avec
-`-Path`.
-Fichier texte d'entrée : une ligne = un chemin.
-Un préfixe `+` force la
-récursion pour cette ligne.
-Le fichier doit exister.
-Mutuellement exclusif avec
-`-Path`.
-Fichier texte d'entrée : une ligne = un chemin.
-Un préfixe `+` force la
-récursion pour cette ligne.
-Le fichier doit exister.
-Mutuellement exclusif avec
-`-Path`.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
-        <dev:type>
-          <maml:name>System.String</maml:name>
-        </dev:type>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
-        <maml:name>OutputExtension</maml:name>
-        <maml:description>
-          <maml:para>Extension de sortie, avec le point initial (ex. `.mkv`). Défaut : `.mkv`.
-Uniquement dans le jeu de paramètres par défaut (pas `-KeepExtension` ni
-`-Rewrite`).
-Extension de sortie, avec le point initial (ex.
-`.mkv`).
-Défaut : `.mkv`.
-Uniquement dans le jeu de paramètres par défaut (pas `-KeepExtension` ni
-`-Rewrite`).
-Extension de sortie, avec le point initial (ex.
-`.mkv`).
-Défaut : `.mkv`.
-Uniquement dans le jeu de paramètres par défaut (pas `-KeepExtension` ni
-`-Rewrite`).</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
-        <dev:type>
-          <maml:name>System.String</maml:name>
-        </dev:type>
-      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
         <maml:name>Path</maml:name>
         <maml:description>
-          <maml:para>Dossiers ou fichiers à traiter. Défaut : `.`. Un élément préfixé par `+` est
-parcouru récursivement même sans `-Recurse`. Mutuellement exclusif avec
-`-ListFile`.
-Dossiers ou fichiers à traiter.
-Défaut : `.`.
-Un élément préfixé par `+` est
-parcouru récursivement même sans `-Recurse`.
-Mutuellement exclusif avec
-`-ListFile`.
-Dossiers ou fichiers à traiter.
-Défaut : `.`.
-Un élément préfixé par `+` est
-parcouru récursivement même sans `-Recurse`.
-Mutuellement exclusif avec
-`-ListFile`.</maml:para>
+          <maml:para>Chemins fichiers ou dossiers à traiter. Défaut `.`. Préfixe `+` = récursion pour cette entrée.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
         <dev:type>
@@ -1413,19 +935,8 @@ Mutuellement exclusif avec
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Quality</maml:name>
         <maml:description>
-          <maml:para>Cible de qualité `Low`, `Medium` (défaut) ou `High`. Pilote CRF/preset vidéo
-(libx265 ou libsvtav1) et le seuil de réencodage audio (bitrate, codecs
-lossless). Ignoré en `-Rewrite` et `-CheckOnly`.
-Cible de qualité `Low`, `Medium` (défaut) ou `High`.
-Pilote CRF/preset vidéo
-(libx265 ou libsvtav1) et le seuil de réencodage audio (bitrate, codecs
-lossless).
-Ignoré en `-Rewrite` et `-CheckOnly`.
-Cible de qualité `Low`, `Medium` (défaut) ou `High`.
-Pilote CRF/preset vidéo
-(libx265 ou libsvtav1) et le seuil de réencodage audio (bitrate, codecs
-lossless).
-Ignoré en `-Rewrite` et `-CheckOnly`.</maml:para>
+          <maml:para>Politique de qualité audio/vidéo (`Low` / `Medium` / `High`). Réservée au réencodage
+normal (absente de `-NoTranscode` et `-CheckOnly`).</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -1435,34 +946,7 @@ Ignoré en `-Rewrite` et `-CheckOnly`.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Recurse</maml:name>
         <maml:description>
-          <maml:para>Parcourt les sous-dossiers. Peut être combiné avec le préfixe `+` sur un chemin
-individuel. Les dossiers `Plex Versions` et `.deletedByTMM` restent exclus.
-Parcourt les sous-dossiers.
-Peut être combiné avec le préfixe `+` sur un chemin
-individuel.
-Les dossiers `Plex Versions` et `.deletedByTMM` restent exclus.
-Parcourt les sous-dossiers.
-Peut être combiné avec le préfixe `+` sur un chemin
-individuel.
-Les dossiers `Plex Versions` et `.deletedByTMM` restent exclus.</maml:para>
-        </maml:description>
-        <dev:type>
-          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
-        </dev:type>
-      </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
-        <maml:name>Rewrite</maml:name>
-        <maml:description>
-          <maml:para>Remux sans réencodage : copie vidéo/audio, filtre les sous-titres, nettoie les
-métadonnées. Conserve l'extension source. Jeu de paramètres exclusif.
-Remux sans réencodage : copie vidéo/audio, filtre les sous-titres, nettoie les
-métadonnées.
-Conserve l'extension source.
-Jeu de paramètres exclusif.
-Remux sans réencodage : copie vidéo/audio, filtre les sous-titres, nettoie les
-métadonnées.
-Conserve l'extension source.
-Jeu de paramètres exclusif.</maml:para>
+          <maml:para>Parcourt les sous-dossiers. Sur `-ListFile`, disponible uniquement avec `-NoTranscode`.</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -1471,8 +955,7 @@ Jeu de paramètres exclusif.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>ScanReadOnlyDirectory</maml:name>
         <maml:description>
-          <maml:para>Autorise la descente récursive dans des répertoires marqués en lecture seule.
-Les fichiers en lecture seule ne sont jamais traités.</maml:para>
+          <maml:para>Autorise la descente récursive dans des répertoires marqués en lecture seule.</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -1481,14 +964,7 @@ Les fichiers en lecture seule ne sont jamais traités.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Sort</maml:name>
         <maml:description>
-          <maml:para>Ordre de traitement : `NewestFirst`, `OldestFirst`, `SmallerFirst`,
-`LargerFirst`. Absent : tri par nom.
-Ordre de traitement : `NewestFirst`, `OldestFirst`, `SmallerFirst`,
-`LargerFirst`.
-Absent : tri par nom.
-Ordre de traitement : `NewestFirst`, `OldestFirst`, `SmallerFirst`,
-`LargerFirst`.
-Absent : tri par nom.</maml:para>
+          <maml:para>Ordre de traitement des fichiers découverts (`NewestFirst`, `OldestFirst`, `SmallerFirst`, `LargerFirst`).</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -1498,7 +974,7 @@ Absent : tri par nom.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>SubTitlesToKeep</maml:name>
         <maml:description>
-          <maml:para>Langues de sous-titres à conserver (codes `tags.language`). Une piste sans langue affectée, ou taguée `unk`, est traitée comme indéterminée (`und`) et toujours gardée, comme `un` et `und`. Défaut : `fr`, `fre`, `fr-FR`, `en`, `eng`, `en-US`, `en-GB`.</maml:para>
+          <maml:para>Langues de sous-titres à conserver (avec `un` / `und`). Les autres pistes sous-titres sont retirées.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
         <dev:type>
@@ -1508,16 +984,7 @@ Absent : tri par nom.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>TempPath</maml:name>
         <maml:description>
-          <maml:para>Dossier temporaire de travail. Doit exister. Défaut : `$env:TEMP`, sinon
-`$env:TMPDIR`, `$env:TMP`, sinon `[IO.Path]::GetTempPath()`.
-Dossier temporaire de travail.
-Doit exister.
-Défaut : `$env:TEMP`, sinon
-`$env:TMPDIR`, `$env:TMP`, sinon `[IO.Path]::GetTempPath()`.
-Dossier temporaire de travail.
-Doit exister.
-Défaut : `$env:TEMP`, sinon
-`$env:TMPDIR`, `$env:TMP`, sinon `[IO.Path]::GetTempPath()`.</maml:para>
+          <maml:para>Dossier des fichiers temporaires ffmpeg.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -1527,14 +994,7 @@ Défaut : `$env:TEMP`, sinon
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>UpdateList</maml:name>
         <maml:description>
-          <maml:para>Après traitement d'une ligne de `-ListFile`, retire cette ligne du fichier
-(sous `-WhatIf`/`-Confirm`). Uniquement avec `-ListFile`.
-Après traitement d'une ligne de `-ListFile`, retire cette ligne du fichier
-(sous `-WhatIf`/`-Confirm`).
-Uniquement avec `-ListFile`.
-Après traitement d'une ligne de `-ListFile`, retire cette ligne du fichier
-(sous `-WhatIf`/`-Confirm`).
-Uniquement avec `-ListFile`.</maml:para>
+          <maml:para>Réécrit `-ListFile` après chaque ligne traitée (sous `ShouldProcess`).</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -1543,21 +1003,7 @@ Uniquement avec `-ListFile`.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>Upscale</maml:name>
         <maml:description>
-          <maml:para>Hauteur cible `720p`, `1080p`, `2160p` ou `4320p`. N'agrandit que si la source
-est plus petite (ou, à hauteur égale, si `-UpscaleWidth` diffère). Combinable
-avec `-UpscaleWidth`. Ignoré en `-Rewrite`.
-Hauteur cible `720p`, `1080p`, `2160p` ou `4320p`.
-N'agrandit que si la source
-est plus petite (ou, à hauteur égale, si `-UpscaleWidth` diffère).
-Combinable
-avec `-UpscaleWidth`.
-Ignoré en `-Rewrite`.
-Hauteur cible `720p`, `1080p`, `2160p` ou `4320p`.
-N'agrandit que si la source
-est plus petite (ou, à hauteur égale, si `-UpscaleWidth` diffère).
-Combinable
-avec `-UpscaleWidth`.
-Ignoré en `-Rewrite`.</maml:para>
+          <maml:para>Hauteur cible d'agrandissement (`720p` / `1080p` / `2160p` / `4320p`). Absent du mode `-NoTranscode`.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -1567,23 +1013,7 @@ Ignoré en `-Rewrite`.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>UpscaleFit</maml:name>
         <maml:description>
-          <maml:para>Boîte `LARGEURxHAUTEUR` (ex. `1920x1080`). Scale Lanczos avec
-`force_original_aspect_ratio=decrease`. Si présent, remplace `-Upscale` /
-`-UpscaleWidth` pour la décision d'agrandissement. Ignoré en `-Rewrite`.
-Boîte `LARGEURxHAUTEUR` (ex.
-`1920x1080`).
-Scale Lanczos avec
-`force_original_aspect_ratio=decrease`.
-Si présent, remplace `-Upscale` /
-`-UpscaleWidth` pour la décision d'agrandissement.
-Ignoré en `-Rewrite`.
-Boîte `LARGEURxHAUTEUR` (ex.
-`1920x1080`).
-Scale Lanczos avec
-`force_original_aspect_ratio=decrease`.
-Si présent, remplace `-Upscale` /
-`-UpscaleWidth` pour la décision d'agrandissement.
-Ignoré en `-Rewrite`.</maml:para>
+          <maml:para>Cible `LargeurxHauteur` pour la décision d'agrandissement. Absent du mode `-NoTranscode`.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -1593,24 +1023,7 @@ Ignoré en `-Rewrite`.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>UpscaleWidth</maml:name>
         <maml:description>
-          <maml:para>Largeur cible en pixels. `-1` (défaut) laisse ffmpeg calculer la largeur
-(`scale=-1:hauteur`). Seules `-1` et les valeurs strictement positives sont
-acceptées. Sans `-Upscale` ni `-UpscaleFit`, un agrandissement n'a lieu que si
-cette largeur est supérieure à celle de la source.
-Largeur cible en pixels.
-`-1` (défaut) laisse ffmpeg calculer la largeur
-(`scale=-1:hauteur`).
-Seules `-1` et les valeurs strictement positives sont
-acceptées.
-Sans `-Upscale` ni `-UpscaleFit`, un agrandissement n'a lieu que si
-cette largeur est supérieure à celle de la source.
-Largeur cible en pixels.
-`-1` (défaut) laisse ffmpeg calculer la largeur
-(`scale=-1:hauteur`).
-Seules `-1` et les valeurs strictement positives sont
-acceptées.
-Sans `-Upscale` ni `-UpscaleFit`, un agrandissement n'a lieu que si
-cette largeur est supérieure à celle de la source.</maml:para>
+          <maml:para>Largeur cible complémentaire à `-Upscale`. Absent du mode `-NoTranscode`.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.Int32</command:parameterValue>
         <dev:type>
@@ -1620,17 +1033,7 @@ cette largeur est supérieure à celle de la source.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>VideoCodec</maml:name>
         <maml:description>
-          <maml:para>Codec vidéo cible : `HEVC` (défaut, libx265) ou `AV1` (libsvtav1). Les pistes
-déjà HEVC `main*`, AV1 ou VC1 sont copiées sauf `-ForceRecodeVideo` ou
-`-AllowVideoCodecUpgrade`.
-Codec vidéo cible : `HEVC` (défaut, libx265) ou `AV1` (libsvtav1).
-Les pistes
-déjà HEVC `main*`, AV1 ou VC1 sont copiées sauf `-ForceRecodeVideo` ou
-`-AllowVideoCodecUpgrade`.
-Codec vidéo cible : `HEVC` (défaut, libx265) ou `AV1` (libsvtav1).
-Les pistes
-déjà HEVC `main*`, AV1 ou VC1 sont copiées sauf `-ForceRecodeVideo` ou
-`-AllowVideoCodecUpgrade`.</maml:para>
+          <maml:para>Codec vidéo cible `HEVC` ou `AV1`. Absent du mode `-NoTranscode`.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -1654,7 +1057,7 @@ quand même append `reencode-errors.log` (hors `ShouldProcess`).</maml:para>
       <maml:alert>
         <maml:para>Prérequis : PowerShell 7+, module chargé depuis son `.psd1`. ffmpeg/ffprobe &gt;= 9.0.1.
 
-Ne pas faire : passer `-FFToolsBase` pour changer les binaires ; combiner `-Path` et `-ListFile` ; combiner les modes `-CheckOnly` / `-Rewrite` / `-KeepExtension` ; prendre `-CheckOnly` pour un dry-run ; prendre `-WhatIf` pour « aucune écriture disque » (`reencode-errors.log` reste possible) ; attendre un code de retour par fichier (la commande continue).
+Ne pas faire : passer `-FFToolsBase` pour changer les binaires ; combiner `-Path` et `-ListFile` ; combiner les modes `-CheckOnly` / `-NoTranscode` ; prendre `-CheckOnly` pour un dry-run ; prendre `-WhatIf` pour « aucune écriture disque » (`reencode-errors.log` reste possible) ; attendre un code de retour par fichier (la commande continue).
 
 Skip « No reencoding needed » / « No stream filtering needed » = déjà conforme, ce n'est pas une erreur.
 
@@ -1687,11 +1090,11 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>--------- Example 4: Remux pour retirer des pistes, sans réencoder ---------</maml:title>
+        <maml:title>--------- Example 4: Filtrer des pistes sans transcodage ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -Rewrite</dev:code>
+        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode</dev:code>
         <dev:remarks>
-          <maml:para>Intention : filtrer sous-titres / métadonnées en copiant vidéo et audio. Ignoré si aucun filtrage n'est nécessaire.</maml:para>
+          <maml:para>Intention : retirer sous-titres / vignettes et nettoyer les métadonnées en copiant les flux conservés. Conserve l'extension source. Ignoré si aucune opération n'est nécessaire.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>

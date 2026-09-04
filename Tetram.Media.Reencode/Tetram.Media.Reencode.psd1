@@ -1,12 +1,12 @@
 @{
 # --- Identité du module ---
     RootModule = 'Tetram.Media.Reencode.psm1'
-    ModuleVersion = '2.6.1'
+    ModuleVersion = '3.0.0'
     GUID = 'd4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95'
 
     Author = 'TRL'
     CompanyName = 'Tetram'
-    Description = 'Outils de ré-encodage/normalisation de médias (PS7+, WhatIf/Confirm), avec statistiques optionnelles. Mode -Rewrite : remux sans réencodage (copy vidéo/audio), filtrage des pistes et nettoyage des métadonnées.'
+    Description = 'Outils de ré-encodage/normalisation de médias (PS7+, WhatIf/Confirm), avec statistiques optionnelles. Réencodage vers MKV. Mode -NoTranscode : filtrage des pistes et nettoyage des métadonnées sans transcodage des flux conservés.'
 
     # --- Compatibilité ---
     PowerShellVersion = '7.0'
@@ -51,6 +51,7 @@
 - 2.5.0 : Mode -Rewrite (ParameterSets RewriteFromPath / RewriteFromFile) : remux avec -c:v/-c:a copy, filtrage des pistes (sous-titres, vignettes) et nettoyage des métadonnées ; correction du skip lorsque seules des pistes sont retirées.
 - 2.6.0 : Contrôle d'intégrité de la durée après encodage (comparaison source/sortie avec tolérance configurable) ; correction de la détection des flux attached-picture et de la sonde de durée pilotée par la sélection de flux.
 - 2.6.1 : Découpage interne du module en sous-modules privés (Probe, Streams, EncoderArgs, NFO, Scan) ; aucun changement fonctionnel.
+- 3.0.0 : API simplifiée — réencodage toujours en MKV ; mode -NoTranscode (filtrage conservé, aucun transcodage des flux retenus, extension source) ; suppression de -KeepExtension, -OutputExtension et -Rewrite.
 '@
         }
     }
