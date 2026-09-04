@@ -136,10 +136,24 @@ function Get-AudioEncoderArgs
         return @("-c:a:$StreamIndex", 'copy')
     }
 
+    $encoder = switch ($TargetCodec.ToLowerInvariant())
+    {
+        'opus' { 'libopus' }
+        'aac'  { 'aac' }
+        'eac3' { 'eac3' }
+        default
+        {
+            throw "Unsupported target audio codec '$TargetCodec'"
+        }
+    }
+
     $arguments = @(
-        "-c:a:$StreamIndex", ($TargetCodec -eq 'opus' ? 'libopus' : 'aac')
-        "-b:a:$StreamIndex", $TargetBitrate
+        "-c:a:$StreamIndex", $encoder
     )
+    if (-not [string]::IsNullOrWhiteSpace($TargetBitrate))
+    {
+        $arguments += @("-b:a:$StreamIndex", $TargetBitrate)
+    }
     if ($ChannelMapFilter)
     {
         $arguments += @("-filter:a:$StreamIndex", $ChannelMapFilter)

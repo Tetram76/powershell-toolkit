@@ -210,20 +210,61 @@ function Select-VideoStreams
     }
 }
 
+function Test-FinalVideoIsAV1
+{
+    param(
+        [object[]] $VideoTracks,
+        [Parameter(Mandatory)]
+        [ValidateSet('HEVC', 'AV1')]
+        [string] $VideoCodec
+    )
+
+    # VideoCodec configuré ≠ codec réellement produit : une cible AV1 copiée en HEVC
+    # ne doit pas déclencher la contrainte audio, une source AV1 copiée si.
+    foreach ($stream in @($VideoTracks))
+    {
+        if ($null -eq $stream)
+        {
+            continue
+        }
+        if (-not (([bool]$stream.__process) -or ([bool]$stream.__copy)))
+        {
+            continue
+        }
+
+        $finalCodec = if ([bool]$stream.__recode -or [bool]$stream.__deinterlace -or [bool]$stream.__upscale)
+        {
+            $VideoCodec
+        }
+        else
+        {
+            [string]$stream.codec_name
+        }
+
+        if ($finalCodec -ieq 'av1')
+        {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Select-AudioStreams
 {
     param(
         [hashtable] $FfprobeOutput,
         [string] $FinalExtension,
         [string] $Quality,
-        [bool] $RewriteMode
+        [bool] $RewriteMode,
+        [bool] $FinalVideoIsAV1
     )
     Write-Verbose ">> Select-AudioStreams"
     try
     {
         $audioStreams = @($FfprobeOutput.streams) | Where-Object { $_.codec_type -eq 'audio' }
         $AudioTracks = $audioStreams | Select-Object codec_name, channels, channel_layout, bit_rate, tags
-        $targetAudioCodec = Get-TargetAudioCodec -FinalExtension $FinalExtension
+        $targetAudioCodec = Get-TargetAudioCodec -FinalExtension $FinalExtension -Quality $Quality
         $i = -1
 
         foreach ($stream in $AudioTracks)
@@ -261,14 +302,36 @@ function Select-AudioStreams
 
             $isLossless = Test-IsLosslessAudioCodec $codec
 
-            $targetBitrateLabel = Get-TargetAudioBitrate -Codec $targetAudioCodec -Quality $Quality -Channels $channels
-            $targetBps = ConvertTo-IntBitrateK $targetBitrateLabel
+            $forceAacToEac3 = $FinalVideoIsAV1 -and ($codec -ieq 'aac') -and -not $RewriteMode
+            # High/Medium hors MP4 n'acceptent plus Opus : alreadyTargetNoGain ne doit pas figer une copie.
+            $forceOpusToEac3 =
+                ($FinalExtension -ine '.mp4') -and
+                ($Quality -in @('High', 'Medium')) -and
+                ($codec -ieq 'opus') -and
+                -not $RewriteMode
+
+            $effectiveTargetCodec = if ($forceAacToEac3)
+            {
+                'eac3'
+            }
+            else
+            {
+                $targetAudioCodec
+            }
+
+            $targetBitrateLabel = $null
+            $targetBps = 0
+            if ($effectiveTargetCodec -ine 'eac3')
+            {
+                $targetBitrateLabel = Get-TargetAudioBitrate -Codec $effectiveTargetCodec -Quality $Quality -Channels $channels
+                $targetBps = ConvertTo-IntBitrateK $targetBitrateLabel
+            }
 
             $hasGain = ($currentBps -gt 0) -and ($targetBps -gt 0) -and ($targetBps -lt [int]($currentBps / 1.05))
 
             $likelyGainCodecs = @('dts', 'eac3', 'ac3', 'truehd')
             $alreadyTargetNoGain =
-            ($codec -ieq $targetAudioCodec) -and (
+            ($codec -ieq $effectiveTargetCodec) -and (
             ($currentBps -le 0) -or
                     ($targetBps -gt 0 -and $currentBps -le $targetBps)
             )
@@ -311,7 +374,7 @@ function Select-AudioStreams
             }
 
             $opusLayoutFix = $null
-            if ($targetAudioCodec -eq 'opus' -and $layout -match 'side')
+            if ($effectiveTargetCodec -eq 'opus' -and $layout -match 'side')
             {
                 if ($channels -eq 5)
                 {
@@ -329,13 +392,13 @@ function Select-AudioStreams
             }
             else
             {
-                $recodeForContainer -or $recodeForQuality
+                $forceAacToEac3 -or $forceOpusToEac3 -or $recodeForContainer -or $recodeForQuality
             }
             $stream | Add-Member -NotePropertyName '__recode' -NotePropertyValue $recode -Force
 
             if ($recode)
             {
-                $stream | Add-Member -NotePropertyName '__targetAudioCodec' -NotePropertyValue $targetAudioCodec -Force
+                $stream | Add-Member -NotePropertyName '__targetAudioCodec' -NotePropertyValue $effectiveTargetCodec -Force
                 $stream | Add-Member -NotePropertyName '__targetAudioBitrate' -NotePropertyValue $targetBitrateLabel -Force
 
                 if ($opusLayoutFix)
