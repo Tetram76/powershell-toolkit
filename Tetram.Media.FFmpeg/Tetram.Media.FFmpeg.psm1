@@ -3,23 +3,9 @@ Set-StrictMode -Version 3.0
 $script:FFToolsSearchRoot = Join-Path $PSScriptRoot 'ffmpeg'
 $script:FFToolsDefaultBase = $null
 $script:FFToolsBaseResolved = $false
-$script:FFToolsMinVersionCache = $null
+$script:FFToolsRejectedHighest = $null
 # Hook tests : scriptblock (string $LiteralPath) -> [version]| $null
 $script:FFToolsVersionReader = $null
-
-function Get-FFToolsMinVersion
-{
-    if ($null -eq $script:FFToolsMinVersionCache)
-    {
-        $raw = $MyInvocation.MyCommand.Module.PrivateData.FFToolsMinVersion
-        if ([string]::IsNullOrWhiteSpace($raw))
-        {
-            $raw = '9.0.1'
-        }
-        $script:FFToolsMinVersionCache = [version]$raw
-    }
-    return $script:FFToolsMinVersionCache
-}
 
 function Get-FFmpegVersionFromBinary
 {
@@ -52,6 +38,46 @@ function Get-FFmpegVersionFromBinary
     return $null
 }
 
+function ConvertTo-FFToolsVersionKey
+{
+    param([Parameter(Mandatory)][version]$Version)
+
+    $build = if ($Version.Build -lt 0) { 0 } else { $Version.Build }
+    return '{0}.{1}.{2}' -f $Version.Major, $Version.Minor, $build
+}
+
+function Get-FFToolsRejectedReason
+{
+    param([Parameter(Mandatory)][version]$Version)
+
+    $rejected = $MyInvocation.MyCommand.Module.PrivateData.FFToolsRejectedVersions
+    if (-not ($rejected -is [System.Collections.IDictionary]))
+    {
+        return $null
+    }
+
+    $want = ConvertTo-FFToolsVersionKey -Version $Version
+    foreach ($key in @($rejected.Keys))
+    {
+        if ([string]::IsNullOrWhiteSpace($key)) { continue }
+        try
+        {
+            $have = ConvertTo-FFToolsVersionKey -Version ([version]$key)
+        }
+        catch
+        {
+            continue
+        }
+        if ($have -ne $want) { continue }
+        $reason = [string]$rejected[$key]
+        if (-not [string]::IsNullOrWhiteSpace($reason))
+        {
+            return $reason
+        }
+    }
+    return $null
+}
+
 function Resolve-FFToolsDefaultBase
 {
     if ($script:FFToolsBaseResolved)
@@ -61,6 +87,7 @@ function Resolve-FFToolsDefaultBase
 
     $script:FFToolsBaseResolved = $true
     $script:FFToolsDefaultBase = $null
+    $script:FFToolsRejectedHighest = $null
 
     $root = $script:FFToolsSearchRoot
     if (-not $root -or -not (Test-Path -LiteralPath $root))
@@ -70,9 +97,11 @@ function Resolve-FFToolsDefaultBase
 
     $exeName = if ($IsWindows) { 'ffmpeg.exe' } else { 'ffmpeg' }
     $probeName = if ($IsWindows) { 'ffprobe.exe' } else { 'ffprobe' }
-    $min = Get-FFToolsMinVersion
+    $min = [version]$MyInvocation.MyCommand.Module.PrivateData.FFToolsMinVersion
     $bestVer = $null
     $bestBin = $null
+    $highestFound = $null
+    $highestFoundReason = $null
 
     Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like 'ffmpeg-*' } |
@@ -84,13 +113,29 @@ function Resolve-FFToolsDefaultBase
             if (-not (Test-Path -LiteralPath $probeCandidate -PathType Leaf)) { return }
             $ver = Get-FFmpegVersionFromBinary -LiteralPath $candidate
             if ($null -eq $ver) { return }
+            $rejectReason = Get-FFToolsRejectedReason -Version $ver
+            if ($null -eq $highestFound -or $ver -gt $highestFound)
+            {
+                $highestFound = $ver
+                $highestFoundReason = $rejectReason
+            }
             if ($ver -lt $min) { return }
+            # Rejet métier distinct du seuil mini : ces builds (ex. 9.0.0/9.0.1) sont inutilisables.
+            if ($rejectReason) { return }
             if ($null -eq $bestVer -or $ver -gt $bestVer)
             {
                 $bestVer = $ver
                 $bestBin = $binDir
             }
         }
+
+    if ($null -eq $bestBin -and $highestFoundReason)
+    {
+        $script:FFToolsRejectedHighest = @{
+            Version = $highestFound
+            Reason  = $highestFoundReason
+        }
+    }
 
     $script:FFToolsDefaultBase = $bestBin
     return $script:FFToolsDefaultBase
@@ -100,9 +145,16 @@ function Get-FFToolMissingMessage
 {
     param([Parameter(Mandatory)][string]$ToolName)
 
-    $min = Get-FFToolsMinVersion
+    $min = [version]$MyInvocation.MyCommand.Module.PrivateData.FFToolsMinVersion
     $root = $script:FFToolsSearchRoot
-    return "$ToolName introuvable : placez une build officielle >= $min sous 'Tetram.Media.FFmpeg\ffmpeg\ffmpeg-<version>-...\bin\' (racine recherchée : '$root'), ou fournissez -OverridePath / PATH."
+    $hint = "placez une build officielle >= $min sous 'Tetram.Media.FFmpeg\ffmpeg\ffmpeg-<version>-...\bin\' (racine recherchée : '$root'), ou fournissez -OverridePath / PATH."
+    if ($script:FFToolsRejectedHighest)
+    {
+        $ver = $script:FFToolsRejectedHighest.Version
+        $reason = $script:FFToolsRejectedHighest.Reason
+        return "$ToolName introuvable : la version $ver trouvée est explicitement rejetée ($reason). $hint"
+    }
+    return "$ToolName introuvable : $hint"
 }
 
 function Get-FFmpegPath
