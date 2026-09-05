@@ -17,9 +17,18 @@ AfterAll {
 }
 
 Describe 'Tetram.Media.FFmpeg manifest' {
-    It 'déclare FFToolsMinVersion = 9.0.1 dans PrivateData' {
+    It 'déclare FFToolsMinVersion = 8.0.0 dans PrivateData' {
         $data = Import-PowerShellDataFile -LiteralPath $script:ManifestPath
-        $data.PrivateData.FFToolsMinVersion | Should -Be '9.0.1'
+        $data.PrivateData.FFToolsMinVersion | Should -Be '8.0.0'
+    }
+
+    It 'associe un motif de rejet propre à chaque version exclue' {
+        $data = Import-PowerShellDataFile -LiteralPath $script:ManifestPath
+        $rejected = $data.PrivateData.FFToolsRejectedVersions
+        ($rejected -is [System.Collections.IDictionary]) | Should -BeTrue
+        $data.PrivateData.Keys | Should -Not -Contain 'FFToolsRejectedReason'
+        $rejected['9.0.0'] | Should -Be 'bug de parallélisation qui peut corrompre le fichier final'
+        $rejected['9.0.1'] | Should -Be 'bug de parallélisation qui peut corrompre le fichier final'
     }
 }
 
@@ -68,6 +77,8 @@ Describe 'Resolve-FFToolsDefaultBase' {
             $script:FFToolsSearchRoot = $TestRoot
             $script:FFToolsDefaultBase = $null
             $script:FFToolsBaseResolved = $false
+            $script:FFToolsRejectedMapCache = $null
+            $script:FFToolsRejectedHighest = $null
             $script:FFToolsVersionReader = $null
         }
     }
@@ -96,18 +107,38 @@ Describe 'Resolve-FFToolsDefaultBase' {
     }
 
     It 'ignore une version < min' {
-        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-8.0.1-full_build' -VersionText '8.0.1'
+        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-7.1.0-full_build' -VersionText '7.1.0'
         if ($IsWindows) {
             InModuleScope 'Tetram.Media.FFmpeg' {
                 $script:FFToolsVersionReader = {
                     param($LiteralPath)
 
-                    [version]'8.0.1'
+                    [version]'7.1.0'
                 }
             }
         }
         $base = InModuleScope 'Tetram.Media.FFmpeg' { Resolve-FFToolsDefaultBase }
         $base | Should -BeNullOrEmpty
+    }
+
+    It 'rejette 9.0.0 et 9.0.1 et sélectionne une 8 acceptable' {
+        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-8.0.1-full_build' -VersionText '8.0.1'
+        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.0.0-full_build' -VersionText '9.0.0'
+        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.0.1-full_build' -VersionText '9.0.1'
+        if ($IsWindows) {
+            InModuleScope 'Tetram.Media.FFmpeg' {
+                $script:FFToolsVersionReader = {
+                    param($LiteralPath)
+
+                    if ($LiteralPath -match '9\.0\.1') { return [version]'9.0.1' }
+                    if ($LiteralPath -match '9\.0\.0') { return [version]'9.0.0' }
+                    if ($LiteralPath -match '8\.0\.1') { return [version]'8.0.1' }
+                    return $null
+                }
+            }
+        }
+        $base = InModuleScope 'Tetram.Media.FFmpeg' { Resolve-FFToolsDefaultBase }
+        $base | Should -Match 'ffmpeg-8\.0\.1-full_build[\\/]bin$'
     }
 
     It 'ignore un binaire sans version parsable' {
@@ -126,7 +157,7 @@ Describe 'Resolve-FFToolsDefaultBase' {
     }
 
     It 'ignore une build ffmpeg sans ffprobe et prend une build complète plus ancienne' {
-        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.0.1-full_build' -VersionText '9.0.1'
+        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-8.0.1-full_build' -VersionText '8.0.1'
         New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.1.0-full_build' -VersionText '9.1.0'
         $probeName = if ($IsWindows) { 'ffprobe.exe' } else { 'ffprobe' }
         Remove-Item -LiteralPath (Join-Path $script:TestRoot 'ffmpeg-9.1.0-full_build' 'bin' $probeName) -Force
@@ -136,23 +167,23 @@ Describe 'Resolve-FFToolsDefaultBase' {
                     param($LiteralPath)
 
                     if ($LiteralPath -match '9\.1\.0') { return [version]'9.1.0' }
-                    if ($LiteralPath -match '9\.0\.1') { return [version]'9.0.1' }
+                    if ($LiteralPath -match '8\.0\.1') { return [version]'8.0.1' }
                     return $null
                 }
             }
         }
         $base = InModuleScope 'Tetram.Media.FFmpeg' { Resolve-FFToolsDefaultBase }
-        $base | Should -Match 'ffmpeg-9\.0\.1-full_build[\\/]bin$'
+        $base | Should -Match 'ffmpeg-8\.0\.1-full_build[\\/]bin$'
     }
 
     It 'Get-FFmpegPath et Get-FfprobePath partagent le même bin' {
-        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.0.1-full_build' -VersionText '9.0.1'
+        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-8.0.1-full_build' -VersionText '8.0.1'
         if ($IsWindows) {
             InModuleScope 'Tetram.Media.FFmpeg' {
                 $script:FFToolsVersionReader = {
                     param($LiteralPath)
 
-                    [version]'9.0.1'
+                    [version]'8.0.1'
                 }
             }
         }
@@ -198,8 +229,29 @@ Describe 'Resolve-FFToolsDefaultBase' {
             New-Item -ItemType Directory -Path $script:FFToolsSearchRoot -Force | Out-Null
             $script:FFToolsBaseResolved = $false
             $script:FFToolsDefaultBase = $null
-            { Get-FFmpegPath } | Should -Throw -ExpectedMessage '*9.0.1*'
+            { Get-FFmpegPath } | Should -Throw -ExpectedMessage '*8.0.0*'
             { Get-FFmpegPath } | Should -Throw -ExpectedMessage '*Tetram.Media.FFmpeg*'
+            try { Get-FFmpegPath } catch { $_.Exception.Message | Should -Not -Match 'explicitement rejetée' }
+        }
+    }
+
+    It 'throw un message de rejet si la plus haute version trouvée est 9.0.1' {
+        New-FakeFFBuild -Root $script:TestRoot -FolderName 'ffmpeg-9.0.1-full_build' -VersionText '9.0.1'
+        if ($IsWindows) {
+            InModuleScope 'Tetram.Media.FFmpeg' {
+                $script:FFToolsVersionReader = {
+                    param($LiteralPath)
+
+                    [version]'9.0.1'
+                }
+            }
+        }
+        Mock -ModuleName Tetram.Media.FFmpeg Get-Command { $null } -ParameterFilter { $Name -eq 'ffmpeg' }
+        InModuleScope 'Tetram.Media.FFmpeg' {
+            { Get-FFmpegPath } | Should -Throw -ExpectedMessage '*introuvable*'
+            { Get-FFmpegPath } | Should -Throw -ExpectedMessage '*9.0.1*'
+            { Get-FFmpegPath } | Should -Throw -ExpectedMessage '*explicitement rejetée*'
+            { Get-FFmpegPath } | Should -Throw -ExpectedMessage '*parallélisation*'
         }
     }
 

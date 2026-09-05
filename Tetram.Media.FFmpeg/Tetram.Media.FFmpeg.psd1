@@ -27,7 +27,11 @@
     VariablesToExport = @()
 
     PrivateData = @{
-        FFToolsMinVersion = '9.0.1'
+        FFToolsMinVersion = '8.0.0'
+        FFToolsRejectedVersions = @{
+            '9.0.0' = 'bug de parallélisation qui peut corrompre le fichier final'
+            '9.0.1' = 'bug de parallélisation qui peut corrompre le fichier final'
+        }
         PSData = @{
             Tags = @(
                 'ffmpeg',
