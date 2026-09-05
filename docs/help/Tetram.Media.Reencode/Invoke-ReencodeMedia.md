@@ -95,7 +95,7 @@ Effet disque :
 
 Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-NoTranscode`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion` en réencodage normal. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
 
-ffmpeg/ffprobe : `-FFMPEGPath` / `-FFPROBEPath`, sinon dossier `Tetram.Media.FFmpeg\ffmpeg\` (build ffmpeg >= 9.0.1), sinon PATH. Ne pas utiliser `-FFToolsBase` pour pointer les binaires : le paramètre est validé mais ignoré.
+ffmpeg/ffprobe : `-FFMPEGPath` / `-FFPROBEPath`, sinon dossier `Tetram.Media.FFmpeg\ffmpeg\` (build ffmpeg >= 8.0.0, hors 9.0.0 et 9.0.1), sinon PATH. Ne pas utiliser `-FFToolsBase` pour pointer les binaires : le paramètre est validé mais ignoré.
 
 Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`). Une exception peut quand même écrire `reencode-errors.log`. `ConfirmImpact` est Medium : pas de prompt sauf `-Confirm`.
 
@@ -1190,7 +1190,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Prérequis : PowerShell 7+, module chargé depuis son `.psd1`. ffmpeg/ffprobe >= 9.0.1.
+Prérequis : PowerShell 7+, module chargé depuis son `.psd1`. ffmpeg/ffprobe >= 8.0.0 (hors 9.0.0 et 9.0.1).
 
 Audio hors MP4 : High/Medium → EAC3 ; Low → Opus (y compris avec une vidéo finale AV1).
 AV1 + AAC n'impose EAC3 qu'en High et Medium.

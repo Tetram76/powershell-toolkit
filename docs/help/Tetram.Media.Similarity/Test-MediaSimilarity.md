@@ -43,7 +43,7 @@ Résultat : objets pipeline `{ SourceFile, Matches: [{ TargetFile, Confidence }]
 
 Contraintes d'appel : `Get-ChildItem -Include` n'énumère les fichiers d'un dossier que si `-Recurse` est passé ou si `-Path` désigne déjà un contenu (ex. `D:\Media\*`). Sans cela, la commande peut ne trouver aucun fichier. Le bloc `process` écrase `$files`/`$results` : ne pas piper plusieurs chemins en attendant une fusion.
 
-ffmpeg : `Tetram.Media.FFmpeg\ffmpeg\` (build >= 9.0.1) puis PATH. `ConfirmImpact` non élevé : `-Confirm` seulement si demandé.
+ffmpeg : `Tetram.Media.FFmpeg\ffmpeg\` (build >= 8.0.0, hors 9.0.0 et 9.0.1) puis PATH. `ConfirmImpact` non élevé : `-Confirm` seulement si demandé.
 
 ## EXAMPLES
 
@@ -275,7 +275,7 @@ Propriétés : `SourceFile` (string), `Matches` (collection de `TargetFile`, `Co
 
 ## NOTES
 
-Prérequis : PowerShell 7+, ffmpeg >= 9.0.1. Comparaison O(n²) sur le nombre de signatures : coûteux sur de gros corpus.
+Prérequis : PowerShell 7+, ffmpeg >= 8.0.0 (hors 9.0.0 et 9.0.1). Comparaison O(n²) sur le nombre de signatures : coûteux sur de gros corpus.
 
 Ne pas faire : attendre une exception si ffmpeg manque ; interpréter l'absence d'objets comme un échec (souvent « 0 match » ou indexation seule) ; omettre `-Recurse` sur un chemin dossier sans joker.
 
