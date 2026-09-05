@@ -24,8 +24,8 @@ Invoke-ReencodeMedia [[-Path] <string[]>] [-Recurse] [-Sort <string>] [-ScanRead
  [-InputMasks <string[]>] [-VideoCodec <string>] [-ClearStreamsTitle] [-ForceRecodeVideo]
  [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>] [-UpscaleWidth <int>]
  [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion] [-AllowIntegrityMismatch]
- [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
- [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
+ [-SubTitlesToKeep <string[]>] [-RemoveAttachments] [-TempPath <string>] [-FFToolsBase <string>]
+ [-FFMPEGPath <string>] [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
 ```
 
 ### ReencodeFromFile
@@ -35,8 +35,8 @@ Invoke-ReencodeMedia -ListFile <string> [-UpdateList] [-Sort <string>] [-ScanRea
  [-InputMasks <string[]>] [-VideoCodec <string>] [-ClearStreamsTitle] [-ForceRecodeVideo]
  [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>] [-UpscaleWidth <int>]
  [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion] [-AllowIntegrityMismatch]
- [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
- [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
+ [-SubTitlesToKeep <string[]>] [-RemoveAttachments] [-TempPath <string>] [-FFToolsBase <string>]
+ [-FFMPEGPath <string>] [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
 ```
 
 ### NoTranscodeFromPath
@@ -44,8 +44,8 @@ Invoke-ReencodeMedia -ListFile <string> [-UpdateList] [-Sort <string>] [-ScanRea
 ```
 Invoke-ReencodeMedia [[-Path] <string[]>] -NoTranscode [-Recurse] [-Sort <string>]
  [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-ClearStreamsTitle]
- [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
- [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
+ [-SubTitlesToKeep <string[]>] [-RemoveAttachments] [-TempPath <string>] [-FFToolsBase <string>]
+ [-FFMPEGPath <string>] [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
 ```
 
 ### NoTranscodeFromFile
@@ -53,8 +53,8 @@ Invoke-ReencodeMedia [[-Path] <string[]>] -NoTranscode [-Recurse] [-Sort <string
 ```
 Invoke-ReencodeMedia -ListFile <string> -NoTranscode [-Recurse] [-UpdateList] [-Sort <string>]
  [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-ClearStreamsTitle]
- [-SubTitlesToKeep <string[]>] [-TempPath <string>] [-FFToolsBase <string>] [-FFMPEGPath <string>]
- [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
+ [-SubTitlesToKeep <string[]>] [-RemoveAttachments] [-TempPath <string>] [-FFToolsBase <string>]
+ [-FFMPEGPath <string>] [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
 ```
 
 ### CheckFromPath
@@ -81,8 +81,8 @@ Point d'entrée unique du module. Importer `.\Tetram.Media.Reencode` (PowerShell
 
 Choisir exactement un mode (jeux de paramètres exclusifs) :
 
-- réencodage normal (ni `-NoTranscode` ni `-CheckOnly`) : filtrage des flux indésirables et politiques de transformation habituelles ; le conteneur final est toujours `.mkv`.
-- `-NoTranscode` : même filtrage, métadonnées et attachments, mais aucun flux conservé n'est transcodé ; l'extension source est conservée. Ce n'est pas un « garder tous les flux » ni une immuabilité du fichier : des pistes peuvent être retirées, des métadonnées corrigées, et le fichier peut ne pas être réécrit s'il n'y a rien à faire.
+- réencodage normal (ni `-NoTranscode` ni `-CheckOnly`) : filtrage des flux indésirables (sous-titres, vignettes, et `-RemoveAttachments` si demandé) et politiques de transformation habituelles ; le conteneur final est toujours `.mkv`.
+- `-NoTranscode` : même filtrage (sous-titres, vignettes, et `-RemoveAttachments` si demandé), métadonnées et attachments, mais aucun flux conservé n'est transcodé ; l'extension source est conservée. Ce n'est pas un « garder tous les flux » ni une immuabilité du fichier : des pistes peuvent être retirées, des métadonnées corrigées, et le fichier peut ne pas être réécrit s'il n'y a rien à faire.
 - `-CheckOnly` : intermédiaire entre `-WhatIf` et un réencodage. Vérifie que ffmpeg peut décoder (muxer `null`) sans réencoder, remuxer ni remplacer le fichier média. Ce n'est pas un dry-run : les horodatages NFO (`premiered`) sont posés sur le fichier et éventuellement les dossiers, comme sur un run normal.
 
 Choisir exactement une source : `-Path` (défaut `.`) ou `-ListFile` (fichier texte, une entrée par ligne). Un chemin préfixé par `+` est parcouru récursivement même sans `-Recurse`.
@@ -155,6 +155,14 @@ Intention : continuer un réencodage malgré un mismatch de durée déjà détec
 
 ```powershell
 Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -AllowIntegrityMismatch
+```
+
+### Example 8: Retirer toutes les pièces jointes sans transcodage
+
+Intention : supprimer tous les flux ffprobe de type `attachment` (y compris les polices ASS) tout en copiant les autres flux conservés. Conserve l'extension source. Sans effet s'il n'y a aucun attachment et aucun autre travail.
+
+```powershell
+Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode -RemoveAttachments
 ```
 
 ## PARAMETERS
@@ -639,7 +647,10 @@ HelpMessage: ''
 ### -NoTranscode
 
 Filtrage, métadonnées et attachments sans transcoder les flux conservés.
-Conserve l'extension source. Jeu de paramètres exclusif.
+Conserve l'extension source. Avec `-RemoveAttachments`, tous les flux
+`attachment` sont retirés ; sans ce commutateur, la politique actuelle de
+conservation des attachments (polices ASS, etc.) reste inchangée.
+Jeu de paramètres exclusif.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter
@@ -756,6 +767,49 @@ ParameterSets:
   ValueFromPipelineByPropertyName: false
   ValueFromRemainingArguments: false
 - Name: CheckFromPath
+  Position: Named
+  IsRequired: false
+  ValueFromPipeline: false
+  ValueFromPipelineByPropertyName: false
+  ValueFromRemainingArguments: false
+DontShow: false
+AcceptedValues: []
+HelpMessage: ''
+```
+
+### -RemoveAttachments
+
+Supprime de la sortie tous les flux ffprobe de type `attachment`. Cette
+suppression s'applique également aux polices associées à des sous-titres ASS.
+Disponible en réencodage normal et en `-NoTranscode` ; absent de `-CheckOnly`.
+Sans ce commutateur, la politique de conservation actuelle des attachments
+reste inchangée.
+
+```yaml
+Type: System.Management.Automation.SwitchParameter
+DefaultValue: ''
+SupportsWildcards: false
+Aliases: []
+ParameterSets:
+- Name: NoTranscodeFromFile
+  Position: Named
+  IsRequired: false
+  ValueFromPipeline: false
+  ValueFromPipelineByPropertyName: false
+  ValueFromRemainingArguments: false
+- Name: NoTranscodeFromPath
+  Position: Named
+  IsRequired: false
+  ValueFromPipeline: false
+  ValueFromPipelineByPropertyName: false
+  ValueFromRemainingArguments: false
+- Name: ReencodeFromFile
+  Position: Named
+  IsRequired: false
+  ValueFromPipeline: false
+  ValueFromPipelineByPropertyName: false
+  ValueFromRemainingArguments: false
+- Name: ReencodeFromPath
   Position: Named
   IsRequired: false
   ValueFromPipeline: false

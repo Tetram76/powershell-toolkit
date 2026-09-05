@@ -14,8 +14,8 @@
 
 Choisir exactement un mode (jeux de paramètres exclusifs) :
 
-- réencodage normal (ni `-NoTranscode` ni `-CheckOnly`) : filtrage des flux indésirables et politiques de transformation habituelles ; le conteneur final est toujours `.mkv`.
-- `-NoTranscode` : même filtrage, métadonnées et attachments, mais aucun flux conservé n'est transcodé ; l'extension source est conservée. Ce n'est pas un « garder tous les flux » ni une immuabilité du fichier : des pistes peuvent être retirées, des métadonnées corrigées, et le fichier peut ne pas être réécrit s'il n'y a rien à faire.
+- réencodage normal (ni `-NoTranscode` ni `-CheckOnly`) : filtrage des flux indésirables (sous-titres, vignettes, et `-RemoveAttachments` si demandé) et politiques de transformation habituelles ; le conteneur final est toujours `.mkv`.
+- `-NoTranscode` : même filtrage (sous-titres, vignettes, et `-RemoveAttachments` si demandé), métadonnées et attachments, mais aucun flux conservé n'est transcodé ; l'extension source est conservée. Ce n'est pas un « garder tous les flux » ni une immuabilité du fichier : des pistes peuvent être retirées, des métadonnées corrigées, et le fichier peut ne pas être réécrit s'il n'y a rien à faire.
 - `-CheckOnly` : intermédiaire entre `-WhatIf` et un réencodage. Vérifie que ffmpeg peut décoder (muxer `null`) sans réencoder, remuxer ni remplacer le fichier média. Ce n'est pas un dry-run : les horodatages NFO (`premiered`) sont posés sur le fichier et éventuellement les dossiers, comme sur un run normal.
 
 Choisir exactement une source : `-Path` (défaut `.`) ou `-ListFile` (fichier texte, une entrée par ligne). Un chemin préfixé par `+` est parcouru récursivement même sans `-Recurse`.
@@ -164,6 +164,13 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>RemoveAttachments</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>TempPath</maml:name>
           <maml:description />
           <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
@@ -341,6 +348,13 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>RemoveAttachments</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>TempPath</maml:name>
           <maml:description />
           <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
@@ -447,6 +461,13 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
           <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
           <dev:type>
             <maml:name>System.String[]</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>RemoveAttachments</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
@@ -563,6 +584,13 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
           <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
           <dev:type>
             <maml:name>System.String[]</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>RemoveAttachments</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
           </dev:type>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
@@ -945,7 +973,10 @@ mode `-NoTranscode`.</maml:para>
         <maml:name>NoTranscode</maml:name>
         <maml:description>
           <maml:para>Filtrage, métadonnées et attachments sans transcoder les flux conservés.
-Conserve l'extension source. Jeu de paramètres exclusif.</maml:para>
+Conserve l'extension source. Avec `-RemoveAttachments`, tous les flux
+`attachment` sont retirés ; sans ce commutateur, la politique actuelle de
+conservation des attachments (polices ASS, etc.) reste inchangée.
+Jeu de paramètres exclusif.</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -978,6 +1009,19 @@ AV1 + AAC → EAC3 ne s'applique qu'en High et Medium.</maml:para>
         <maml:name>Recurse</maml:name>
         <maml:description>
           <maml:para>Parcourt les sous-dossiers. Sur `-ListFile`, disponible uniquement avec `-NoTranscode`.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>RemoveAttachments</maml:name>
+        <maml:description>
+          <maml:para>Supprime de la sortie tous les flux ffprobe de type `attachment`. Cette
+suppression s'applique également aux polices associées à des sous-titres ASS.
+Disponible en réencodage normal et en `-NoTranscode` ; absent de `-CheckOnly`.
+Sans ce commutateur, la politique de conservation actuelle des attachments
+reste inchangée.</maml:para>
         </maml:description>
         <dev:type>
           <maml:name>System.Management.Automation.SwitchParameter</maml:name>
@@ -1153,6 +1197,14 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
         <dev:code>Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -AllowIntegrityMismatch</dev:code>
         <dev:remarks>
           <maml:para>Intention : continuer un réencodage malgré un mismatch de durée déjà détecté. Ce n'est pas le comportement recommandé par défaut : le contrôle s'exécute toujours, l'écart est signalé en warning, et la sortie remplace l'original. Sans effet en `-NoTranscode` ni `-CheckOnly`.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 8: Retirer toutes les pièces jointes sans transcodage ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode -RemoveAttachments</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : supprimer tous les flux ffprobe de type `attachment` (y compris les polices ASS) tout en copiant les autres flux conservés. Conserve l'extension source. Sans effet s'il n'y a aucun attachment et aucun autre travail.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

@@ -936,6 +936,114 @@ Describe 'Select-AttachmentStreams' {
     }
 }
 
+Describe 'Select-AttachmentStreams — RemoveAttachments' {
+
+    It 'conserve une police TTF/OTF lorsque ASS est présent et RemoveAttachments est faux' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = 'otf'; tags = @{ mimetype = $null; filename = 'Deja.otf' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams `
+                -FfprobeOutput $FfprobeOutput `
+                -HasAssSubtitles $true `
+                -RemoveAttachments $false
+            @($tracks).Count | Should -Be 1
+            $tracks[0].__copy | Should -BeTrue
+            $tracks[0].__process | Should -BeFalse
+        }
+    }
+
+    It 'supprime une police même si un sous-titre ASS conservé est présent' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = 'otf'; tags = @{ mimetype = $null; filename = 'Deja.otf' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams `
+                -FfprobeOutput $FfprobeOutput `
+                -HasAssSubtitles $true `
+                -RemoveAttachments $true
+            @($tracks).Count | Should -Be 1
+            $tracks[0].__copy | Should -BeFalse
+            $tracks[0].__process | Should -BeFalse
+        }
+    }
+
+    It 'supprime un attachment non-police' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = 'mjpeg'; tags = @{ filename = 'cover.jpg' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams `
+                -FfprobeOutput $FfprobeOutput `
+                -HasAssSubtitles $false `
+                -RemoveAttachments $true
+            @($tracks).Count | Should -Be 1
+            $tracks[0].__copy | Should -BeFalse
+            $tracks[0].__process | Should -BeFalse
+        }
+    }
+
+    It 'supprime tous les attachments hétérogènes' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = 'ttf'; tags = @{ filename = 'Arial.ttf' } }
+                @{ codec_type = 'attachment'; codec_name = $null; tags = @{ mimetype = 'application/x-truetype-font'; filename = 'Subtitle.woff' } }
+                @{ codec_type = 'attachment'; codec_name = 'mjpeg'; tags = @{ filename = 'cover.jpg' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = @(Select-AttachmentStreams `
+                    -FfprobeOutput $FfprobeOutput `
+                    -HasAssSubtitles $true `
+                    -RemoveAttachments $true)
+            $tracks.Count | Should -Be 3
+            foreach ($track in $tracks)
+            {
+                $track.__copy | Should -BeFalse
+                $track.__process | Should -BeFalse
+            }
+        }
+    }
+
+    It 'ne corrige pas le mimetype d''un attachment destiné à être supprimé' {
+        $ffprobe = @{
+            streams = @(
+                @{ codec_type = 'attachment'; codec_name = $null; tags = @{ mimetype = 'application/x-truetype-font'; filename = 'Arial' } }
+            )
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+            param($FfprobeOutput)
+
+            $tracks = Select-AttachmentStreams `
+                -FfprobeOutput $FfprobeOutput `
+                -HasAssSubtitles $true `
+                -RemoveAttachments $true
+            $tracks[0].__copy | Should -BeFalse
+            $tracks[0].__process | Should -BeFalse
+            $tracks[0].PSObject.Properties.Name | Should -Not -Contain '__targetMimetype'
+        }
+    }
+}
+
 Describe 'Select-VideoStreams — color_space' {
 
     It 'conserve color_space=gbr sur chaque VideoTrack' {

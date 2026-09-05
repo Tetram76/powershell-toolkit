@@ -13,6 +13,7 @@ BeforeAll {
         param(
             [bool] $NoTranscode = $false,
             [bool] $AllowIntegrityMismatch = $false,
+            [bool] $RemoveAttachments = $false,
             [string] $Quality = 'Medium',
             [string] $VideoCodec = 'HEVC'
         )
@@ -21,6 +22,7 @@ BeforeAll {
             CheckOnly                = $false
             NoTranscode              = $NoTranscode
             AllowIntegrityMismatch   = $AllowIntegrityMismatch
+            RemoveAttachments        = $RemoveAttachments
             ForceRecodeVideo         = $false
             VideoCodec               = $VideoCodec
             AllowVideoCodecUpgrade   = $false
@@ -311,6 +313,121 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
 
         $script:InfoLogs | Should -Not -Contain "Skip '$file' that does not look like a convertable format"
         $script:FfmpegOutputFiles.Count | Should -Be 1
+    }
+
+    It 'lance ffmpeg en NoTranscode lorsque RemoveAttachments retire le seul attachment' {
+        $file = Join-Path $TestDrive 'drop-attach.mkv'
+        Set-Content -LiteralPath $file -Value 'x'
+        $script:CapturedDynamicArgs = @()
+
+        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+            @{
+                format  = @{ duration = '10.0' }
+                streams = @(
+                    (New-HevcStream)
+                    (New-AacStream)
+                    @{ codec_type = 'attachment'; codec_name = 'mjpeg'; tags = @{ filename = 'cover.jpg' } }
+                )
+            }
+        }
+        Mock -ModuleName Tetram.Media.Reencode Invoke-FFmpeg {
+            param($OutputFile, $DynamicArgs)
+            if ($OutputFile)
+            {
+                [void]$script:FfmpegOutputFiles.Add($OutputFile)
+            }
+            $script:CapturedDynamicArgs = @($DynamicArgs)
+            return $true
+        }
+
+        Invoke-ReencodeFileUnderTest `
+            -Filename $file `
+            -Config (New-ReencodeFileTestConfig -NoTranscode $true -RemoveAttachments $true) `
+            -TempPath $TestDrive
+
+        $script:FfmpegOutputFiles.Count | Should -Be 1
+        [System.IO.Path]::GetExtension($script:FfmpegOutputFiles[0]) | Should -BeExactly '.mkv'
+        ($script:CapturedDynamicArgs -join ' ') | Should -Not -Match '0:t:'
+    }
+
+    It 'lance ffmpeg en réencodage normal lorsque RemoveAttachments retire le seul attachment' {
+        $file = Join-Path $TestDrive 'drop-attach-reencode.mkv'
+        Set-Content -LiteralPath $file -Value 'x'
+
+        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+            @{
+                format  = @{ duration = '10.0' }
+                streams = @(
+                    (New-HevcStream)
+                    (New-AacStream)
+                    @{ codec_type = 'attachment'; codec_name = 'mjpeg'; tags = @{ filename = 'cover.jpg' } }
+                )
+            }
+        }
+
+        Invoke-ReencodeFileUnderTest `
+            -Filename $file `
+            -Config (New-ReencodeFileTestConfig -RemoveAttachments $true) `
+            -TempPath $TestDrive
+
+        $script:FfmpegOutputFiles.Count | Should -Be 1
+        [System.IO.Path]::GetExtension($script:FfmpegOutputFiles[0]) | Should -BeExactly '.mkv'
+    }
+
+    It 'ne déclenche pas de réécriture si RemoveAttachments est actif sans attachment' {
+        $file = Join-Path $TestDrive 'no-attach.mkv'
+        Set-Content -LiteralPath $file -Value 'x'
+
+        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+            @{
+                format  = @{ duration = '10.0' }
+                streams = @((New-HevcStream), (New-AacStream))
+            }
+        }
+
+        Invoke-ReencodeFileUnderTest `
+            -Filename $file `
+            -Config (New-ReencodeFileTestConfig -RemoveAttachments $true) `
+            -TempPath $TestDrive
+
+        $script:FfmpegOutputFiles.Count | Should -Be 0
+        $script:InfoLogs | Should -Contain "No reencoding needed for '$file'"
+
+        $script:InfoLogs.Clear()
+        $fileNoTranscode = Join-Path $TestDrive 'no-attach-nt.mkv'
+        Set-Content -LiteralPath $fileNoTranscode -Value 'x'
+
+        Invoke-ReencodeFileUnderTest `
+            -Filename $fileNoTranscode `
+            -Config (New-ReencodeFileTestConfig -NoTranscode $true -RemoveAttachments $true) `
+            -TempPath $TestDrive
+
+        $script:FfmpegOutputFiles.Count | Should -Be 0
+        $script:InfoLogs | Should -Contain "No stream filtering needed for '$fileNoTranscode'"
+    }
+
+    It 'conserve un attachment non-police sans le switch, sans réécriture' {
+        $file = Join-Path $TestDrive 'keep-attach.mkv'
+        Set-Content -LiteralPath $file -Value 'x'
+
+        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+            @{
+                format  = @{ duration = '10.0' }
+                streams = @(
+                    (New-HevcStream)
+                    (New-AacStream)
+                    @{ codec_type = 'attachment'; codec_name = 'mjpeg'; tags = @{ filename = 'cover.jpg' } }
+                )
+            }
+        }
+
+        Invoke-ReencodeFileUnderTest `
+            -Filename $file `
+            -Config (New-ReencodeFileTestConfig -RemoveAttachments $false) `
+            -TempPath $TestDrive
+
+        $script:FfmpegOutputFiles.Count | Should -Be 0
+        $script:InfoLogs | Should -Contain "No reencoding needed for '$file'"
     }
 }
 
