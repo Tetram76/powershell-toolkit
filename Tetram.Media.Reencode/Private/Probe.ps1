@@ -72,14 +72,41 @@ function Get-DurationFromFormat
 }
 
 
-function Get-DurationFromStreams
+function Get-ParsedDurationSeconds
+{
+    param($Value)
+    if ($null -eq $Value)
+    {
+        return $null
+    }
+    $ds = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($ds))
+    {
+        return $null
+    }
+    try
+    {
+        $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
+        # 0 est une durée mesurée (flux vide / tronqué), pas une métadonnée absente.
+        if ($sec -ge 0)
+        {
+            return $sec
+        }
+    }
+    catch
+    {
+    }
+    return $null
+}
+
+function Get-ProbeStreamByRelativeIndex
 {
     param(
         [hashtable] $Probe,
-        [int[]] $KeptSourceVideoIndices = $null,
-        [int[]] $KeptSourceAudioIndices = $null
+        [string] $CodecType,
+        [int] $TypeRelativeIndex
     )
-    if ($null -eq $Probe)
+    if ($null -eq $Probe -or $TypeRelativeIndex -lt 0)
     {
         return $null
     }
@@ -88,57 +115,35 @@ function Get-DurationFromStreams
     {
         return $null
     }
-    $arr = @($streams)
-    foreach ($prefer in @('video', 'audio'))
+    $relIdx = -1
+    foreach ($s in @($streams))
     {
-        $kept = if ($prefer -eq 'video')
+        if (-not ($s -is [hashtable]) -or $s['codec_type'] -ne $CodecType)
         {
-            $KeptSourceVideoIndices
+            continue
         }
-        else
+        $relIdx++
+        if ($relIdx -eq $TypeRelativeIndex)
         {
-            $KeptSourceAudioIndices
-        }
-        $relIdx = -1
-        foreach ($s in $arr)
-        {
-            if (-not ($s -is [hashtable]))
-            {
-                continue
-            }
-            if ($s['codec_type'] -ne $prefer)
-            {
-                continue
-            }
-            $relIdx++
-            if ($null -ne $kept -and -not ($kept -contains $relIdx))
-            {
-                continue
-            }
-            $d = $s['duration']
-            if ($null -eq $d)
-            {
-                continue
-            }
-            $ds = [string]$d
-            if ( [string]::IsNullOrWhiteSpace($ds))
-            {
-                continue
-            }
-            try
-            {
-                $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
-                if ($sec -gt 0)
-                {
-                    return $sec
-                }
-            }
-            catch
-            {
-            }
+            return $s
         }
     }
     return $null
+}
+
+function Get-DurationFromSpecificStream
+{
+    param(
+        [hashtable] $Probe,
+        [string] $CodecType,
+        [int] $TypeRelativeIndex
+    )
+    $stream = Get-ProbeStreamByRelativeIndex -Probe $Probe -CodecType $CodecType -TypeRelativeIndex $TypeRelativeIndex
+    if ($null -eq $stream)
+    {
+        return $null
+    }
+    return Get-ParsedDurationSeconds -Value $stream['duration']
 }
 
 function ConvertTo-DurationSeconds
@@ -158,7 +163,7 @@ function ConvertTo-DurationSeconds
     {
         $ts = [TimeSpan]::Parse($s, [cultureinfo]::InvariantCulture)
         $sec = $ts.TotalSeconds
-        if ($sec -gt 0)
+        if ($sec -ge 0)
         {
             return $sec
         }
@@ -169,67 +174,47 @@ function ConvertTo-DurationSeconds
     return $null
 }
 
-function Get-DurationFromTags
+function Get-DurationFromSpecificStreamTag
 {
     param(
         [hashtable] $Probe,
-        [int[]] $KeptSourceVideoIndices = $null,
-        [int[]] $KeptSourceAudioIndices = $null
+        [string] $CodecType,
+        [int] $TypeRelativeIndex
     )
-    if ($null -eq $Probe)
+    $stream = Get-ProbeStreamByRelativeIndex -Probe $Probe -CodecType $CodecType -TypeRelativeIndex $TypeRelativeIndex
+    if ($null -eq $stream)
     {
         return $null
     }
-    $streams = $Probe['streams']
-    if ($null -eq $streams)
+    $tags = $stream['tags']
+    if (-not ($tags -is [hashtable]))
     {
         return $null
     }
-    $arr = @($streams)
-    foreach ($prefer in @('video', 'audio'))
+    # ContainsKey est insensible à la casse : DURATION et duration sont la même entrée.
+    if ($tags.ContainsKey('DURATION'))
     {
-        $kept = if ($prefer -eq 'video')
-        {
-            $KeptSourceVideoIndices
-        }
-        else
-        {
-            $KeptSourceAudioIndices
-        }
-        $relIdx = -1
-        foreach ($s in $arr)
-        {
-            if (-not ($s -is [hashtable]) -or $s['codec_type'] -ne $prefer)
-            {
-                continue
-            }
-            $relIdx++
-            if ($null -ne $kept -and -not ($kept -contains $relIdx))
-            {
-                continue
-            }
-            $tags = $s['tags']
-            if (-not ($tags -is [hashtable]))
-            {
-                continue
-            }
-            $dur = $null
-            foreach ($key in @('DURATION', 'duration'))
-            {
-                if ( $tags.ContainsKey($key))
-                {
-                    $dur = $tags[$key]; break
-                }
-            }
-            if ($null -ne $dur)
-            {
-                $parsed = ConvertTo-DurationSeconds -Tag ([string]$dur)
-                if ($null -ne $parsed)
-                {
-                    return $parsed
-                }
-            }
-        }
+        return ConvertTo-DurationSeconds -Tag ([string]$tags['DURATION'])
+    }
+    return $null
+}
+
+function Get-DurationForStreamMetadata
+{
+    param(
+        [hashtable] $Probe,
+        [string] $CodecType,
+        [int] $TypeRelativeIndex
+    )
+    $streamDuration = Get-DurationFromSpecificStream -Probe $Probe -CodecType $CodecType -TypeRelativeIndex $TypeRelativeIndex
+    if ($null -ne $streamDuration)
+    {
+        return [pscustomobject]@{ Method = 'stream'; Duration = $streamDuration }
+    }
+    $tagDuration = Get-DurationFromSpecificStreamTag -Probe $Probe -CodecType $CodecType -TypeRelativeIndex $TypeRelativeIndex
+    if ($null -ne $tagDuration)
+    {
+        return [pscustomobject]@{ Method = 'tag'; Duration = $tagDuration }
     }
     return $null
 }
@@ -324,85 +309,180 @@ function Get-DurationFromPacketCount
     }
 }
 
-function Get-ComparableDurationPair
+function Get-ComparableStreamDurationPair
 {
     param(
-        [Parameter(Mandatory)] [string] $FFPROBE,
-        [Parameter(Mandatory)] [hashtable] $SourceProbe,
-        [Parameter(Mandatory)] [string] $SourceFile,
-        [Parameter(Mandatory)] [string] $TempFile,
-        [int[]] $KeptSourceVideoIndices = $null,
-        [int[]] $KeptSourceAudioIndices = $null
+        [hashtable] $SourceProbe,
+        [hashtable] $TempProbe,
+        [string] $CodecType,
+        [int] $SourceRelativeIndex,
+        [int] $OutputRelativeIndex,
+        [string] $FFPROBE,
+        [string] $SourceFile,
+        [string] $TempFile
     )
 
-    [hashtable]$tempProbe = $null
-
-    $s = Get-DurationFromFormat -Probe $SourceProbe
-    if ($null -ne $s)
+    $outputStream = Get-ProbeStreamByRelativeIndex -Probe $TempProbe -CodecType $CodecType -TypeRelativeIndex $OutputRelativeIndex
+    if ($null -eq $outputStream)
     {
-        $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile
-        $t = Get-DurationFromFormat -Probe $tempProbe
-        if ($null -ne $t)
+        $sourceMeta = Get-DurationForStreamMetadata -Probe $SourceProbe -CodecType $CodecType -TypeRelativeIndex $SourceRelativeIndex
+        $sourceDuration = if ($null -ne $sourceMeta) { $sourceMeta.Duration } else { $null }
+        return [pscustomobject]@{ Method = 'stream'; Source = $sourceDuration; Temp = $null; OutputMissing = $true }
+    }
+
+    # stream.duration et tag DURATION du même flux mappé désignent la même grandeur ;
+    # les conteneurs ne l'exposent pas par le même canal (mp4 vs mkv).
+    $sourceMeta = Get-DurationForStreamMetadata -Probe $SourceProbe -CodecType $CodecType -TypeRelativeIndex $SourceRelativeIndex
+    $tempMeta = Get-DurationForStreamMetadata -Probe $TempProbe -CodecType $CodecType -TypeRelativeIndex $OutputRelativeIndex
+    if ($null -ne $sourceMeta -and $null -ne $tempMeta)
+    {
+        $method = if ($sourceMeta.Method -eq $tempMeta.Method) { $sourceMeta.Method } else { 'stream' }
+        return [pscustomobject]@{ Method = $method; Source = $sourceMeta.Duration; Temp = $tempMeta.Duration; OutputMissing = $false }
+    }
+
+    if ($CodecType -eq 'video')
+    {
+        $sourceDuration = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $SourceFile -StreamIndex $SourceRelativeIndex
+        $tempDuration = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $TempFile -StreamIndex $OutputRelativeIndex
+        if ($null -ne $sourceDuration -and $null -ne $tempDuration)
         {
-            return [pscustomobject]@{ Method = 'format'; Source = $s; Temp = $t }
+            return [pscustomobject]@{ Method = 'count'; Source = $sourceDuration; Temp = $tempDuration; OutputMissing = $false }
         }
     }
 
-    $s = Get-DurationFromStreams -Probe $SourceProbe -KeptSourceVideoIndices $KeptSourceVideoIndices -KeptSourceAudioIndices $KeptSourceAudioIndices
-    if ($null -ne $s)
+    return $null
+}
+
+function Get-DurationComparison
+{
+    param(
+        [double] $Expected,
+        [double] $Actual,
+        [double] $TolerancePercent,
+        [double] $ToleranceSecondsMin
+    )
+    $diff = [math]::Abs($Expected - $Actual)
+    $tolerance = [math]::Max($ToleranceSecondsMin, $Expected * $TolerancePercent / 100.0)
+    [pscustomobject]@{
+        Diff = $diff
+        IsMismatch = ($diff -gt $tolerance)
+    }
+}
+
+function New-IntegrityCheckResult
+{
+    param(
+        [string] $Status,
+        [string] $Method,
+        $Expected = $null,
+        $Actual = $null,
+        $Diff = $null,
+        [string] $StreamType = $null,
+        $SourceRelativeIndex = $null,
+        $OutputRelativeIndex = $null
+    )
+    [pscustomobject]@{
+        Status = $Status
+        Method = $Method
+        Expected = $Expected
+        Actual = $Actual
+        Diff = $Diff
+        StreamType = $StreamType
+        SourceRelativeIndex = $SourceRelativeIndex
+        OutputRelativeIndex = $OutputRelativeIndex
+    }
+}
+
+function Get-IntegrityStreamMapLabel
+{
+    param(
+        [string] $StreamType,
+        $SourceRelativeIndex,
+        $OutputRelativeIndex
+    )
+    if ([string]::IsNullOrWhiteSpace($StreamType) -or $null -eq $SourceRelativeIndex -or $null -eq $OutputRelativeIndex)
     {
-        if ($null -eq $tempProbe)
+        return $null
+    }
+    $letter = switch ($StreamType)
+    {
+        'video' { 'v' }
+        'audio' { 'a' }
+        'subtitle' { 's' }
+        default { $null }
+    }
+    if ($null -eq $letter)
+    {
+        return $null
+    }
+    return ('source 0:{0}:{1} -> output 0:{0}:{2}' -f $letter, [int]$SourceRelativeIndex, [int]$OutputRelativeIndex)
+}
+
+function Find-KeptStreamDurationMismatch
+{
+    param(
+        [string] $CodecType,
+        [int[]] $KeptIndices,
+        [hashtable] $SourceProbe,
+        [hashtable] $TempProbe,
+        [string] $FFPROBE,
+        [string] $SourceFile,
+        [string] $TempFile,
+        [double] $TolerancePercent,
+        [double] $ToleranceSecondsMin,
+        [ref] $HadUnknownStream,
+        [ref] $LastOk
+    )
+
+    # Copie vers List[int] plutôt que `$kept = if (...) { @() } else { @($KeptIndices) }` :
+    # l'expression `if` déballe un tableau à un élément, et `.Count` lève sous StrictMode.
+    $kept = [System.Collections.Generic.List[int]]::new()
+    if ($null -ne $KeptIndices)
+    {
+        foreach ($idx in $KeptIndices)
         {
-            $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile
+            $kept.Add([int]$idx)
         }
-        $t = Get-DurationFromStreams -Probe $tempProbe
-        if ($null -ne $t)
+    }
+    for ($outputRelativeIndex = 0; $outputRelativeIndex -lt $kept.Count; $outputRelativeIndex++)
+    {
+        $sourceRelativeIndex = [int]$kept[$outputRelativeIndex]
+        $pair = Get-ComparableStreamDurationPair `
+            -SourceProbe $SourceProbe `
+            -TempProbe $TempProbe `
+            -CodecType $CodecType `
+            -SourceRelativeIndex $sourceRelativeIndex `
+            -OutputRelativeIndex $outputRelativeIndex `
+            -FFPROBE $FFPROBE `
+            -SourceFile $SourceFile `
+            -TempFile $TempFile
+        if ($null -eq $pair)
         {
-            return [pscustomobject]@{ Method = 'stream'; Source = $s; Temp = $t }
+            # Un flux indéterminable ne doit pas masquer un mismatch plus loin.
+            $HadUnknownStream.Value = $true
+            continue
         }
+        if ($pair.OutputMissing)
+        {
+            return New-IntegrityCheckResult -Status 'mismatch' -Method $pair.Method -Expected $pair.Source -Actual $null `
+                -StreamType $CodecType -SourceRelativeIndex $sourceRelativeIndex -OutputRelativeIndex $outputRelativeIndex
+        }
+
+        $streamCmp = Get-DurationComparison `
+            -Expected $pair.Source `
+            -Actual $pair.Temp `
+            -TolerancePercent $TolerancePercent `
+            -ToleranceSecondsMin $ToleranceSecondsMin
+        if ($streamCmp.IsMismatch)
+        {
+            return New-IntegrityCheckResult -Status 'mismatch' -Method $pair.Method -Expected $pair.Source -Actual $pair.Temp -Diff $streamCmp.Diff `
+                -StreamType $CodecType -SourceRelativeIndex $sourceRelativeIndex -OutputRelativeIndex $outputRelativeIndex
+        }
+        $LastOk.Value = New-IntegrityCheckResult -Status 'ok' -Method $pair.Method -Expected $pair.Source -Actual $pair.Temp -Diff $streamCmp.Diff `
+            -StreamType $CodecType -SourceRelativeIndex $sourceRelativeIndex -OutputRelativeIndex $outputRelativeIndex
     }
 
-    $s = Get-DurationFromTags -Probe $SourceProbe -KeptSourceVideoIndices $KeptSourceVideoIndices -KeptSourceAudioIndices $KeptSourceAudioIndices
-    if ($null -ne $s)
-    {
-        if ($null -eq $tempProbe)
-        {
-            $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile
-        }
-        $t = Get-DurationFromTags -Probe $tempProbe
-        if ($null -ne $t)
-        {
-            return [pscustomobject]@{ Method = 'tag'; Source = $s; Temp = $t }
-        }
-    }
-
-    $srcVideoIdx = if ($null -ne $KeptSourceVideoIndices -and $KeptSourceVideoIndices.Count -gt 0)
-    {
-        $KeptSourceVideoIndices[0]
-    }
-    elseif ($null -eq $KeptSourceVideoIndices)
-    {
-        0
-    }
-    else
-    {
-        $null
-    }
-
-    if ($null -ne $srcVideoIdx)
-    {
-        $s = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $SourceFile -StreamIndex $srcVideoIdx
-        if ($null -ne $s)
-        {
-            $t = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $TempFile -StreamIndex 0
-            if ($null -ne $t)
-            {
-                return [pscustomobject]@{ Method = 'count'; Source = $s; Temp = $t }
-            }
-        }
-    }
-
-    return [pscustomobject]@{ Method = 'unknown'; Source = $null; Temp = $null }
+    return $null
 }
 
 function Test-EncodedFileIntegrity
@@ -415,48 +495,69 @@ function Test-EncodedFileIntegrity
         [double] $TolerancePercent = 0.5,
         [double] $ToleranceSecondsMin = 1.0,
         [int[]] $KeptSourceVideoIndices = $null,
-        [int[]] $KeptSourceAudioIndices = $null
+        [int[]] $KeptSourceAudioIndices = $null,
+        [int[]] $KeptSourceSubtitleIndices = $null
     )
 
-    $pair = Get-ComparableDurationPair `
-        -FFPROBE $FFPROBE `
-        -SourceProbe $SourceProbe `
-        -SourceFile $SourceFile `
-        -TempFile $TempFile `
-        -KeptSourceVideoIndices $KeptSourceVideoIndices `
-        -KeptSourceAudioIndices $KeptSourceAudioIndices
-
-    if ($pair.Method -eq 'unknown')
+    $tempProbe = Get-FFprobeJson -FFPROBE $FFPROBE -File $TempFile
+    if ($null -eq $tempProbe)
     {
-        return [pscustomobject]@{
-            Status = 'unknown'
-            Method = 'unknown'
-            Expected = $null
-            Actual = $null
-            Diff = $null
+        return New-IntegrityCheckResult -Status 'mismatch' -Method 'probe'
+    }
+
+    # format.duration prouve un média incorrect, jamais qu'il est complet.
+    $lastOk = $null
+    $sourceFormat = Get-DurationFromFormat -Probe $SourceProbe
+    $tempFormat = Get-DurationFromFormat -Probe $tempProbe
+    if ($null -ne $sourceFormat -and $null -ne $tempFormat)
+    {
+        $formatCmp = Get-DurationComparison `
+            -Expected $sourceFormat `
+            -Actual $tempFormat `
+            -TolerancePercent $TolerancePercent `
+            -ToleranceSecondsMin $ToleranceSecondsMin
+        if ($formatCmp.IsMismatch)
+        {
+            return New-IntegrityCheckResult -Status 'mismatch' -Method 'format' -Expected $sourceFormat -Actual $tempFormat -Diff $formatCmp.Diff
         }
     }
 
-    $expected = $pair.Source
-    $actual = $pair.Temp
-    $tolerance = [math]::Max($ToleranceSecondsMin, $expected * $TolerancePercent / 100.0)
-    $diff = [math]::Abs($expected - $actual)
-    if ($diff -gt $tolerance)
+    $hadUnknownStream = $false
+    $streamTypeArgs = @{
+        SourceProbe = $SourceProbe
+        TempProbe = $tempProbe
+        FFPROBE = $FFPROBE
+        SourceFile = $SourceFile
+        TempFile = $TempFile
+        TolerancePercent = $TolerancePercent
+        ToleranceSecondsMin = $ToleranceSecondsMin
+        HadUnknownStream = [ref]$hadUnknownStream
+        LastOk = [ref]$lastOk
+    }
+    foreach ($codecType in @('video', 'audio', 'subtitle'))
     {
-        return [pscustomobject]@{
-            Status = 'mismatch'
-            Method = $pair.Method
-            Expected = $expected
-            Actual = $actual
-            Diff = $diff
+        $keptIndices = switch ($codecType)
+        {
+            'video' { $KeptSourceVideoIndices }
+            'audio' { $KeptSourceAudioIndices }
+            'subtitle' { $KeptSourceSubtitleIndices }
+        }
+        $mismatch = Find-KeptStreamDurationMismatch @streamTypeArgs -CodecType $codecType -KeptIndices $keptIndices
+        if ($null -ne $mismatch)
+        {
+            return $mismatch
         }
     }
 
-    return [pscustomobject]@{
-        Status = 'ok'
-        Method = $pair.Method
-        Expected = $expected
-        Actual = $actual
-        Diff = $diff
+    if ($hadUnknownStream)
+    {
+        return New-IntegrityCheckResult -Status 'unknown' -Method 'unknown'
     }
+
+    if ($null -ne $lastOk)
+    {
+        return $lastOk
+    }
+
+    return New-IntegrityCheckResult -Status 'unknown' -Method 'unknown'
 }

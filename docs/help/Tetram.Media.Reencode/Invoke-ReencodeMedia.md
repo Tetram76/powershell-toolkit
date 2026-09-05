@@ -4,7 +4,7 @@ external help file: Tetram.Media.Reencode-Help.xml
 HelpUri: ''
 Locale: fr-FR
 Module Name: Tetram.Media.Reencode
-ms.date: 09/04/2026
+ms.date: 09/05/2026
 PlatyPS schema version: 2024-05-01
 title: Invoke-ReencodeMedia
 ---
@@ -91,7 +91,7 @@ Effet disque :
 
 - `-WhatIf` : pas de réécriture média, pas de timestamps NFO. N'est pas un silence disque total : une exception fichier (catch de `Invoke-ReencodeFile`) append `reencode-errors.log` dans le répertoire courant, sans `ShouldProcess`.
 - `-CheckOnly` (sans `-WhatIf`) : pas de temporaire ffmpeg, pas de `Move-Item` / `Rename-Item` sur le média. Les timestamps NFO (`premiered`) sont malgré tout appliqués. Un échec ffmpeg est journalisé dans `reencode-errors.log`.
-- réencodage / `-NoTranscode` : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin (réencodage vers `.mkv`). Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). En réencodage, un écart de durée au-delà de max(1 s, 0,5 %) rejette la sortie et conserve l'original par défaut ; avec `-AllowIntegrityMismatch`, le même écart reste détecté et signalé, mais devient un avertissement non bloquant et la sortie est acceptée. `-NoTranscode` n'exécute pas ce contrôle de durée.
+- réencodage / `-NoTranscode` : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin (réencodage vers `.mkv`). Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). En réencodage, un écart de durée au-delà de max(1 s, 0,5 %), un fichier de sortie que ffprobe ne peut pas sonder, ou un flux mappé absent de la sortie, rejettent la sortie et conservent l'original par défaut ; avec `-AllowIntegrityMismatch`, le même mismatch reste détecté et signalé, mais devient un avertissement non bloquant et la sortie est acceptée. `-NoTranscode` n'exécute pas ce contrôle.
 
 Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-NoTranscode`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion` en réencodage normal. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
 
@@ -149,9 +149,9 @@ Intention : récursion ciblée. Le `+` s'applique à cette entrée seulement.
 Invoke-ReencodeMedia -Path '+D:\Media\Shows'
 ```
 
-### Example 7: Accepter explicitement un écart d'intégrité de durée
+### Example 7: Accepter explicitement un mismatch d'intégrité
 
-Intention : continuer un réencodage malgré un mismatch de durée déjà détecté. Ce n'est pas le comportement recommandé par défaut : le contrôle s'exécute toujours, l'écart est signalé en warning, et la sortie remplace l'original. Sans effet en `-NoTranscode` ni `-CheckOnly`.
+Intention : continuer un réencodage malgré un mismatch déjà détecté (écart de durée, probe de sortie impossible, ou flux mappé manquant). Ce n'est pas le comportement recommandé par défaut : le contrôle s'exécute toujours, le mismatch est signalé en warning, et la sortie remplace l'original. Sans effet en `-NoTranscode` ni `-CheckOnly`.
 
 ```powershell
 Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -AllowIntegrityMismatch
@@ -169,13 +169,14 @@ Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode -RemoveAttachments
 
 ### -AllowIntegrityMismatch
 
-En réencodage réel uniquement. Par défaut, un écart de durée supérieur à la
-tolérance d'intégrité (max 1 s ou 0,5 %) rejette la sortie et conserve
-l'original. Avec ce commutateur, le même écart reste détecté et affiché, mais
-devient un avertissement non bloquant : le fichier de sortie est accepté.
-Le commutateur ne désactive pas le contrôle. Il n'existe pas en `-NoTranscode`
-ni en `-CheckOnly`. Le cas « durée incomparable » (`unknown`) était déjà
-accepté et n'est pas la raison d'être de ce paramètre.
+En réencodage réel uniquement. Par défaut, un mismatch d'intégrité rejette la
+sortie et conserve l'original : écart de durée supérieur à la tolérance
+(max 1 s ou 0,5 %), fichier de sortie que ffprobe ne peut pas sonder, ou flux
+mappé manquant en sortie. Avec ce commutateur, le même mismatch reste détecté
+et affiché, mais devient un avertissement non bloquant : le fichier de sortie
+est accepté. Le commutateur ne désactive pas le contrôle. Il n'existe pas en
+`-NoTranscode` ni en `-CheckOnly`. Le cas « durée incomparable » (`unknown`)
+était déjà accepté et n'est pas la raison d'être de ce paramètre.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter

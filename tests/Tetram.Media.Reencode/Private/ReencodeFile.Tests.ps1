@@ -492,6 +492,57 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $script:WarningLogs | Should -BeNullOrEmpty
         Get-Content -LiteralPath $file -Raw | Should -Match 'source-original'
         Get-ChildItem -LiteralPath $TestDrive -Filter '*.mkv' | Should -HaveCount 0
+        $script:ErrorLogs[0] | Should -Match 'expected 100'
+        $script:ErrorLogs[0] | Should -Not -Match 'expected s,'
+    }
+
+    It 'identifie le flux fautif dans le message de mismatch' {
+        $file = Join-Path $TestDrive 'mismatch-stream.mp4'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+            [pscustomobject]@{
+                Status               = 'mismatch'
+                Method               = 'stream'
+                Expected             = 100.0
+                Actual               = 90.0
+                Diff                 = 10.0
+                StreamType           = 'audio'
+                SourceRelativeIndex  = 2
+                OutputRelativeIndex  = 1
+            }
+        }
+
+        $state = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
+
+        $state.IntegrityFailureFiles | Should -Contain $file
+        $script:ErrorLogs[0] | Should -Match '0:a:2'
+        $script:ErrorLogs[0] | Should -Match '0:a:1'
+        $script:ErrorLogs[0] | Should -Match 'expected 100'
+    }
+
+    It 'signale un échec de probe sans message de durée vide' {
+        $file = Join-Path $TestDrive 'probe-fail.mp4'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+            [pscustomobject]@{
+                Status   = 'mismatch'
+                Method   = 'probe'
+                Expected = $null
+                Actual   = $null
+                Diff     = $null
+            }
+        }
+
+        $state = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
+
+        $state.IntegrityFailureFiles | Should -Contain $file
+        $state.SessionResult.Count | Should -Be 0
+        $script:ErrorLogs | Should -Not -BeNullOrEmpty
+        $script:ErrorLogs[0] | Should -Match 'probe'
+        $script:ErrorLogs[0] | Should -Match 'could not be probed'
+        $script:ErrorLogs[0] | Should -Not -Match 'expected s,'
     }
 
     It 'accepte un mismatch en warning et installe le temporaire lorsque AllowIntegrityMismatch est vrai' {
@@ -584,5 +635,39 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $state.IntegrityWarningFiles | Should -HaveCount 0
         $state.SessionResult.Count | Should -Be 1
         Get-Content -LiteralPath $file -Raw | Should -Match 'encoded-temp'
+    }
+
+    It 'transmet les indices source des subtitles réellement conservés' {
+        $file = Join-Path $TestDrive 'subs-kept.mkv'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+            @{
+                format  = @{ duration = '10.0' }
+                streams = @(
+                    (New-HevcStream)
+                    (New-AacStream)
+                    @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fr' } }
+                    @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'jpn' } }
+                    @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'en' } }
+                )
+            }
+        }
+        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+            [pscustomobject]@{
+                Status   = 'ok'
+                Method   = 'stream'
+                Expected = 10.0
+                Actual   = 10.0
+                Diff     = 0.0
+            }
+        }
+
+        $null = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
+
+        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 1 -ParameterFilter {
+            $null -ne $KeptSourceSubtitleIndices -and
+            (@($KeptSourceSubtitleIndices) -join ',') -eq '0,2'
+        }
     }
 }
