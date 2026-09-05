@@ -234,6 +234,39 @@ Describe 'Get-FFmpegArgs — pièces jointes police' {
             $args | Should -Not -Contain '-metadata:s:t:0'
         }
     }
+
+    It 'ne mappe pas un attachment explicitement non sélectionné' {
+        $attachment = [pscustomobject]@{
+            _index     = 0
+            __process  = $false
+            __copy     = $false
+        }
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Attachment = $attachment } {
+            param($Attachment)
+
+            $args = Get-FFmpegArgs `
+                -VideoCodec 'AV1' `
+                -Quality 'Low' `
+                -Upscale '' `
+                -UpscaleWidth 0 `
+                -UpscaleHeight 0 `
+                -UpscaleFit '' `
+                -ConfigUpscaleWidth 0 `
+                -ClearStreamsTitle $false `
+                -VideoTracks @() `
+                -IsSource10Bit $false `
+                -SourceChroma '420' `
+                -AudioTracks @() `
+                -SubtitleTracks @() `
+                -AttachmentTracks @($Attachment)
+
+            $joined = $args -join ' '
+            $joined | Should -Not -Match '0:t:0'
+            $args | Should -Not -Contain '-c:t:0'
+            $args | Should -Not -Contain '-metadata:s:t:0'
+        }
+    }
 }
 
 Describe 'Get-FFmpegArgs — __recode' {

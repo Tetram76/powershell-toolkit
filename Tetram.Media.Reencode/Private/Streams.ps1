@@ -561,7 +561,8 @@ function Select-AttachmentStreams
 {
     param(
         [hashtable] $FfprobeOutput,
-        [bool] $HasAssSubtitles
+        [bool] $HasAssSubtitles,
+        [bool] $RemoveAttachments = $false
     )
     Write-Verbose ">> Select-AttachmentStreams"
     try
@@ -577,7 +578,14 @@ function Select-AttachmentStreams
             $isFontByMetadata = ((Get-ProbeProperty $tags 'mimetype') -match '\bfont\b|truetype|opentype') -or
                     ((Get-ProbeProperty $tags 'filename') -match '\.(ttf|otf|woff2?|ttc)$')
             $isFont = $isFontByCodec -or $isFontByMetadata
-            $keepStream = (-not $isFont) -or $HasAssSubtitles
+            $keepStream = if ($RemoveAttachments)
+            {
+                $false
+            }
+            else
+            {
+                (-not $isFont) -or $HasAssSubtitles
+            }
 
             if ($keepStream -and $isFont)
             {

@@ -135,6 +135,25 @@ Describe 'Invoke-ReencodeMedia - surface publique' {
         $meta.Parameters['AllowIntegrityMismatch'].ParameterSets['ReencodeFromPath'].IsMandatory | Should -BeFalse
         $meta.Parameters['AllowIntegrityMismatch'].ParameterSets['ReencodeFromFile'].IsMandatory | Should -BeFalse
     }
+
+    It 'place -RemoveAttachments sur les ParameterSets Reencode* et NoTranscode*, jamais Check*' {
+        $meta = Get-Command Invoke-ReencodeMedia
+        Get-ParameterSetNames $meta 'RemoveAttachments' | Should -Be @(
+            'NoTranscodeFromFile'
+            'NoTranscodeFromPath'
+            'ReencodeFromFile'
+            'ReencodeFromPath'
+        )
+        foreach ($set in @(
+                'NoTranscodeFromFile'
+                'NoTranscodeFromPath'
+                'ReencodeFromFile'
+                'ReencodeFromPath'
+            ))
+        {
+            $meta.Parameters['RemoveAttachments'].ParameterSets[$set].IsMandatory | Should -BeFalse
+        }
+    }
 }
 
 Describe 'Invoke-ReencodeMedia - résolution FFmpeg au démarrage' {
@@ -201,6 +220,39 @@ Describe 'Invoke-ReencodeMedia - configuration et récapitulatif' {
         Invoke-ReencodeMedia -Path $TestDrive
 
         $script:capturedConfig.AllowIntegrityMismatch | Should -BeFalse
+    }
+
+    It 'propage -RemoveAttachments dans la configuration transmise à l''orchestration' {
+        $script:capturedConfig = $null
+        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+            param($Paths, $State, $Config, $Cmdlet)
+            $script:capturedConfig = $Config
+        }
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+
+        Invoke-ReencodeMedia -Path $TestDrive -RemoveAttachments
+
+        $script:capturedConfig | Should -Not -BeNullOrEmpty
+        $script:capturedConfig.RemoveAttachments | Should -BeTrue
+    }
+
+    It 'propage RemoveAttachments à false par défaut' {
+        $script:capturedConfig = $null
+        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+            param($Paths, $State, $Config, $Cmdlet)
+            $script:capturedConfig = $Config
+        }
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+
+        Invoke-ReencodeMedia -Path $TestDrive
+
+        $script:capturedConfig.RemoveAttachments | Should -BeFalse
     }
 
     It 'présente les warnings d''intégrité sans les limiter aux durées invérifiables' {

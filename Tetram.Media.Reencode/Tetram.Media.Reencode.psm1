@@ -403,7 +403,8 @@ function Invoke-ReencodeFile
 
         $AttachmentTracks = Select-AttachmentStreams `
             -FfprobeOutput $ffprobeOutput `
-            -HasAssSubtitles $subtitleResult.HasAssSubtitles
+            -HasAssSubtitles $subtitleResult.HasAssSubtitles `
+            -RemoveAttachments $Config.RemoveAttachments
 
         $hasVideoToConvert = @(@($videoResult.VideoTracks) | Where-Object { -not $_.__copy }).Count
         $hasAudioToConvert = @(@($AudioTracks) | Where-Object { -not $_.__copy }).Count
@@ -710,6 +711,11 @@ function Invoke-ReencodeMedia
         [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
         [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [string[]] $SubTitlesToKeep = @('fr', 'fre', 'fr-FR', 'en', 'eng', 'en-US', 'en-GB'),
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
+        [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
+        [switch] $RemoveAttachments,
 
         [Parameter(ParameterSetName = 'CheckFromPath')]
         [Parameter(ParameterSetName = 'CheckFromFile')]
@@ -809,6 +815,7 @@ function Invoke-ReencodeMedia
         AllowSubTitlesConversion = $AllowSubTitlesConversion
         SubTitlesToKeep = $SubTitlesToKeep
         ClearStreamsTitle = $ClearStreamsTitle
+        RemoveAttachments = [bool]$RemoveAttachments
 
         # Liste
         UpdateList = $UpdateList
