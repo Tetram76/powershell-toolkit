@@ -187,16 +187,18 @@ function Get-DurationFromSpecificStreamTag
         return $null
     }
     $tags = $stream['tags']
-    if (-not ($tags -is [hashtable]))
+    if ($null -eq $tags)
     {
         return $null
     }
-    # ContainsKey est insensible à la casse : DURATION et duration sont la même entrée.
-    if ($tags.ContainsKey('DURATION'))
+    # OrderedHashtable (Get-FFprobeJson) : ContainsKey('DURATION') rate la clé JSON duration.
+    # Hashtable @{} des tests unitaires ne reproduit pas ce piège.
+    $raw = Get-ProbeProperty $tags 'DURATION'
+    if ($null -eq $raw)
     {
-        return ConvertTo-DurationSeconds -Tag ([string]$tags['DURATION'])
+        return $null
     }
-    return $null
+    return ConvertTo-DurationSeconds -Tag ([string]$raw)
 }
 
 function Get-DurationForStreamMetadata

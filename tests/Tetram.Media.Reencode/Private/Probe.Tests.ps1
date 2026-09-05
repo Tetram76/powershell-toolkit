@@ -476,6 +476,19 @@ Describe 'Test-EncodedFileIntegrity — méthodes d''extraction' {
         $result.Method | Should -Be 'tag'
     }
 
+    It 'détecte un mismatch audio via tag duration minuscule (OrderedHashtable ffprobe)' {
+        # ConvertFrom-Json -AsHashtable : ContainsKey('DURATION') est faux pour duration ; @{ } ne l'est pas.
+        $source = ConvertFrom-Json -AsHashtable -InputObject '{"format":{},"streams":[{"codec_type":"audio","tags":{"duration":"00:01:40.000000000"}}]}'
+        $temp = ConvertFrom-Json -AsHashtable -InputObject '{"format":{},"streams":[{"codec_type":"audio","tags":{"duration":"00:00:40.000000000"}}]}'
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceAudioIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.StreamType | Should -Be 'audio'
+        $result.Expected | Should -Be 100
+        $result.Actual | Should -Be 40
+    }
+
     It 'E3 — fallback count_packets vidéo avec les indices source/output remappés' {
         $script:PacketCountCalls = [System.Collections.Generic.List[hashtable]]::new()
         Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount {
