@@ -77,7 +77,6 @@ Describe 'Resolve-FFToolsDefaultBase' {
             $script:FFToolsSearchRoot = $TestRoot
             $script:FFToolsDefaultBase = $null
             $script:FFToolsBaseResolved = $false
-            $script:FFToolsRejectedMapCache = $null
             $script:FFToolsRejectedHighest = $null
             $script:FFToolsVersionReader = $null
         }

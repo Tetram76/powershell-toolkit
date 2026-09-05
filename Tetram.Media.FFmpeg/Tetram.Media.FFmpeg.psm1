@@ -3,25 +3,9 @@ Set-StrictMode -Version 3.0
 $script:FFToolsSearchRoot = Join-Path $PSScriptRoot 'ffmpeg'
 $script:FFToolsDefaultBase = $null
 $script:FFToolsBaseResolved = $false
-$script:FFToolsMinVersionCache = $null
-$script:FFToolsRejectedMapCache = $null
 $script:FFToolsRejectedHighest = $null
 # Hook tests : scriptblock (string $LiteralPath) -> [version]| $null
 $script:FFToolsVersionReader = $null
-
-function Get-FFToolsMinVersion
-{
-    if ($null -eq $script:FFToolsMinVersionCache)
-    {
-        $raw = $MyInvocation.MyCommand.Module.PrivateData.FFToolsMinVersion
-        if ([string]::IsNullOrWhiteSpace($raw))
-        {
-            $raw = '8.0.0'
-        }
-        $script:FFToolsMinVersionCache = [version]$raw
-    }
-    return $script:FFToolsMinVersionCache
-}
 
 function Get-FFmpegVersionFromBinary
 {
@@ -62,46 +46,34 @@ function ConvertTo-FFToolsVersionKey
     return '{0}.{1}.{2}' -f $Version.Major, $Version.Minor, $build
 }
 
-function Get-FFToolsRejectedMap
-{
-    if ($null -eq $script:FFToolsRejectedMapCache)
-    {
-        $raw = $MyInvocation.MyCommand.Module.PrivateData.FFToolsRejectedVersions
-        if (-not ($raw -is [System.Collections.IDictionary]))
-        {
-            $raw = @{
-                '9.0.0' = 'bug de parallélisation qui peut corrompre le fichier final'
-                '9.0.1' = 'bug de parallélisation qui peut corrompre le fichier final'
-            }
-        }
-        $map = @{}
-        foreach ($item in $raw.GetEnumerator())
-        {
-            $reason = [string]$item.Value
-            if ([string]::IsNullOrWhiteSpace($item.Key) -or [string]::IsNullOrWhiteSpace($reason)) { continue }
-            try
-            {
-                $map[(ConvertTo-FFToolsVersionKey -Version ([version]$item.Key))] = $reason
-            }
-            catch
-            {
-                # Entrée manifeste non parsable en [version] : ignorer plutôt que d'abandonner le scan.
-            }
-        }
-        $script:FFToolsRejectedMapCache = $map
-    }
-    return $script:FFToolsRejectedMapCache
-}
-
 function Get-FFToolsRejectedReason
 {
     param([Parameter(Mandatory)][version]$Version)
 
-    $map = Get-FFToolsRejectedMap
-    $key = ConvertTo-FFToolsVersionKey -Version $Version
-    if ($map.ContainsKey($key))
+    $rejected = $MyInvocation.MyCommand.Module.PrivateData.FFToolsRejectedVersions
+    if (-not ($rejected -is [System.Collections.IDictionary]))
     {
-        return $map[$key]
+        return $null
+    }
+
+    $want = ConvertTo-FFToolsVersionKey -Version $Version
+    foreach ($key in @($rejected.Keys))
+    {
+        if ([string]::IsNullOrWhiteSpace($key)) { continue }
+        try
+        {
+            $have = ConvertTo-FFToolsVersionKey -Version ([version]$key)
+        }
+        catch
+        {
+            continue
+        }
+        if ($have -ne $want) { continue }
+        $reason = [string]$rejected[$key]
+        if (-not [string]::IsNullOrWhiteSpace($reason))
+        {
+            return $reason
+        }
     }
     return $null
 }
@@ -125,7 +97,7 @@ function Resolve-FFToolsDefaultBase
 
     $exeName = if ($IsWindows) { 'ffmpeg.exe' } else { 'ffmpeg' }
     $probeName = if ($IsWindows) { 'ffprobe.exe' } else { 'ffprobe' }
-    $min = Get-FFToolsMinVersion
+    $min = [version]$MyInvocation.MyCommand.Module.PrivateData.FFToolsMinVersion
     $bestVer = $null
     $bestBin = $null
     $highestFound = $null
@@ -173,7 +145,7 @@ function Get-FFToolMissingMessage
 {
     param([Parameter(Mandatory)][string]$ToolName)
 
-    $min = Get-FFToolsMinVersion
+    $min = [version]$MyInvocation.MyCommand.Module.PrivateData.FFToolsMinVersion
     $root = $script:FFToolsSearchRoot
     $hint = "placez une build officielle >= $min sous 'Tetram.Media.FFmpeg\ffmpeg\ffmpeg-<version>-...\bin\' (racine recherchée : '$root'), ou fournissez -OverridePath / PATH."
     if ($script:FFToolsRejectedHighest)
