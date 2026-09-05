@@ -1,7 +1,7 @@
 @{
 # --- Identité du module ---
     RootModule = 'Tetram.Media.Reencode.psm1'
-    ModuleVersion = '3.0.0'
+    ModuleVersion = '3.1.0'
     GUID = 'd4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95'
 
     Author = 'TRL'
@@ -52,6 +52,7 @@
 - 2.6.0 : Contrôle d'intégrité de la durée après encodage (comparaison source/sortie avec tolérance configurable) ; correction de la détection des flux attached-picture et de la sonde de durée pilotée par la sélection de flux.
 - 2.6.1 : Découpage interne du module en sous-modules privés (Probe, Streams, EncoderArgs, NFO, Scan) ; aucun changement fonctionnel.
 - 3.0.0 : API simplifiée — réencodage toujours en MKV ; mode -NoTranscode (filtrage conservé, aucun transcodage des flux retenus, extension source) ; suppression de -KeepExtension, -OutputExtension et -Rewrite.
+- 3.1.0 : Ajout de -AllowIntegrityMismatch (jeux Reencode* uniquement) : un mismatch de durée reste rejeté par défaut ; avec le switch, le contrôle s'exécute toujours mais l'écart devient un warning et la sortie est acceptée. Absent de -NoTranscode et -CheckOnly ; aucun contrôle d'intégrité de durée en -NoTranscode.
 '@
         }
     }

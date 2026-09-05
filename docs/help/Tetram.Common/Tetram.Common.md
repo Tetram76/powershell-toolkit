@@ -1,6 +1,6 @@
 ---
 document type: module
-Help Version: 1.2.0
+Help Version: 1.3.0
 HelpInfoUri: ''
 Locale: fr-FR
 Module Guid: 1c6e2a0f-bf1a-4a92-8a7a-1d5a0f6a6b90
@@ -21,3 +21,7 @@ Fonctions de journalisation, de formatage, et utilitaires de chemin pour process
 ### [Test-PowerShellSpecificPath](Test-PowerShellSpecificPath.md)
 
 Indique si un chemin emploie de la syntaxe que seul PowerShell comprend.
+
+### [Write-InfoWarning](Write-InfoWarning.md)
+
+Affiche un message d'information de niveau warning en jaune.

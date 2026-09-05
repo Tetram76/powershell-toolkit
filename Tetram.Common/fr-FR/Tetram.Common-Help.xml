@@ -74,4 +74,89 @@
       </maml:navigationLink>
     </command:relatedLinks>
   </command:command>
+  <command:command>
+    <command:details>
+      <command:name>Write-InfoWarning</command:name>
+      <maml:description>
+        <maml:para>Affiche un message d'information de niveau warning en jaune.</maml:para>
+      </maml:description>
+      <command:verb>Write</command:verb>
+      <command:noun>InfoWarning</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Raccourci sémantique vers `Write-InfoLog` avec une couleur jaune fixe. Il n'introduit pas un nouveau système de journalisation et n'écrit pas dans le warning stream PowerShell (`Write-Warning` n'est pas appelé).
+
+Sans `-Force`, la visibilité suit exactement `Write-InfoLog` : le message n'apparaît que si `-Verbose` est présent ou si `$VerbosePreference` vaut `Continue`. Avec `-Force`, le message s'affiche indépendamment de `Verbose`.
+
+Aucun objet n'est écrit dans le pipeline : il s'agit d'un affichage console, avec le timestamp fourni par `Write-Log`.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Write-InfoWarning</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>Text</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Force</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Affiche le message même si Verbose n'est pas actif. Relais direct du `-Force` de `Write-InfoLog`.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+        <maml:name>Text</maml:name>
+        <maml:description>
+          <maml:para>Texte à afficher. Obligatoire. La couleur n'est pas paramétrable : elle est toujours jaune.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues />
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Ne pas utiliser pour le warning stream PowerShell. Pour un message d'information bleu, utiliser `Write-InfoLog`.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Warning forcé ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Write-InfoWarning -Text 'durée incohérente acceptée' -Force</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Même politique de visibilité que Write-InfoLog ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Write-InfoWarning -Text 'détail visible seulement en Verbose'</dev:code>
+        <dev:remarks />
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
 </helpItems>

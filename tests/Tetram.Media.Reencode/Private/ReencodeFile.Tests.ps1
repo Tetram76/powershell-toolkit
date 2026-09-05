@@ -12,6 +12,7 @@ BeforeAll {
     function script:New-ReencodeFileTestConfig {
         param(
             [bool] $NoTranscode = $false,
+            [bool] $AllowIntegrityMismatch = $false,
             [string] $Quality = 'Medium',
             [string] $VideoCodec = 'HEVC'
         )
@@ -19,6 +20,7 @@ BeforeAll {
         @{
             CheckOnly                = $false
             NoTranscode              = $NoTranscode
+            AllowIntegrityMismatch   = $AllowIntegrityMismatch
             ForceRecodeVideo         = $false
             VideoCodec               = $VideoCodec
             AllowVideoCodecUpgrade   = $false
@@ -82,6 +84,34 @@ BeforeAll {
             }
 
             Invoke-BoundFile -WhatIf
+        }
+    }
+
+    function script:Invoke-ReencodeFileForIntegrity {
+        param(
+            [Parameter(Mandatory)] [string] $Filename,
+            [Parameter(Mandatory)] [hashtable] $Config,
+            [Parameter(Mandatory)] [string] $TempPath
+        )
+
+        InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+            Filename = $Filename
+            Config   = $Config
+            TempPath = $TempPath
+        } {
+            param($Filename, $Config, $TempPath)
+
+            $state = Initialize-ReencodeState -TempPath $TempPath
+            $state.ErrorLog = Join-Path $TempPath 'reencode-errors.log'
+
+            function Invoke-BoundFile {
+                [CmdletBinding(SupportsShouldProcess)]
+                param()
+                Invoke-ReencodeFile -Filename $Filename -State $state -Config $Config -Cmdlet $PSCmdlet
+            }
+
+            Invoke-BoundFile
+            $state
         }
     }
 }
@@ -281,5 +311,161 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
 
         $script:InfoLogs | Should -Not -Contain "Skip '$file' that does not look like a convertable format"
         $script:FfmpegOutputFiles.Count | Should -Be 1
+    }
+}
+
+Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
+
+    BeforeEach {
+        $script:InfoLogs = [System.Collections.Generic.List[string]]::new()
+        $script:WarningLogs = [System.Collections.Generic.List[string]]::new()
+        $script:ErrorLogs = [System.Collections.Generic.List[string]]::new()
+
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {
+            param([string] $Text)
+            [void]$script:InfoLogs.Add($Text)
+        }
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {
+            param([string] $Text)
+            [void]$script:WarningLogs.Add($Text)
+        }
+        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLogWithFile {
+            param([string] $Text)
+            [void]$script:ErrorLogs.Add($Text)
+        }
+        Mock -ModuleName Tetram.Media.Reencode Write-Log {}
+        Mock -ModuleName Tetram.Media.Reencode Invoke-FFmpeg {
+            param($OutputFile)
+            if ($OutputFile)
+            {
+                Set-Content -LiteralPath $OutputFile -Value 'encoded-temp'
+            }
+            return $true
+        }
+        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+            @{
+                format  = @{ duration = '10.0' }
+                streams = @((New-HevcStream), (New-AacStream))
+            }
+        }
+    }
+
+    It 'rejette un mismatch et conserve l''original lorsque AllowIntegrityMismatch est faux' {
+        $file = Join-Path $TestDrive 'mismatch-strict.mp4'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+            [pscustomobject]@{
+                Status   = 'mismatch'
+                Method   = 'format'
+                Expected = 100.0
+                Actual   = 90.0
+                Diff     = 10.0
+            }
+        }
+
+        $state = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
+
+        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 1
+        $state.IntegrityFailureFiles | Should -Contain $file
+        $state.IntegrityWarningFiles | Should -Not -Contain $file
+        $state.SessionResult.Count | Should -Be 0
+        $script:ErrorLogs | Should -Not -BeNullOrEmpty
+        $script:WarningLogs | Should -BeNullOrEmpty
+        Get-Content -LiteralPath $file -Raw | Should -Match 'source-original'
+        Get-ChildItem -LiteralPath $TestDrive -Filter '*.mkv' | Should -HaveCount 0
+    }
+
+    It 'accepte un mismatch en warning et installe le temporaire lorsque AllowIntegrityMismatch est vrai' {
+        $file = Join-Path $TestDrive 'mismatch-allow.mp4'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+            [pscustomobject]@{
+                Status   = 'mismatch'
+                Method   = 'format'
+                Expected = 100.0
+                Actual   = 90.0
+                Diff     = 10.0
+            }
+        }
+
+        $state = Invoke-ReencodeFileForIntegrity `
+            -Filename $file `
+            -Config (New-ReencodeFileTestConfig -AllowIntegrityMismatch $true) `
+            -TempPath $TestDrive
+
+        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 1
+        $state.IntegrityFailureFiles | Should -HaveCount 0
+        $state.IntegrityWarningFiles | Should -Contain $file
+        $state.SessionResult.Count | Should -Be 1
+        $script:ErrorLogs | Should -BeNullOrEmpty
+        $script:WarningLogs | Should -Not -BeNullOrEmpty
+        $script:WarningLogs[0] | Should -Match 'mismatch-allow'
+        $script:WarningLogs[0] | Should -Match 'format'
+        $script:WarningLogs[0] | Should -Match '100'
+        $script:WarningLogs[0] | Should -Match '90'
+        $script:WarningLogs[0] | Should -Match 'AllowIntegrityMismatch'
+        Should -Invoke -ModuleName Tetram.Media.Reencode Write-InfoWarning -Times 1 -ParameterFilter {
+            $Force -and $Text -match 'AllowIntegrityMismatch'
+        }
+        Test-Path -LiteralPath $file | Should -BeFalse
+        $installed = Join-Path $TestDrive 'mismatch-allow.mkv'
+        Test-Path -LiteralPath $installed -PathType Leaf | Should -BeTrue
+        Get-Content -LiteralPath $installed -Raw | Should -Match 'encoded-temp'
+    }
+
+    It 'accepte un unknown en réencodage sans exiger AllowIntegrityMismatch' {
+        $file = Join-Path $TestDrive 'unknown-duration.mp4'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+            [pscustomobject]@{
+                Status   = 'unknown'
+                Method   = 'unknown'
+                Expected = $null
+                Actual   = $null
+                Diff     = $null
+            }
+        }
+
+        $state = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
+
+        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 1
+        $state.IntegrityFailureFiles | Should -HaveCount 0
+        $state.IntegrityWarningFiles | Should -Contain $file
+        $state.SessionResult.Count | Should -Be 1
+        Test-Path -LiteralPath (Join-Path $TestDrive 'unknown-duration.mkv') -PathType Leaf | Should -BeTrue
+    }
+
+    It 'n''exécute pas le contrôle de durée en NoTranscode' {
+        $file = Join-Path $TestDrive 'notranscode-drop.mkv'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+            @{
+                format  = @{ duration = '10.0' }
+                streams = @(
+                    (New-HevcStream)
+                    (New-AacStream)
+                    @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'jpn' } }
+                )
+            }
+        }
+        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+            throw 'Test-EncodedFileIntegrity ne doit pas être appelé en NoTranscode'
+        }
+
+        $state = Invoke-ReencodeFileForIntegrity `
+            -Filename $file `
+            -Config (New-ReencodeFileTestConfig -NoTranscode $true) `
+            -TempPath $TestDrive
+
+        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 0
+        $state.IntegrityFailureFiles | Should -HaveCount 0
+        $state.IntegrityWarningFiles | Should -HaveCount 0
+        $state.SessionResult.Count | Should -Be 1
+        Get-Content -LiteralPath $file -Raw | Should -Match 'encoded-temp'
     }
 }

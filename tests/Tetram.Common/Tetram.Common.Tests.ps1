@@ -104,6 +104,55 @@ Describe 'Show-CommandLine (-PassThru)' {
     }
 }
 
+Describe 'Write-InfoWarning' {
+
+    It 'est exporté par Tetram.Common' {
+        $cmd = Get-Command -Name Write-InfoWarning -Module 'Tetram.Common' -ErrorAction Ignore
+        $cmd | Should -Not -BeNullOrEmpty
+    }
+
+    It 'exige le paramètre Text' {
+        { Write-InfoWarning } | Should -Throw
+    }
+
+    It 'délègue à Write-InfoLog en jaune avec -Force' {
+        InModuleScope Tetram.Common {
+            Mock Write-InfoLog {}
+
+            Write-InfoWarning -Text 'test' -Force
+
+            Should -Invoke Write-InfoLog -Times 1 -ParameterFilter {
+                $Text -eq 'test' -and
+                $Color -eq [System.ConsoleColor]::Yellow -and
+                $Force
+            }
+        }
+    }
+
+    It 'ne force pas l''affichage lorsque -Force est absent' {
+        InModuleScope Tetram.Common {
+            Mock Write-InfoLog {}
+
+            Write-InfoWarning -Text 'quiet'
+
+            Should -Invoke Write-InfoLog -Times 1 -ParameterFilter {
+                $Text -eq 'quiet' -and
+                $Color -eq [System.ConsoleColor]::Yellow -and
+                -not $Force
+            }
+        }
+    }
+
+    It 'n''écrit aucun objet dans le pipeline' {
+        InModuleScope Tetram.Common {
+            Mock Write-InfoLog {}
+
+            $output = Write-InfoWarning -Text 'no pipeline' -Force
+            $output | Should -BeNullOrEmpty
+        }
+    }
+}
+
 Describe 'Test-PowerShellSpecificPath' {
 
     It 'reconnaît les crochets et l''échappement backtick' {

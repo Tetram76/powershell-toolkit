@@ -418,7 +418,14 @@ function Test-EncodedFileIntegrity
         [int[]] $KeptSourceAudioIndices = $null
     )
 
-    $pair = Get-ComparableDurationPair -FFPROBE $FFPROBE -SourceProbe $SourceProbe -SourceFile $SourceFile -TempFile $TempFile -KeptSourceVideoIndices $KeptSourceVideoIndices -KeptSourceAudioIndices $KeptSourceAudioIndices
+    $pair = Get-ComparableDurationPair `
+        -FFPROBE $FFPROBE `
+        -SourceProbe $SourceProbe `
+        -SourceFile $SourceFile `
+        -TempFile $TempFile `
+        -KeptSourceVideoIndices $KeptSourceVideoIndices `
+        -KeptSourceAudioIndices $KeptSourceAudioIndices
+
     if ($pair.Method -eq 'unknown')
     {
         return [pscustomobject]@{
