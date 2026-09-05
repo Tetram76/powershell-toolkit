@@ -6,10 +6,11 @@ Set-StrictMode -Version 3.0
     Fonctions d’aide pour la journalisation colorée (PowerShell 7+).
 .DESCRIPTION
     Fournit des fonctions Write-Log*, conformes aux conventions PowerShell.
-    - Write-Log        : affiche un message avec couleur.
-    - Write-ErrorLog   : journalise les erreurs (en rouge).
-    - Write-InfoLog    : journalise les infos (en bleu).
-    - Write-DebugLog   : journalise les messages de debug (en gris).
+    - Write-Log         : affiche un message avec couleur.
+    - Write-ErrorLog    : journalise les erreurs (en rouge).
+    - Write-InfoLog     : journalise les infos (en bleu).
+    - Write-InfoWarning : journalise un avertissement d’information (en jaune).
+    - Write-DebugLog    : journalise les messages de debug (en gris).
 .NOTES
     Ces fonctions n’écrivent pas dans le pipeline (affichage console uniquement).
     Cross-platform, aucun avertissement de verbe non approuvé.
@@ -49,6 +50,17 @@ function Write-InfoLog
     {
         Write-Log -Color $Color $Text
     }
+}
+
+function Write-InfoWarning
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string] $Text,
+        [switch] $Force
+    )
+
+    Write-InfoLog -Text $Text -Color Yellow -Force:$Force
 }
 
 function Write-DebugLog
@@ -351,7 +363,7 @@ function Show-Colors()
 
 Export-ModuleMember -Function `
 	Show-Colors,
-Write-Log, Write-ErrorLog, Write-InfoLog, Write-DebugLog,
+Write-Log, Write-ErrorLog, Write-InfoLog, Write-InfoWarning, Write-DebugLog,
 Format-FileSize, Format-Duration,
 Show-CommandLine,
 Test-PowerShellSpecificPath

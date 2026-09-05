@@ -1,6 +1,6 @@
 ---
 document type: module
-Help Version: 3.0.0
+Help Version: 3.1.0
 HelpInfoUri: ''
 Locale: fr-FR
 Module Guid: d4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95

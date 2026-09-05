@@ -479,7 +479,7 @@ function Invoke-ReencodeFile
             return
         }
 
-        if (-not $WhatIfPreference -and (Test-Path -LiteralPath $TempFilename -PathType Leaf))
+        if (-not $Config.NoTranscode -and -not $WhatIfPreference -and (Test-Path -LiteralPath $TempFilename -PathType Leaf))
         {
             $keptSourceVideoIndices = @(
                 $videoResult.VideoTracks |
@@ -505,9 +505,18 @@ function Invoke-ReencodeFile
                 'mismatch' {
                     $msg = "Incomplete encoding for '{0}' [via {1}] - expected {2:0.000}s, got {3:0.000}s (diff {4:0.000}s)" -f `
                         $Filename, $integrity.Method, $integrity.Expected, $integrity.Actual, $integrity.Diff
-                    Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
-                    [void]$State.IntegrityFailureFiles.Add($Filename)
-                    return
+                    if ($Config.AllowIntegrityMismatch)
+                    {
+                        $msg = "$msg — accepted because -AllowIntegrityMismatch is set"
+                        Write-InfoWarning -Text $msg -Force
+                        [void]$State.IntegrityWarningFiles.Add($Filename)
+                    }
+                    else
+                    {
+                        Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
+                        [void]$State.IntegrityFailureFiles.Add($Filename)
+                        return
+                    }
                 }
                 'unknown' {
                     $msg = "Integrity check inconclusive for '$Filename' - no comparable duration method - accepting file"
@@ -695,6 +704,9 @@ function Invoke-ReencodeMedia
         [switch] $AllowSubTitlesConversion,
         [Parameter(ParameterSetName = 'ReencodeFromPath')]
         [Parameter(ParameterSetName = 'ReencodeFromFile')]
+        [switch] $AllowIntegrityMismatch,
+        [Parameter(ParameterSetName = 'ReencodeFromPath')]
+        [Parameter(ParameterSetName = 'ReencodeFromFile')]
         [Parameter(ParameterSetName = 'NoTranscodeFromPath')]
         [Parameter(ParameterSetName = 'NoTranscodeFromFile')]
         [string[]] $SubTitlesToKeep = @('fr', 'fre', 'fr-FR', 'en', 'eng', 'en-US', 'en-GB'),
@@ -780,6 +792,7 @@ function Invoke-ReencodeMedia
         # Mode / format cible
         CheckOnly = $CheckOnly
         NoTranscode = [bool]$NoTranscode
+        AllowIntegrityMismatch = [bool]$AllowIntegrityMismatch
 
         # Vidéo
         VideoCodec = $VideoCodec
@@ -831,10 +844,10 @@ function Invoke-ReencodeMedia
         }
         if ($state.IntegrityWarningFiles.Count -gt 0)
         {
-            Write-InfoLog -Color Yellow ("{0} file(s) accepted with integrity warning (duration unverifiable):" -f $state.IntegrityWarningFiles.Count) -Force
+            Write-InfoWarning -Text ("{0} file(s) accepted with integrity warning:" -f $state.IntegrityWarningFiles.Count) -Force
             foreach ($f in $state.IntegrityWarningFiles)
             {
-                Write-InfoLog -Color Yellow "  - $f" -Force
+                Write-InfoWarning -Text "  - $f" -Force
             }
         }
     }

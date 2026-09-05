@@ -125,6 +125,16 @@ Describe 'Invoke-ReencodeMedia - surface publique' {
             Get-ParameterSetNames $meta $name | Should -Be $allSets -Because $name
         }
     }
+
+    It 'place -AllowIntegrityMismatch uniquement sur les ParameterSets Reencode*' {
+        $meta = Get-Command Invoke-ReencodeMedia
+        Get-ParameterSetNames $meta 'AllowIntegrityMismatch' | Should -Be @(
+            'ReencodeFromFile'
+            'ReencodeFromPath'
+        )
+        $meta.Parameters['AllowIntegrityMismatch'].ParameterSets['ReencodeFromPath'].IsMandatory | Should -BeFalse
+        $meta.Parameters['AllowIntegrityMismatch'].ParameterSets['ReencodeFromFile'].IsMandatory | Should -BeFalse
+    }
 }
 
 Describe 'Invoke-ReencodeMedia - résolution FFmpeg au démarrage' {
@@ -146,5 +156,74 @@ Describe 'Invoke-ReencodeMedia - résolution FFmpeg au démarrage' {
     It "log une erreur via Write-ErrorLog et ne lève pas d'exception quand FFmpeg est introuvable" {
         { Invoke-ReencodeMedia -Path $TestDrive -CheckOnly } | Should -Not -Throw
         Should -Invoke -ModuleName Tetram.Media.Reencode Write-ErrorLog -Times 1
+    }
+}
+
+Describe 'Invoke-ReencodeMedia - configuration et récapitulatif' {
+    BeforeAll {
+        Set-StrictMode -Version Latest
+        $script:RepoRootReencodeConfig = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
+        Import-Module -Name (Join-Path $script:RepoRootReencodeConfig 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+    }
+
+    AfterAll {
+        Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'propage -AllowIntegrityMismatch dans la configuration transmise à l''orchestration' {
+        $script:capturedConfig = $null
+        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+            param($Paths, $State, $Config, $Cmdlet)
+            $script:capturedConfig = $Config
+        }
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+
+        Invoke-ReencodeMedia -Path $TestDrive -AllowIntegrityMismatch
+
+        $script:capturedConfig | Should -Not -BeNullOrEmpty
+        $script:capturedConfig.AllowIntegrityMismatch | Should -BeTrue
+    }
+
+    It 'propage AllowIntegrityMismatch à false par défaut' {
+        $script:capturedConfig = $null
+        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+            param($Paths, $State, $Config, $Cmdlet)
+            $script:capturedConfig = $Config
+        }
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+
+        Invoke-ReencodeMedia -Path $TestDrive
+
+        $script:capturedConfig.AllowIntegrityMismatch | Should -BeFalse
+    }
+
+    It 'présente les warnings d''intégrité sans les limiter aux durées invérifiables' {
+        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+            param($Paths, $State, $Config, $Cmdlet)
+            [void]$State.IntegrityWarningFiles.Add('accepted.mkv')
+        }
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+
+        Invoke-ReencodeMedia -Path $TestDrive
+
+        Should -Invoke -ModuleName Tetram.Media.Reencode Write-InfoWarning -Times 1 -ParameterFilter {
+            $Force -and
+            $Text -eq '1 file(s) accepted with integrity warning:'
+        }
+        Should -Invoke -ModuleName Tetram.Media.Reencode Write-InfoWarning -Times 1 -ParameterFilter {
+            $Force -and $Text -eq '  - accepted.mkv'
+        }
+        Should -Invoke -ModuleName Tetram.Media.Reencode Write-InfoWarning -Times 0 -ParameterFilter {
+            $Text -like '*unverifiable*'
+        }
     }
 }
