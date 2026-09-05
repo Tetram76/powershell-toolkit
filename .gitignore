@@ -2,8 +2,10 @@ Tetram.Media.FFmpeg/ffmpeg/*
 !Tetram.Media.FFmpeg/ffmpeg/.keep
 Tetram.Media.FFmpeg/mediainfo/*
 !Tetram.Media.FFmpeg/mediainfo/.keep
-Tetram.Media.Whisper/Purfview-Whisper-Faster/*
-!Tetram.Media.Whisper/Purfview-Whisper-Faster/.keep
+Tetram.Media.Transcript/Purfview-Whisper-Faster/*
+!Tetram.Media.Transcript/Purfview-Whisper-Faster/README.md
+Tetram.Media.Transcript/SherpaOnnx/*
+!Tetram.Media.Transcript/SherpaOnnx/README.md
 reencode-errors.log
 .idea/
 /testResults.xml

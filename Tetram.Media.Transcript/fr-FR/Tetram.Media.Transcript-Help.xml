@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<helpItems xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" schema="maml" xmlns="http://msh">
+  <command:command>
+    <command:details>
+      <command:name>Get-MediaTranscript</command:name>
+      <maml:description>
+        <maml:para>Transcrit une piste audio d'un fichier média.</maml:para>
+      </maml:description>
+      <command:verb>Get</command:verb>
+      <command:noun>MediaTranscript</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>`Get-MediaTranscript` traite exactement un média et une piste audio. Chaque valeur de `-Model` déclenche une invocation distincte du moteur associé à ce modèle. Les modèles Faster-Whisper produisent un JSON Tetram à côté du média. Chaque modèle Sherpa (`reazon-k2-v2`, `parakeet-0.6b-ja`, `sensevoice-small`) exécute deux observations VAD (Silero puis TEN) sur le même WAV temporaire et publie donc deux sidecars. L'appelant choisit un ou plusieurs modèles ; il ne choisit pas le moteur ni le VAD. Les artefacts natifs temporaires sont le JSON Faster-Whisper et le WAV préparé pour Sherpa-ONNX : ils sont écrits sous le répertoire temporaire système, lus, normalisés, puis supprimés. Le stdout Sherpa (lignes `start -- end: text`) est capturé, pas écrit sur disque. `-LiteralPath` doit désigner un fichier unique existant : un masque ou un dossier est refusé par l'orchestrateur. Un fichier-liste existant (`.lst`, `.m3u`, …) est transmis au backend : Faster-Whisper / Purfview le refuse. Les caractères spéciaux PowerShell font partie du nom. Le success stream émet un `FileInfo` par sidecar JSON publié.
+
+Le fichier durable Faster-Whisper/Kotoba suit `&lt;media-base&gt;.track &lt;trackid&gt;.&lt;langue&gt;.&lt;model&gt;.json` (piste puis langue). Exemple : `Episode.track 2.ja.large-v3.json`. Pour un modèle Sherpa : `Episode.track 1.ja.&lt;model&gt;.silero.json` et `Episode.track 1.ja.&lt;model&gt;.ten.json`. Dans le JSON, `model` reste le nom canonique ; `vad` vaut `silero` ou `ten`. Les formats de présentation (SRT, VTT, etc.) seront produits plus tard par une autre commande à partir de ce JSON.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Get-MediaTranscript</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="PSPath">
+          <maml:name>LiteralPath</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>AudioTrack</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Model</maml:name>
+          <maml:description />
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">large-v2</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">large-v3-turbo</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">reazon-k2-v2</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">parakeet-0.6b-ja</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">sensevoice-small</command:parameterValue>
+          </command:parameterValueGroup>
+          <command:parameterValue required="true" variableLength="false">string[]</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String[]</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>UseLanguage</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>WhatIf</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Confirm</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>AudioTrack</maml:name>
+        <maml:description>
+          <maml:para>Index 1-based de la piste audio à transcrire. Défaut `1`. Une invocation ne traite qu'une seule piste.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>System.Int32</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="cf">
+        <maml:name>Confirm</maml:name>
+        <maml:description>
+          <maml:para>La ligne de commande s'affiche ; une confirmation est demandée avant d'exécuter le binaire du moteur (il tourne si on confirme).</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="PSPath">
+        <maml:name>LiteralPath</maml:name>
+        <maml:description>
+          <maml:para>Chemin littéral d'un fichier média unique existant. Les caractères spéciaux PowerShell (`*`, `?`, `[`) font partie du nom ; ils ne sont pas interprétés comme un masque. Un masque ou un dossier est refusé par l'orchestrateur. Un fichier-liste existant est transmis au backend (Purfview le refuse).</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Model</maml:name>
+        <maml:description>
+          <maml:para>Modèle de transcription, défaut `large-v2`. Plusieurs valeurs : une invocation par modèle, éventuellement sur des moteurs différents. `large-v2`, `large-v3`, `large-v3-turbo` et `kotoba-v2` passent par Faster-Whisper / Purfview et produisent un sidecar chacun. `reazon-k2-v2`, `parakeet-0.6b-ja` et `sensevoice-small` sont des modèles japonais exécutés localement via le même binaire Sherpa-ONNX ; une valeur produit deux sidecars (Silero et TEN) distingués par `vad`, sans nouveau paramètre public. Les poids Sherpa sont attendus dans `SherpaOnnx/models/&lt;nom&gt;/`. Les binaires et poids doivent déjà être présents localement : la commande ne télécharge rien. `kotoba-v2` doit être installé séparément dans la distribution Purfview. `-UseLanguage ja` est accepté pour les trois modèles Sherpa ; une autre langue est refusée. L'absence de `-UseLanguage` n'empêche pas ces modèles japonais. SenseVoice est limité au japonais (`languageSource=forced`) ; Reazon et Parakeet publient `languageSource=model`.</maml:para>
+        </maml:description>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">large-v2</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">large-v3-turbo</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">large-v3</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">kotoba-v2</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">reazon-k2-v2</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">parakeet-0.6b-ja</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">sensevoice-small</command:parameterValue>
+        </command:parameterValueGroup>
+        <command:parameterValue required="true" variableLength="true">System.String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String[]</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>UseLanguage</maml:name>
+        <maml:description>
+          <maml:para>Code ISO de la langue. Absent, Faster-Whisper la détecte ; pour les modèles Sherpa le japonais est fourni (`ja`).</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="wi">
+        <maml:name>WhatIf</maml:name>
+        <maml:description>
+          <maml:para>La ligne de commande s'affiche, le binaire ne tourne pas (dry-run).</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.IO.FileInfo</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>Un objet fichier par sidecar JSON publié, dans l'ordre de publication. Rien n'est émis si aucun transcript n'a été écrit.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Une invocation traite un seul fichier média et une seule piste audio (`-AudioTrack`, défaut 1) ; `-Model` accepte plusieurs valeurs ; Faster-Whisper/Kotoba produisent un sidecar par modèle, chaque modèle Sherpa en produit deux (`.silero` / `.ten`) à partir d'un WAV temporaire commun ; les distributions Purfview et Sherpa-ONNX se posent respectivement dans `Purfview-Whisper-Faster` et `SherpaOnnx`, dossiers non versionnés hors README ; jamais de téléchargement automatique ; jamais de traduction ; la seule sortie durable est le JSON Tetram ; une réexécution réécrit ces sidecars ; la commande n'accepte pas d'entrée pipeline ; le success stream renvoie les `FileInfo` des sidecars générés.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Transcrire un fichier ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -Model large-v3 -UseLanguage ja 'D:\Videos\Episode.mkv'</dev:code>
+        <dev:remarks>
+          <maml:para>Traite la piste audio 1 et produit `D:\Videos\Episode.track 1.ja.large-v3.json`.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Choisir une autre piste audio ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript `
+    -LiteralPath 'D:\Videos\Episode.mkv' `
+    -AudioTrack 2 `
+    -Model large-v3 `
+    -UseLanguage ja</dev:code>
+        <dev:remarks>
+          <maml:para>Produit `D:\Videos\Episode.track 2.ja.large-v3.json`.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 3: Fichier dont le nom contient des crochets ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Films\film[1].mkv'</dev:code>
+        <dev:remarks>
+          <maml:para>Le chemin est traité littéralement : `film[1].mkv` désigne ce fichier, pas un masque.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 4: Choisir le modèle ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Films\film.mkv' -Model large-v3-turbo</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 5: Forcer la langue ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Films\film.mkv' -UseLanguage fr</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 6: Afficher la ligne de commande sans lancer le binaire ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Films\film.mkv' -WhatIf</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 7: Transcrire avec kotoba-v2 ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Films\film.mkv' -Model kotoba-v2 -UseLanguage ja</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 8: Enchaîner plusieurs modèles ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model large-v3, kotoba-v2 -UseLanguage ja</dev:code>
+        <dev:remarks>
+          <maml:para>Produit `Episode.track 1.ja.large-v3.json` puis `Episode.track 1.ja.kotoba-v2.json`, chacune via sa propre invocation.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 9: Mélanger Faster-Whisper et Sherpa-ONNX ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model large-v3, reazon-k2-v2 -UseLanguage ja</dev:code>
+        <dev:remarks>
+          <maml:para>Faster-Whisper produit `Episode.track 1.ja.large-v3.json`. Reazon produit `Episode.track 1.ja.reazon-k2-v2.silero.json` et `Episode.track 1.ja.reazon-k2-v2.ten.json` (`model` = `reazon-k2-v2`, `vad` distinct).</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 10: Parakeet et SenseVoice ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MediaTranscript -LiteralPath 'D:\Videos\Episode.mkv' -Model parakeet-0.6b-ja, sensevoice-small -UseLanguage ja</dev:code>
+        <dev:remarks>
+          <maml:para>Produit quatre sidecars : `Episode.track 1.ja.parakeet-0.6b-ja.silero.json`, `Episode.track 1.ja.parakeet-0.6b-ja.ten.json`, `Episode.track 1.ja.sensevoice-small.silero.json` et `Episode.track 1.ja.sensevoice-small.ten.json`.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+</helpItems>
