@@ -1203,5 +1203,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
 
 ## RELATED LINKS
 
+- [Get-MkvInterleaveRepairCommand]()
+- [Invoke-MkvRepair]()
 - [Test-MediaSimilarity]()
 - [Remove-EmptyDirs]()

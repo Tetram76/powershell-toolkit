@@ -73,5 +73,3 @@ function Get-MediaTranscript {
         return
     }
 }
-
-Export-ModuleMember -Function Get-MediaTranscript

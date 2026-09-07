@@ -909,5 +909,3 @@ function Invoke-ReencodeMedia
         }
     }
 }
-
-Export-ModuleMember -Function Invoke-ReencodeMedia

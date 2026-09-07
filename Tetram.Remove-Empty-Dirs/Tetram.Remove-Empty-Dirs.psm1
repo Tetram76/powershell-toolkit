@@ -113,4 +113,3 @@ function Remove-EmptyDirs
         Write-InfoLog "Completed in $pass pass(es)."
     }
 }
-Export-ModuleMember -Function Remove-EmptyDirs

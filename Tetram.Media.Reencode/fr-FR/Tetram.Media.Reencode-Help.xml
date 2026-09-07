@@ -2,6 +2,463 @@
 <helpItems xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" schema="maml" xmlns="http://msh">
   <command:command>
     <command:details>
+      <command:name>Get-MkvInterleaveRepairCommand</command:name>
+      <maml:description>
+        <maml:para>Construit la ligne `mkvmerge` qui répare l'interleaving d'un MKV, sans remplacer le fichier.</maml:para>
+      </maml:description>
+      <command:verb>Get</command:verb>
+      <command:noun>MkvInterleaveRepairCommand</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Importer `.\Tetram.Media.Reencode` (PowerShell 7+). `-Path` est un fichier existant, Matroska reconnu par `mkvmerge -J`. Cette commande **n'exécute pas** le remux : elle identifie le fichier (`mkvmerge -J`) puis retourne un objet décrivant l'exécutable, les arguments, la ligne PowerShell copiable et les chemins (logiques vs outils). Pour remplacer in-place, utiliser `Invoke-MkvRepair`.
+
+Sans `-OutputPath`, la sortie est un voisin `{basename}.repaired.mkv` (le suffixe `.mkv` source, casse indifférente, est remplacé ; sinon `.repaired.mkv` est concaténé, ex. `clip.mp4.repaired.mkv`). La sortie ne peut pas être le fichier source.
+
+Les pistes audio/vidéo sont chacune lues par un reader `mkvmerge` distinct (carrier = première piste A/V, les autres A/V en readers suivants avec `-S -B -M --no-chapters --no-global-tags`). Les pistes non A/V (sous-titres, etc.) restent rattachées au carrier. L'ordre original des pistes est restauré via `--track-order`. Les propriétés de segment présentes (UID, titre, timestamp scale, date UTC, liens previous/next) sont recopiées.
+
+Chemins Windows longs : au-delà de `-ExtendedPathThreshold` (défaut 160), les chemins **outils** (`ToolInputPath`, `ToolOutputPath`, et `-MkvMerge` s'il est encheminé) reçoivent le préfixe `\\?\` / `\\?\UNC\`. `InputPath` / `OutputPath` restent les chemins logiques.
+
+Échecs (exception) : fichier absent, sortie = source, conteneur non reconnu/non supporté, type autre que Matroska, aucune piste, aucune piste A/V, date Matroska illisible, `mkvmerge -J` code &gt;= 2.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Get-MkvInterleaveRepairCommand</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>OutputPath</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>MkvMerge</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>ExtendedPathThreshold</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>ExtendedPathThreshold</maml:name>
+        <maml:description>
+          <maml:para>Longueur à partir de laquelle les chemins outils reçoivent le préfixe Windows étendu. Défaut : 160.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>System.Int32</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>MkvMerge</maml:name>
+        <maml:description>
+          <maml:para>Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` (PATH). Un chemin encheminé est soumis au même seuil de chemin étendu.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>OutputPath</maml:name>
+        <maml:description>
+          <maml:para>Fichier MKV cible du remux. Distinct du source. Absent : voisin `{basename}.repaired.mkv`.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Fichier Matroska à identifier. Obligatoire, position 0.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues />
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Prérequis : PowerShell 7+, `mkvmerge` (MKVToolNix). Identification seulement : pas de `ShouldProcess`, pas de remplacement du source.
+
+Ne pas faire : prendre cette commande pour un remux ; pointer `-OutputPath` sur le source ; l'utiliser sur un non-Matroska.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Inspecter la ligne mkvmerge avant un remux ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MkvInterleaveRepairCommand -Path 'D:\Media\film.mkv' | Select-Object CommandLine, OutputPath</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : voir readers, `--track-order` et le voisin `.repaired.mkv` sans toucher au fichier. `mkvmerge -J` est quand même exécuté.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Forcer un fichier de sortie ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Get-MkvInterleaveRepairCommand -Path 'D:\Media\film.mkv' -OutputPath 'D:\Temp\film.repaired.mkv'</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : écrire ailleurs que le voisin par défaut. Doit être distinct du source.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Invoke-MkvRepair</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Invoke-ReencodeMedia</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command>
+    <command:details>
+      <command:name>Invoke-MkvRepair</command:name>
+      <maml:description>
+        <maml:para>Répare l'interleaving d'un MKV (ou des `*.mkv` d'un dossier) et remplace le fichier source in-place.</maml:para>
+      </maml:description>
+      <command:verb>Invoke</command:verb>
+      <command:noun>MkvRepair</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Importer `.\Tetram.Media.Reencode` (PowerShell 7+). Remux `mkvmerge` à readers A/V séparés (même construction que `Get-MkvInterleaveRepairCommand`), puis `Move-Item` de la sortie temporaire sur le source. Ce n'est pas un réencodage : les flux conservés sont recopiés. Jeux exclusifs : `-Path` (un fichier) ou `-Folder` (scan `*.mkv`).
+
+Effet disque :
+
+- `-WhatIf` : pas de remux, pas de remplacement. `ConfirmImpact` Medium : pas de prompt sauf `-Confirm`.
+- run réel : `mkvmerge` écrit un voisin `.repaired.mkv` (ou le `-OutputPath` interne équivalent), attend que le fichier soit disponible en exclusivité, puis déplace ce temporaire par-dessus le source. Si `mkvmerge` rend un code non nul, ou si la sortie n'existe pas, le source est conservé et une exception est levée.
+
+Mode `-Folder` : uniquement des fichiers `*.mkv` non lecture seule. La liste est **entièrement matérialisée** avant la première réparation : un `.repaired.mkv` créé pendant le run n'est pas ajouté à la file. `-Recurse` descend dans les sous-dossiers. Un dossier absent lève ; un dossier sans candidat retourne sans erreur. Le mode `-Path` ne saute pas un fichier lecture seule : ce filtre n'existe que pour `-Folder`.
+
+`-PassThru` émet le `FileInfo` du source après remplacement. Sans ce commutateur : aucun objet pipeline. Une barre de progression s'affiche en mode dossier.
+
+`mkvmerge` : `-MkvMerge`, défaut `mkvmerge.exe` (PATH). Chemins longs : même seuil 160 que `Get-MkvInterleaveRepairCommand`.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Invoke-MkvRepair</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>MkvMerge</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>ExtendedPathThreshold</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>FileReadyTimeoutSeconds</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>RetryIntervalMilliseconds</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>PassThru</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>WhatIf</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Confirm</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+      <command:syntaxItem>
+        <maml:name>Invoke-MkvRepair</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Folder</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Recurse</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>MkvMerge</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>ExtendedPathThreshold</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>FileReadyTimeoutSeconds</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>RetryIntervalMilliseconds</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>PassThru</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>WhatIf</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Confirm</maml:name>
+          <maml:description />
+          <dev:type>
+            <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="cf">
+        <maml:name>Confirm</maml:name>
+        <maml:description>
+          <maml:para>Demande confirmation avant chaque remplacement `ShouldProcess` (ConfirmImpact Medium).</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>ExtendedPathThreshold</maml:name>
+        <maml:description>
+          <maml:para>Longueur à partir de laquelle les chemins outils reçoivent le préfixe Windows étendu. Défaut : 160.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>System.Int32</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>FileReadyTimeoutSeconds</maml:name>
+        <maml:description>
+          <maml:para>Délai d'attente (secondes) pour que la sortie mkvmerge soit disponible en exclusivité, et pour les retries de `Move-Item`. Défaut : 30.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>System.Int32</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Folder</maml:name>
+        <maml:description>
+          <maml:para>Dossier à scanner (`*.mkv`). Exclut `-Path`. Doit exister.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>MkvMerge</maml:name>
+        <maml:description>
+          <maml:para>Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` (PATH).</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Émet le `FileInfo` du fichier source après un remplacement réussi. Absent sous `-WhatIf`.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Fichier Matroska à réparer et remplacer. Obligatoire en jeu File, position 0. Exclut `-Folder`.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Recurse</maml:name>
+        <maml:description>
+          <maml:para>Parcourt les sous-dossiers. Uniquement avec `-Folder`.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>RetryIntervalMilliseconds</maml:name>
+        <maml:description>
+          <maml:para>Intervalle (ms) entre tentatives d'ouverture exclusive / `Move-Item`. Défaut : 200.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>System.Int32</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="wi">
+        <maml:name>WhatIf</maml:name>
+        <maml:description>
+          <maml:para>Pas de remux ni de remplacement du source.</maml:para>
+        </maml:description>
+        <dev:type>
+          <maml:name>System.Management.Automation.SwitchParameter</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues />
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Prérequis : PowerShell 7+, `mkvmerge` (MKVToolNix).
+
+Ne pas faire : combiner `-Path` et `-Folder` ; prendre `-Folder` pour traiter un `.mp4` ; compter sur le skip lecture seule en mode `-Path` ; prendre cette commande pour un réencodage ffmpeg (`Invoke-ReencodeMedia`).</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Simuler le remplacement d'un fichier ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-MkvRepair -Path 'D:\Media\film.mkv' -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : voir la cible `ShouldProcess` sans remux ni `Move-Item`.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Réparer un MKV in-place ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-MkvRepair -Path 'D:\Media\film.mkv'</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : remux puis écraser l'original. L'échec mkvmerge conserve le source.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 3: Réparer tous les MKV d'un arbre ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-MkvRepair -Folder 'D:\Media' -Recurse</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : scan récursif `*.mkv`, ignore lecture seule, file figée avant le premier remux.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 4: Récupérer le FileInfo après remplacement ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Invoke-MkvRepair -Path 'D:\Media\film.mkv' -PassThru</dev:code>
+        <dev:remarks>
+          <maml:para>Intention : enchaîner sur le fichier déjà réécrit. Sans effet sous `-WhatIf`.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Get-MkvInterleaveRepairCommand</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Invoke-ReencodeMedia</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command>
+    <command:details>
       <command:name>Invoke-ReencodeMedia</command:name>
       <maml:description>
         <maml:para>Remplace in-place des fichiers média : réencodage HEVC/AV1 vers MKV, `-NoTranscode` (filtrage sans transcodage) ou contrôle ffmpeg (`-CheckOnly`, pas un dry-run).</maml:para>
@@ -1212,6 +1669,14 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
     <command:relatedLinks>
       <maml:navigationLink>
         <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Get-MkvInterleaveRepairCommand</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Invoke-MkvRepair</maml:linkText>
         <maml:uri />
       </maml:navigationLink>
       <maml:navigationLink>

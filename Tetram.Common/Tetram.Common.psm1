@@ -360,10 +360,3 @@ function Show-Colors()
         Write-Host "$color" -Foreground $color
     }
 }
-
-Export-ModuleMember -Function `
-	Show-Colors,
-Write-Log, Write-ErrorLog, Write-InfoLog, Write-InfoWarning, Write-DebugLog,
-Format-FileSize, Format-Duration,
-Show-CommandLine,
-Test-PowerShellSpecificPath

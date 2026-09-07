@@ -231,5 +231,3 @@ function Merge-MediaSubtitle {
         }
     }
 }
-
-Export-ModuleMember -Function Get-MediaStream, Merge-MediaSubtitle
