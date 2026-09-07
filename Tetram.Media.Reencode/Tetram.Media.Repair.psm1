@@ -10,60 +10,7 @@ Set-StrictMode -Version 3.0
 # Helpers privés
 # ---------------------------------------------------------------------------
 
-function ConvertFrom-TetramExtendedLengthPath {
-    param(
-        [Parameter(Mandatory)]
-        [string] $Path
-    )
-
-    if ($Path.StartsWith(
-        '\\?\UNC\',
-        [System.StringComparison]::OrdinalIgnoreCase
-    )) {
-        return '\\' + $Path.Substring(8)
-    }
-
-    if ($Path.StartsWith(
-        '\\?\',
-        [System.StringComparison]::OrdinalIgnoreCase
-    )) {
-        return $Path.Substring(4)
-    }
-
-    return $Path
-}
-
-
-function ConvertTo-TetramExtendedLengthPath {
-    param(
-        [Parameter(Mandatory)]
-        [string] $Path,
-
-        [int] $Threshold = 160
-    )
-
-    if ($Path.StartsWith(
-        '\\?\',
-        [System.StringComparison]::OrdinalIgnoreCase
-    )) {
-        return $Path
-    }
-
-    $fullPath = [System.IO.Path]::GetFullPath($Path)
-
-    if ($fullPath.Length -le $Threshold) {
-        return $fullPath
-    }
-
-    if ($fullPath.StartsWith('\\')) {
-        return '\\?\UNC\' + $fullPath.Substring(2)
-    }
-
-    return '\\?\' + $fullPath
-}
-
-
-function Get-TetramOptionalPropertyValue {
+function Get-OptionalPropertyValue {
     param(
         [Parameter(Mandatory)]
         [object] $InputObject,
@@ -82,7 +29,7 @@ function Get-TetramOptionalPropertyValue {
 }
 
 
-function ConvertTo-TetramMkvDate {
+function ConvertTo-MkvDate {
     param(
         [Parameter(Mandatory)]
         [object] $Value
@@ -119,16 +66,13 @@ function ConvertTo-TetramMkvDate {
             [ref] $parsed
         )
     ) {
-        return $parsed.ToString(
-            "yyyy-MM-dd'T'HH:mm:ss'Z'",
-            $culture
-        )
+        return $parsed.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", $culture)
     }
 
     throw "Date Matroska non reconnue : '$text'"
 }
 
-function Get-TetramMkvMergeInfo {
+function Get-MkvMergeInfo {
     param(
         [Parameter(Mandatory)]
         [string] $MkvMerge,
@@ -166,17 +110,7 @@ function Get-TetramMkvMergeInfo {
     }
 }
 
-function ConvertTo-TetramPowerShellLiteral {
-    param(
-        [AllowEmptyString()]
-        [string] $Value
-    )
-
-    return "'" + $Value.Replace("'", "''") + "'"
-}
-
-
-function Wait-TetramFileReady {
+function Wait-FileReady {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -220,7 +154,7 @@ function Wait-TetramFileReady {
 }
 
 
-function Move-TetramItemWithRetry {
+function Move-ItemWithRetry {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -265,7 +199,7 @@ function Move-TetramItemWithRetry {
 }
 
 
-function Invoke-TetramMkvRepairFile {
+function Invoke-MkvRepairFile {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -275,7 +209,7 @@ function Invoke-TetramMkvRepairFile {
         [string] $MkvMerge,
 
         [ValidateRange(1, 32767)]
-        [int] $ExtendedPathThreshold = 160,
+        [int] $ExtendedPathThreshold = 250,
 
         [ValidateRange(1, 300)]
         [int] $FileReadyTimeoutSeconds = 30,
@@ -312,12 +246,12 @@ function Invoke-TetramMkvRepairFile {
         )
     }
 
-    Wait-TetramFileReady `
+    Wait-FileReady `
         -Path $command.ToolOutputPath `
         -TimeoutSeconds $FileReadyTimeoutSeconds `
         -RetryIntervalMilliseconds $RetryIntervalMilliseconds
 
-    Move-TetramItemWithRetry `
+    Move-ItemWithRetry `
         -LiteralPath $command.ToolOutputPath `
         -Destination $command.ToolInputPath `
         -TimeoutSeconds $FileReadyTimeoutSeconds `
@@ -344,23 +278,18 @@ function Get-MkvInterleaveRepairCommand {
         [string] $MkvMerge = 'mkvmerge.exe',
 
         [ValidateRange(1, 32767)]
-        [int] $ExtendedPathThreshold = 160
+        [int] $ExtendedPathThreshold = 250
     )
 
     # -----------------------------------------------------------------------
     # Normalisation des chemins
     # -----------------------------------------------------------------------
 
-    $normalInputPath =
-        ConvertFrom-TetramExtendedLengthPath -Path $Path
+    $normalInputPath = ConvertFrom-ExtendedLengthPath -Path $Path
 
-    $fullInputPath =
-        [System.IO.Path]::GetFullPath($normalInputPath)
+    $fullInputPath = [System.IO.Path]::GetFullPath($normalInputPath)
 
-    $toolInputPath =
-        ConvertTo-TetramExtendedLengthPath `
-            -Path $fullInputPath `
-            -Threshold $ExtendedPathThreshold
+    $toolInputPath = ConvertTo-ExtendedLengthPath -Path $fullInputPath -Threshold $ExtendedPathThreshold
 
     if (-not [System.IO.File]::Exists($toolInputPath)) {
         throw "Fichier introuvable : $Path"
@@ -399,23 +328,15 @@ function Get-MkvInterleaveRepairCommand {
             )
     }
     else {
-        $normalOutputPath =
-            ConvertFrom-TetramExtendedLengthPath -Path $OutputPath
+        $normalOutputPath = ConvertFrom-ExtendedLengthPath -Path $OutputPath
 
-        $fullOutputPath =
-            [System.IO.Path]::GetFullPath($normalOutputPath)
+        $fullOutputPath = [System.IO.Path]::GetFullPath($normalOutputPath)
     }
 
-    $toolOutputPath =
-        ConvertTo-TetramExtendedLengthPath `
-            -Path $fullOutputPath `
-            -Threshold $ExtendedPathThreshold
+    $toolOutputPath = ConvertTo-ExtendedLengthPath -Path $fullOutputPath -Threshold $ExtendedPathThreshold
 
     if (
-        [System.StringComparer]::OrdinalIgnoreCase.Equals(
-            $toolInputPath,
-            $toolOutputPath
-        )
+        [System.StringComparer]::OrdinalIgnoreCase.Equals($toolInputPath, $toolOutputPath)
     ) {
         throw 'Le fichier de sortie ne peut pas être le fichier source.'
     }
@@ -428,48 +349,30 @@ function Get-MkvInterleaveRepairCommand {
     $toolMkvMerge = $MkvMerge
 
     if ([System.IO.Path]::IsPathRooted($MkvMerge)) {
-        $toolMkvMerge =
-            ConvertTo-TetramExtendedLengthPath `
-                -Path $MkvMerge `
-                -Threshold $ExtendedPathThreshold
+        $toolMkvMerge = ConvertTo-ExtendedLengthPath -Path $MkvMerge -Threshold $ExtendedPathThreshold
     }
-
 
     # -----------------------------------------------------------------------
     # Identification Matroska
     # -----------------------------------------------------------------------
 
-    $info = Get-TetramMkvMergeInfo `
-		-MkvMerge $toolMkvMerge `
-		-Path $toolInputPath
+    $info = Get-MkvMergeInfo -MkvMerge $toolMkvMerge -Path $toolInputPath
 
     # -----------------------------------------------------------------------
     # Vérification du conteneur
     # -----------------------------------------------------------------------
 
-    $container =
-        Get-TetramOptionalPropertyValue `
-            -InputObject $info `
-            -Name 'container'
+    $container = Get-OptionalPropertyValue -InputObject $info -Name 'container'
 
     if ($null -eq $container) {
         throw 'mkvmerge n''a retourné aucune information de conteneur.'
     }
 
-    $recognized =
-        Get-TetramOptionalPropertyValue `
-            -InputObject $container `
-            -Name 'recognized'
+    $recognized = Get-OptionalPropertyValue -InputObject $container -Name 'recognized'
 
-    $supported =
-        Get-TetramOptionalPropertyValue `
-            -InputObject $container `
-            -Name 'supported'
+    $supported = Get-OptionalPropertyValue -InputObject $container -Name 'supported'
 
-    $containerType =
-        Get-TetramOptionalPropertyValue `
-            -InputObject $container `
-            -Name 'type'
+    $containerType = Get-OptionalPropertyValue -InputObject $container -Name 'type'
 
     if ($recognized -ne $true -or $supported -ne $true) {
         throw 'Conteneur non reconnu ou non supporté par mkvmerge.'
@@ -487,10 +390,7 @@ function Get-MkvInterleaveRepairCommand {
     # Pistes
     # -----------------------------------------------------------------------
 
-    $tracksValue =
-        Get-TetramOptionalPropertyValue `
-            -InputObject $info `
-            -Name 'tracks'
+    $tracksValue = Get-OptionalPropertyValue -InputObject $info -Name 'tracks'
 
     $tracks = @($tracksValue)
 
@@ -499,10 +399,7 @@ function Get-MkvInterleaveRepairCommand {
     }
 
     $avTracks = @(
-        $tracks |
-            Where-Object {
-                $_.type -in 'video', 'audio'
-            }
+        $tracks | Where-Object { $_.type -in 'video', 'audio' }
     )
 
     if ($avTracks.Count -eq 0) {
@@ -510,10 +407,7 @@ function Get-MkvInterleaveRepairCommand {
     }
 
     $otherTracks = @(
-        $tracks |
-            Where-Object {
-                $_.type -notin 'video', 'audio'
-            }
+        $tracks | Where-Object { $_.type -notin 'video', 'audio' }
     )
 
 
@@ -555,108 +449,85 @@ function Get-MkvInterleaveRepairCommand {
     # Construction des arguments
     # -----------------------------------------------------------------------
 
-    $arguments =
-        [System.Collections.Generic.List[string]]::new()
-
-    [void] $arguments.Add('-o')
-    [void] $arguments.Add($toolOutputPath)
-
+    $arguments = @(
+        '-o', $toolOutputPath
+    )
 
     # -----------------------------------------------------------------------
     # Propriétés du segment
     # -----------------------------------------------------------------------
 
-    $containerProperties =
-        Get-TetramOptionalPropertyValue `
-            -InputObject $container `
-            -Name 'properties'
+    $containerProperties = Get-OptionalPropertyValue -InputObject $container -Name 'properties'
 
     if ($null -ne $containerProperties) {
 
         # ----- SegmentUID --------------------------------------------------
 
-        $segmentUid =
-            Get-TetramOptionalPropertyValue `
-                -InputObject $containerProperties `
-                -Name 'segment_uid'
+        $segmentUid = Get-OptionalPropertyValue -InputObject $containerProperties -Name 'segment_uid'
 
         if ($null -ne $segmentUid) {
-            [void] $arguments.Add('--segment-uid')
-            [void] $arguments.Add([string] $segmentUid)
+            $arguments += @( 
+                '--segment-uid', [string] $segmentUid
+            )
         }
 
 
         # ----- Title -------------------------------------------------------
 
-        $title =
-            Get-TetramOptionalPropertyValue `
-                -InputObject $containerProperties `
-                -Name 'title'
+        $title = Get-OptionalPropertyValue -InputObject $containerProperties -Name 'title'
 
         if ($null -ne $title) {
-            [void] $arguments.Add('--title')
-            [void] $arguments.Add([string] $title)
+            $arguments += @( 
+                '--title', [string] $title
+            )
         }
 
 
         # ----- TimestampScale ---------------------------------------------
 
-        $timestampScale =
-            Get-TetramOptionalPropertyValue `
-                -InputObject $containerProperties `
-                -Name 'timestamp_scale'
+        $timestampScale = Get-OptionalPropertyValue -InputObject $containerProperties -Name 'timestamp_scale'
 
         if ($null -ne $timestampScale) {
-            $timestampScaleText =
-                [System.Convert]::ToString(
-                    $timestampScale,
-                    [System.Globalization.CultureInfo]::InvariantCulture
-                )
+            $timestampScaleText = [System.Convert]::ToString($timestampScale, [System.Globalization.CultureInfo]::InvariantCulture)
 
-            [void] $arguments.Add('--timestamp-scale')
-            [void] $arguments.Add($timestampScaleText)
+            $arguments += @( 
+                '--timestamp-scale', $timestampScaleText
+            )
         }
 
 
         # ----- DateUTC -----------------------------------------------------
 
-        $dateUtc =
-            Get-TetramOptionalPropertyValue `
-                -InputObject $containerProperties `
-                -Name 'date_utc'
+        $dateUtc = Get-OptionalPropertyValue -InputObject $containerProperties -Name 'date_utc'
 
         if ($null -ne $dateUtc) {
-            $dateText =
-                ConvertTo-TetramMkvDate -Value $dateUtc
+            $dateText = ConvertTo-MkvDate -Value $dateUtc
 
-            [void] $arguments.Add('--date')
-            [void] $arguments.Add($dateText)
+            $arguments += @( 
+                '--date', $dateText
+            )
         }
 
 
         # ----- PreviousSegmentUID -----------------------------------------
 
-        $previousSegmentUid =
-            Get-TetramOptionalPropertyValue `
-                -InputObject $containerProperties `
-                -Name 'previous_segment_uid'
+        $previousSegmentUid = Get-OptionalPropertyValue -InputObject $containerProperties -Name 'previous_segment_uid'
 
         if ($null -ne $previousSegmentUid) {
-            [void] $arguments.Add('--link-to-previous')
-            [void] $arguments.Add([string] $previousSegmentUid)
+            $arguments += @( 
+                '--link-to-previous', [string] $previousSegmentUid
+            )
         }
 
 
         # ----- NextSegmentUID ---------------------------------------------
 
-        $nextSegmentUid =
-            Get-TetramOptionalPropertyValue `
-                -InputObject $containerProperties `
-                -Name 'next_segment_uid'
+        $nextSegmentUid = Get-OptionalPropertyValue -InputObject $containerProperties -Name 'next_segment_uid'
 
         if ($null -ne $nextSegmentUid) {
-            [void] $arguments.Add('--link-to-next')
-            [void] $arguments.Add([string] $nextSegmentUid)
+            $arguments += @( 
+                '--link-to-next', [string] $nextSegmentUid
+            )
         }
     }
 
@@ -665,8 +536,9 @@ function Get-MkvInterleaveRepairCommand {
     # Ordre des pistes
     # -----------------------------------------------------------------------
 
-    [void] $arguments.Add('--track-order')
-    [void] $arguments.Add($trackOrder)
+    $arguments += @( 
+        '--track-order', $trackOrder
+    )
 
 
     # -----------------------------------------------------------------------
@@ -674,38 +546,33 @@ function Get-MkvInterleaveRepairCommand {
     # -----------------------------------------------------------------------
 
     if ($carrier.type -eq 'video') {
-        [void] $arguments.Add('--video-tracks')
-        [void] $arguments.Add([string] $carrier.id)
-        [void] $arguments.Add('-A')
+        $arguments += @( 
+            '--video-tracks', [string] $carrier.id, '-A'
+        )
     }
     else {
-        [void] $arguments.Add('--audio-tracks')
-        [void] $arguments.Add([string] $carrier.id)
-        [void] $arguments.Add('-D')
+        $arguments += @( 
+            '--audio-tracks', [string] $carrier.id, '-D'
+        )
     }
 
-    $carrierTagIds =
-        [System.Collections.Generic.List[int]]::new()
-
-    [void] $carrierTagIds.Add(
+    $carrierTagIds = @( 
         [int] $carrier.id
     )
 
     foreach ($track in $otherTracks) {
-        [void] $carrierTagIds.Add(
-            [int] $track.id
-        )
+        $carrierTagIds += [int] $track.id
     }
 
     if ($carrierTagIds.Count -gt 0) {
-        [void] $arguments.Add('--track-tags')
-        [void] $arguments.Add(
-            ($carrierTagIds.ToArray() -join ',')
+        $arguments += @( 
+            '--track-tags', ($carrierTagIds -join ',')
         )
     }
 
-    [void] $arguments.Add($toolInputPath)
-
+    $arguments += @( 
+        $toolInputPath
+    )
 
     # -----------------------------------------------------------------------
     # Readers indépendants des autres pistes A/V
@@ -715,26 +582,21 @@ function Get-MkvInterleaveRepairCommand {
         $track = $avTracks[$i]
 
         if ($track.type -eq 'video') {
-            [void] $arguments.Add('--video-tracks')
-            [void] $arguments.Add([string] $track.id)
-            [void] $arguments.Add('-A')
+            $arguments += @( 
+                '--video-tracks', [string] $track.id, '-A'
+            )
         }
         else {
-            [void] $arguments.Add('--audio-tracks')
-            [void] $arguments.Add([string] $track.id)
-            [void] $arguments.Add('-D')
+            $arguments += @( 
+                '--audio-tracks', [string] $track.id, '-D'
+            )
         }
 
-        [void] $arguments.Add('-S')
-        [void] $arguments.Add('-B')
-        [void] $arguments.Add('-M')
-        [void] $arguments.Add('--no-chapters')
-        [void] $arguments.Add('--no-global-tags')
-
-        [void] $arguments.Add('--track-tags')
-        [void] $arguments.Add([string] $track.id)
-
-        [void] $arguments.Add($toolInputPath)
+        $arguments += @(
+            '-S', '-B', '-M', '--no-chapters', '--no-global-tags'
+            '--track-tags', [string] $track.id
+            $toolInputPath
+        )
     }
 
 
@@ -744,17 +606,9 @@ function Get-MkvInterleaveRepairCommand {
 
     $commandLine =
         '& ' +
-        (ConvertTo-TetramPowerShellLiteral $toolMkvMerge) +
+        (ConvertTo-PowerShellLiteral $toolMkvMerge) +
         ' ' +
-        (
-            (
-                $arguments |
-                    ForEach-Object {
-                        ConvertTo-TetramPowerShellLiteral $_
-                    }
-            ) -join ' '
-        )
-
+        (($arguments | ForEach-Object { ConvertTo-PowerShellLiteral $_ }) -join ' ')
 
     # -----------------------------------------------------------------------
     # Résultat
@@ -768,13 +622,10 @@ function Get-MkvInterleaveRepairCommand {
         ToolOutputPath = $toolOutputPath
 
         Executable     = $toolMkvMerge
-        Arguments      = $arguments.ToArray()
+        Arguments      = $arguments
         CommandLine    = $commandLine
 
-        Tracks         = @(
-            $tracks |
-                Select-Object id, type, codec
-        )
+        Tracks         = @($tracks | Select-Object id, type, codec)
     }
 }
 
@@ -806,7 +657,7 @@ function Invoke-MkvRepair {
         [string] $MkvMerge = 'mkvmerge.exe',
 
         [ValidateRange(1, 32767)]
-        [int] $ExtendedPathThreshold = 160,
+        [int] $ExtendedPathThreshold = 250,
 
         [ValidateRange(1, 300)]
         [int] $FileReadyTimeoutSeconds = 30,
@@ -818,11 +669,8 @@ function Invoke-MkvRepair {
     )
 
     if ($PSCmdlet.ParameterSetName -eq 'File') {
-        if ($PSCmdlet.ShouldProcess(
-            $Path,
-            'Réparer l''interleaving MKV et remplacer le fichier source'
-        )) {
-            Invoke-TetramMkvRepairFile `
+        if ($PSCmdlet.ShouldProcess($Path, 'Réparer l''interleaving MKV et remplacer le fichier source')) {
+            Invoke-MkvRepairFile `
                 -Path $Path `
                 -MkvMerge $MkvMerge `
                 -ExtendedPathThreshold $ExtendedPathThreshold `
@@ -839,16 +687,11 @@ function Invoke-MkvRepair {
     # Mode dossier
     # -----------------------------------------------------------------------
 
-    $normalFolderPath =
-        ConvertFrom-TetramExtendedLengthPath -Path $Folder
+    $normalFolderPath = ConvertFrom-ExtendedLengthPath -Path $Folder
 
-    $fullFolderPath =
-        [System.IO.Path]::GetFullPath($normalFolderPath)
+    $fullFolderPath = [System.IO.Path]::GetFullPath($normalFolderPath)
 
-    $toolFolderPath =
-        ConvertTo-TetramExtendedLengthPath `
-            -Path $fullFolderPath `
-            -Threshold $ExtendedPathThreshold
+    $toolFolderPath = ConvertTo-ExtendedLengthPath -Path $fullFolderPath -Threshold $ExtendedPathThreshold
 
     if (-not [System.IO.Directory]::Exists($toolFolderPath)) {
         throw "Dossier introuvable : $Folder"
@@ -866,12 +709,8 @@ function Invoke-MkvRepair {
     # pas être ajoutés dynamiquement à cette liste.
     $files = @(
         Get-ChildItem @getChildItemArgs |
-            Where-Object {
-                -not $_.IsReadOnly
-            } |
-            ForEach-Object {
-                $_.FullName
-            }
+            Where-Object {-not $_.IsReadOnly} |
+            ForEach-Object { $_.FullName }
     )
 
     $count = $files.Count
@@ -894,11 +733,8 @@ function Invoke-MkvRepair {
                 -CurrentOperation $file `
                 -PercentComplete (($i / $count) * 100)
 
-            if ($PSCmdlet.ShouldProcess(
-                $file,
-                'Réparer l''interleaving MKV et remplacer le fichier source'
-            )) {
-                Invoke-TetramMkvRepairFile `
+            if ($PSCmdlet.ShouldProcess($file, 'Réparer l''interleaving MKV et remplacer le fichier source')) {
+                Invoke-MkvRepairFile `
                     -Path $file `
                     -MkvMerge $MkvMerge `
                     -ExtendedPathThreshold $ExtendedPathThreshold `

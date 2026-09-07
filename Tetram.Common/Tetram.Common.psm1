@@ -223,6 +223,73 @@ function Test-PowerShellSpecificPath
     return $false
 }
 
+function ConvertFrom-ExtendedLengthPath
+{
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path
+    )
+
+    if ($Path.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase))
+    {
+        return '\\' + $Path.Substring(8)
+    }
+
+    if ($Path.StartsWith('\\?\', [System.StringComparison]::OrdinalIgnoreCase))
+    {
+        return $Path.Substring(4)
+    }
+
+    return $Path
+}
+
+function ConvertTo-ExtendedLengthPath
+{
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path,
+
+        # Marge sous MAX_PATH (260) : certains outils Win32 échouent avant la limite documentée.
+        [int] $Threshold = 250
+    )
+
+    if ($Path.StartsWith('\\?\', [System.StringComparison]::OrdinalIgnoreCase))
+    {
+        return $Path
+    }
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+
+    if ($fullPath.Length -le $Threshold)
+    {
+        return $fullPath
+    }
+
+    if ($fullPath.StartsWith('\\'))
+    {
+        return '\\?\UNC\' + $fullPath.Substring(2)
+    }
+
+    return '\\?\' + $fullPath
+}
+
+function ConvertTo-PowerShellLiteral
+{
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [AllowEmptyString()]
+        [string] $Value
+    )
+
+    # EscapeSingleQuotedStringContent n'entoure pas : la recette documentée est "'" + Escape(...) + "'".
+    return "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($Value) + "'"
+}
+
 function Show-CommandLine
 {
     [CmdletBinding()]

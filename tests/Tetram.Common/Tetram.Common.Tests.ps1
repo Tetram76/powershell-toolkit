@@ -153,6 +153,56 @@ Describe 'Write-InfoWarning' {
     }
 }
 
+Describe 'ConvertFrom-ExtendedLengthPath / ConvertTo-ExtendedLengthPath' {
+
+    It 'retire le préfixe \\?\ et \\?\UNC\' {
+        ConvertFrom-ExtendedLengthPath -Path '\\?\C:\Media\film.mkv' |
+            Should -BeExactly 'C:\Media\film.mkv'
+        ConvertFrom-ExtendedLengthPath -Path '\\?\UNC\server\share\film.mkv' |
+            Should -BeExactly '\\server\share\film.mkv'
+        ConvertFrom-ExtendedLengthPath -Path 'C:\Media\film.mkv' |
+            Should -BeExactly 'C:\Media\film.mkv'
+    }
+
+    It 'préfixe seulement au-delà du seuil, et laisse un chemin déjà étendu' {
+        $short = 'C:\Windows'
+        ConvertTo-ExtendedLengthPath -Path $short -Threshold 250 |
+            Should -BeExactly ([System.IO.Path]::GetFullPath($short))
+        ConvertTo-ExtendedLengthPath -Path $short -Threshold 1 |
+            Should -BeExactly ('\\?\' + [System.IO.Path]::GetFullPath($short))
+        ConvertTo-ExtendedLengthPath -Path '\\?\C:\already' -Threshold 1 |
+            Should -BeExactly '\\?\C:\already'
+    }
+
+    It 'applique le préfixe UNC et ignore un chemin déjà sous le seuil par défaut (250)' {
+        $unc = '\\server\share\' + ('a' * 240)
+        $fullUnc = [System.IO.Path]::GetFullPath($unc)
+        ConvertTo-ExtendedLengthPath -Path $unc -Threshold 1 |
+            Should -BeExactly ('\\?\UNC\' + $fullUnc.Substring(2))
+
+        $mid = 'C:\' + ('x' * 200)
+        $full = [System.IO.Path]::GetFullPath($mid)
+        $full.Length | Should -BeGreaterThan 160
+        $full.Length | Should -BeLessOrEqual 250
+        ConvertTo-ExtendedLengthPath -Path $mid |
+            Should -BeExactly $full
+        ConvertTo-ExtendedLengthPath -Path $mid -Threshold 160 |
+            Should -BeExactly ('\\?\' + $full)
+    }
+}
+
+Describe 'ConvertTo-PowerShellLiteral' {
+
+    It 'entoure d''apostrophes et double les apostrophes internes' {
+        ConvertTo-PowerShellLiteral -Value 'C:\Windows' |
+            Should -BeExactly "'C:\Windows'"
+        ConvertTo-PowerShellLiteral -Value "It's a film" |
+            Should -BeExactly "'It''s a film'"
+        ConvertTo-PowerShellLiteral -Value '' |
+            Should -BeExactly "''"
+    }
+}
+
 Describe 'Test-PowerShellSpecificPath' {
 
     It 'reconnaît les crochets et l''échappement backtick' {

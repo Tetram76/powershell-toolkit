@@ -2,6 +2,260 @@
 <helpItems xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" schema="maml" xmlns="http://msh">
   <command:command>
     <command:details>
+      <command:name>ConvertFrom-ExtendedLengthPath</command:name>
+      <maml:description>
+        <maml:para>Retire le préfixe Win32 de chemin étendu (`\\?\` / `\\?\UNC\`).</maml:para>
+      </maml:description>
+      <command:verb>ConvertFrom</command:verb>
+      <command:noun>ExtendedLengthPath</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Ramène un chemin d'outil Win32 vers sa forme logique : `\\?\C:\...` devient `C:\...`, `\\?\UNC\serveur\share\...` devient `\\serveur\share\...`. Un chemin déjà sans préfixe est renvoyé inchangé.
+
+Cette conversion n'accède pas au disque et n'appelle pas `GetFullPath`.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>ConvertFrom-ExtendedLengthPath</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Chemin éventuellement préfixé `\\?\`.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>Le chemin logique, sans préfixe `\\?\`.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Complémentaire de `ConvertTo-ExtendedLengthPath` : les API .NET et les outils natifs préfèrent souvent le chemin étendu ; l'affichage et les comparaisons, le chemin logique.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Préfixe disque local ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>ConvertFrom-ExtendedLengthPath -Path '\\?\C:\Media\film.mkv'</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Préfixe UNC ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>ConvertFrom-ExtendedLengthPath -Path '\\?\UNC\nas\films\film.mkv'</dev:code>
+        <dev:remarks />
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>ConvertTo-ExtendedLengthPath</maml:linkText>
+        <maml:uri>ConvertTo-ExtendedLengthPath.md</maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command>
+    <command:details>
+      <command:name>ConvertTo-ExtendedLengthPath</command:name>
+      <maml:description>
+        <maml:para>Ajoute le préfixe Win32 de chemin étendu (`\\?\` / `\\?\UNC\`) au-delà d'un seuil de longueur.</maml:para>
+      </maml:description>
+      <command:verb>ConvertTo</command:verb>
+      <command:noun>ExtendedLengthPath</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Résout `$Path` en chemin complet. Si sa longueur dépasse `-Threshold` (défaut 250, marge sous MAX_PATH 260), le préfixe `\\?\` est ajouté (ou `\\?\UNC\` pour un UNC). Un chemin déjà préfixé `\\?\` est renvoyé inchangé, sans re-résolution.
+
+En dessous du seuil, le chemin complet est renvoyé sans préfixe.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>ConvertTo-ExtendedLengthPath</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>Threshold</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">int</command:parameterValue>
+          <dev:type>
+            <maml:name>System.Int32</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Chemin à normaliser. Obligatoire.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Threshold</maml:name>
+        <maml:description>
+          <maml:para>Longueur à partir de laquelle le préfixe étendu est ajouté. Défaut : 250.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>System.Int32</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>Chemin complet, éventuellement préfixé `\\?\` / `\\?\UNC\`.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Le seuil 250 est volontairement sous MAX_PATH (260) : certains outils Win32 échouent avant la limite documentée.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Chemin court, inchangé hors préfixe ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>ConvertTo-ExtendedLengthPath -Path 'C:\Windows'</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Forcer le préfixe ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>ConvertTo-ExtendedLengthPath -Path 'C:\Windows' -Threshold 1</dev:code>
+        <dev:remarks />
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>ConvertFrom-ExtendedLengthPath</maml:linkText>
+        <maml:uri>ConvertFrom-ExtendedLengthPath.md</maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command>
+    <command:details>
+      <command:name>ConvertTo-PowerShellLiteral</command:name>
+      <maml:description>
+        <maml:para>Produit un littéral PowerShell à quotes simples, sûr à coller dans une ligne de commande.</maml:para>
+      </maml:description>
+      <command:verb>ConvertTo</command:verb>
+      <command:noun>PowerShellLiteral</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Entoure `$Value` de quotes simples après `CodeGeneration.EscapeSingleQuotedStringContent` (recette documentée : `"'" + Escape(...) + "'"`). Les apostrophes internes, y compris les équivalents Unicode, sont échappées. Une chaîne vide donne `''`.
+
+Utile pour une ligne copiable (`&amp; 'mkvmerge.exe' 'C:\Media\It''s a film.mkv'`), pas pour passer des arguments à un processus natif (là, un tableau d'arguments suffit).</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>ConvertTo-PowerShellLiteral</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>Value</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>Value</maml:name>
+        <maml:description>
+          <maml:para>Texte à représenter en littéral. Peut être vide.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>Littéral quotes simples, y compris les délimiteurs.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Pas de cmdlet native équivalente : `Join-String -SingleQuote` n'échappe pas les apostrophes.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Chemin sans apostrophe ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>ConvertTo-PowerShellLiteral -Value 'C:\Windows'</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Apostrophe interne ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>ConvertTo-PowerShellLiteral -Value "It's a film"</dev:code>
+        <dev:remarks />
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command>
+    <command:details>
       <command:name>Test-PowerShellSpecificPath</command:name>
       <maml:description>
         <maml:para>Indique si un chemin emploie de la syntaxe que seul PowerShell comprend.</maml:para>

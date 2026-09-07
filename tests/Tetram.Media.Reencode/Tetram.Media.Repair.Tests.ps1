@@ -2,7 +2,7 @@
 #
 # RepoRoot depuis tests/<Module> : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
 # Import-Module (Join-Path $RepoRoot 'Tetram.Media.Reencode') ; mocks -ModuleName Tetram.Media.Repair
-# Get-TetramMkvMergeInfo / Invoke-TetramMkvRepairFile : InModuleScope 'Tetram.Media.Repair'
+# Get-MkvMergeInfo / Invoke-MkvRepairFile : InModuleScope 'Tetram.Media.Repair'
 # Fichiers factices sous $TestDrive ; mkvmerge simulé par un .ps1 (pas de binaire réel).
 
 BeforeAll {
@@ -106,7 +106,7 @@ BeforeAll {
         } {
             param($Path, $PassThru)
 
-            Invoke-TetramMkvRepairFile -Path $Path -MkvMerge 'mkvmerge.exe' -PassThru:$PassThru
+            Invoke-MkvRepairFile -Path $Path -MkvMerge 'mkvmerge.exe' -PassThru:$PassThru
         }
     }
 }
@@ -145,39 +145,14 @@ Describe 'Invoke-MkvRepair - surface publique' {
     }
 }
 
-Describe 'ConvertFrom-TetramExtendedLengthPath / ConvertTo-TetramExtendedLengthPath' {
-    It 'retire le préfixe \\?\ et \\?\UNC\' {
-        InModuleScope 'Tetram.Media.Repair' {
-            ConvertFrom-TetramExtendedLengthPath -Path '\\?\C:\Media\film.mkv' |
-                Should -BeExactly 'C:\Media\film.mkv'
-            ConvertFrom-TetramExtendedLengthPath -Path '\\?\UNC\server\share\film.mkv' |
-                Should -BeExactly '\\server\share\film.mkv'
-            ConvertFrom-TetramExtendedLengthPath -Path 'C:\Media\film.mkv' |
-                Should -BeExactly 'C:\Media\film.mkv'
-        }
-    }
-
-    It 'préfixe seulement au-delà du seuil, et laisse un chemin déjà étendu' {
-        InModuleScope 'Tetram.Media.Repair' {
-            $short = 'C:\Windows'
-            ConvertTo-TetramExtendedLengthPath -Path $short -Threshold 160 |
-                Should -BeExactly ([System.IO.Path]::GetFullPath($short))
-            ConvertTo-TetramExtendedLengthPath -Path $short -Threshold 1 |
-                Should -BeExactly ('\\?\' + [System.IO.Path]::GetFullPath($short))
-            ConvertTo-TetramExtendedLengthPath -Path '\\?\C:\already' -Threshold 1 |
-                Should -BeExactly '\\?\C:\already'
-        }
-    }
-}
-
-Describe 'Get-TetramMkvMergeInfo' {
+Describe 'Get-MkvMergeInfo' {
     It 'lit le JSON redirigé quand mkvmerge rend 0 ou 1' {
         $tool = Join-Path $TestDrive 'mkvmerge-ok.ps1'
         New-FakeToolScript -Path $tool -ExitCode 1 -Flag '--redirect-output' -OutputText '{"ok":true}'
 
         $info = InModuleScope 'Tetram.Media.Repair' -Parameters @{ Tool = $tool } {
             param($Tool)
-            Get-TetramMkvMergeInfo -MkvMerge $Tool -Path 'ignored.mkv'
+            Get-MkvMergeInfo -MkvMerge $Tool -Path 'ignored.mkv'
         }
 
         $info.ok | Should -BeTrue
@@ -189,7 +164,7 @@ Describe 'Get-TetramMkvMergeInfo' {
 
         InModuleScope 'Tetram.Media.Repair' -Parameters @{ Tool = $tool } {
             param($Tool)
-            { Get-TetramMkvMergeInfo -MkvMerge $Tool -Path 'ignored.mkv' } |
+            { Get-MkvMergeInfo -MkvMerge $Tool -Path 'ignored.mkv' } |
                 Should -Throw '*mkvmerge -J a échoué*'
         }
     }
@@ -197,7 +172,7 @@ Describe 'Get-TetramMkvMergeInfo' {
 
 Describe 'Get-MkvInterleaveRepairCommand' {
     BeforeEach {
-        Mock -ModuleName Tetram.Media.Repair Get-TetramMkvMergeInfo {
+        Mock -ModuleName Tetram.Media.Repair Get-MkvMergeInfo {
             $script:mkvInfo
         }
     }
@@ -205,7 +180,7 @@ Describe 'Get-MkvInterleaveRepairCommand' {
     It 'refuse un fichier absent avant d''appeler mkvmerge -J' {
         { Get-MkvInterleaveRepairCommand -Path (Join-Path $TestDrive 'missing.mkv') } |
             Should -Throw '*Fichier introuvable*'
-        Should -Invoke -ModuleName Tetram.Media.Repair Get-TetramMkvMergeInfo -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Repair Get-MkvMergeInfo -Times 0
     }
 
     It 'refuse une sortie identique à la source' {
@@ -213,7 +188,7 @@ Describe 'Get-MkvInterleaveRepairCommand' {
         Set-Content -LiteralPath $mkv -Value 'fake'
         { Get-MkvInterleaveRepairCommand -Path $mkv -OutputPath $mkv } |
             Should -Throw '*ne peut pas être le fichier source*'
-        Should -Invoke -ModuleName Tetram.Media.Repair Get-TetramMkvMergeInfo -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Repair Get-MkvMergeInfo -Times 0
     }
 
     It 'dérive film.repaired.mkv à côté d''un .mkv, et suffixe sinon' {
@@ -371,19 +346,19 @@ Describe 'Invoke-MkvRepair' {
     It 'n''appelle pas la réparation sous -WhatIf' {
         $mkv = Join-Path $TestDrive 'whatif.mkv'
         Set-Content -LiteralPath $mkv -Value 'fake'
-        Mock -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile { throw 'ne doit pas tourner' }
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile { throw 'ne doit pas tourner' }
 
         { Invoke-MkvRepair -Path $mkv -WhatIf } | Should -Not -Throw
-        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 0
     }
 
     It 'délègue un fichier au réparateur interne' {
         $mkv = Join-Path $TestDrive 'one.mkv'
         Set-Content -LiteralPath $mkv -Value 'fake'
-        Mock -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile {}
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {}
 
         Invoke-MkvRepair -Path $mkv
-        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile -Times 1 -ParameterFilter {
+        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 1 -ParameterFilter {
             $Path -eq $mkv
         }
     }
@@ -394,7 +369,7 @@ Describe 'Invoke-MkvRepair' {
     }
 
     It 'ne traite pas un dossier sans mkv writable' {
-        Mock -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile { throw 'ne doit pas tourner' }
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile { throw 'ne doit pas tourner' }
         $folder = Join-Path $TestDrive 'nowrite'
         New-Item -ItemType Directory -Path $folder | Out-Null
         $mp4 = Join-Path $folder 'clip.mp4'
@@ -404,7 +379,7 @@ Describe 'Invoke-MkvRepair' {
         [System.IO.File]::SetAttributes($ro, [System.IO.FileAttributes]::ReadOnly)
         try {
             Invoke-MkvRepair -Folder $folder
-            Should -Invoke -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile -Times 0
+            Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 0
         }
         finally {
             [System.IO.File]::SetAttributes($ro, [System.IO.FileAttributes]::Normal)
@@ -418,22 +393,22 @@ Describe 'Invoke-MkvRepair' {
         $nestedMkv = Join-Path $sub 'child.mkv'
         Set-Content -LiteralPath $rootMkv -Value 'fake'
         Set-Content -LiteralPath $nestedMkv -Value 'fake'
-        Mock -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile {}
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {}
 
         Invoke-MkvRepair -Folder $TestDrive
-        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile -Times 1 -ParameterFilter {
+        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 1 -ParameterFilter {
             $Path -eq (Get-Item -LiteralPath $rootMkv).FullName
         }
 
         Invoke-MkvRepair -Folder $TestDrive -Recurse
-        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile -Times 2
-        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-TetramMkvRepairFile -Times 1 -ParameterFilter {
+        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 2
+        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 1 -ParameterFilter {
             $Path -eq (Get-Item -LiteralPath $nestedMkv).FullName
         }
     }
 }
 
-Describe 'Invoke-TetramMkvRepairFile' {
+Describe 'Invoke-MkvRepairFile' {
     It 'remplace le source par la sortie quand mkvmerge rend 0' {
         $src = Join-Path $TestDrive 'replace.mkv'
         $out = Join-Path $TestDrive 'replace.repaired.mkv'

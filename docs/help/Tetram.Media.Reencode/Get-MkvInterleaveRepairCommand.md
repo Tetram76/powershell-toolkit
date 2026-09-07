@@ -34,7 +34,7 @@ Sans `-OutputPath`, la sortie est un voisin `{basename}.repaired.mkv` (le suffix
 
 Les pistes audio/vidéo sont chacune lues par un reader `mkvmerge` distinct (carrier = première piste A/V, les autres A/V en readers suivants avec `-S -B -M --no-chapters --no-global-tags`). Les pistes non A/V (sous-titres, etc.) restent rattachées au carrier. L'ordre original des pistes est restauré via `--track-order`. Les propriétés de segment présentes (UID, titre, timestamp scale, date UTC, liens previous/next) sont recopiées.
 
-Chemins Windows longs : au-delà de `-ExtendedPathThreshold` (défaut 160), les chemins **outils** (`ToolInputPath`, `ToolOutputPath`, et `-MkvMerge` s'il est encheminé) reçoivent le préfixe `\\?\` / `\\?\UNC\`. `InputPath` / `OutputPath` restent les chemins logiques.
+Chemins Windows longs : au-delà de `-ExtendedPathThreshold` (défaut 250), les chemins **outils** (`ToolInputPath`, `ToolOutputPath`, et `-MkvMerge` s'il est encheminé) reçoivent le préfixe `\\?\` / `\\?\UNC\`. `InputPath` / `OutputPath` restent les chemins logiques.
 
 Échecs (exception) : fichier absent, sortie = source, conteneur non reconnu/non supporté, type autre que Matroska, aucune piste, aucune piste A/V, date Matroska illisible, `mkvmerge -J` code >= 2.
 
@@ -60,11 +60,11 @@ Get-MkvInterleaveRepairCommand -Path 'D:\Media\film.mkv' -OutputPath 'D:\Temp\fi
 
 ### -ExtendedPathThreshold
 
-Longueur à partir de laquelle les chemins outils reçoivent le préfixe Windows étendu. Défaut : 160.
+Longueur à partir de laquelle les chemins outils reçoivent le préfixe Windows étendu. Défaut : 250.
 
 ```yaml
 Type: System.Int32
-DefaultValue: 160
+DefaultValue: 250
 SupportsWildcards: false
 Aliases: []
 ParameterSets:
