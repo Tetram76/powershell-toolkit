@@ -236,6 +236,8 @@ function Invoke-MkvRepairFile {
 
     $exitCode = $LASTEXITCODE
 
+    # Code 1 mkvmerge : avertissements, le mux a continué, fichier « peut être
+    # correct ou non ». On refuse tout non-nul avant d'écraser le source.
     if ($exitCode -ne 0) {
         throw (
             "mkvmerge a échoué avec le code de sortie $exitCode. " +

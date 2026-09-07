@@ -474,6 +474,8 @@ Describe 'Invoke-MkvRepairFile' {
     }
 
     It 'conserve le source si mkvmerge échoue' {
+        # Code 1 (avertissement) : volontairement un échec, comme tout non-nul.
+        # Le mux a pu écrire une sortie douteuse ; on ne remplace pas le source.
         $src = Join-Path $TestDrive 'keep.mkv'
         $out = Join-Path $TestDrive 'keep.repaired.mkv'
         $tool = Join-Path $TestDrive 'mkvmerge-fail-run.ps1'
