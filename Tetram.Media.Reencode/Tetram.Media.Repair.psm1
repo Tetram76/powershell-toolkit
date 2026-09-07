@@ -19,6 +19,18 @@ function Get-OptionalPropertyValue {
         [string] $Name
     )
 
+    # ConvertFrom-Json -AsHashtable : OrderedHashtable, les clés ne sont pas
+    # des NoteProperties (PSObject.Properties['container'] est null).
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        foreach ($key in @($InputObject.Keys)) {
+            if ($key -eq $Name) {
+                return $InputObject[$key]
+            }
+        }
+
+        return $null
+    }
+
     $property = $InputObject.PSObject.Properties[$Name]
 
     if ($null -eq $property) {

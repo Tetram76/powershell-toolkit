@@ -344,6 +344,23 @@ Describe 'Get-MkvInterleaveRepairCommand' {
     }
 }
 
+Describe 'Get-MkvInterleaveRepairCommand - JSON hashtable mkvmerge -J' {
+    It 'lit container et tracks depuis ConvertFrom-Json -AsHashtable' {
+        $mkv = Join-Path $TestDrive 'from-json.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        $tool = Join-Path $TestDrive 'mkvmerge-hashtable.ps1'
+        $json = '{"container":{"recognized":true,"supported":true,"type":"Matroska"},"tracks":[{"id":0,"type":"video","codec":"V_MPEGH/ISO/HEVC"}]}'
+        New-FakeToolScript -Path $tool -ExitCode 0 -Flag '--redirect-output' -OutputText $json
+
+        $cmd = Get-MkvInterleaveRepairCommand -Path $mkv -MkvMerge $tool
+
+        $cmd.Tracks.Count | Should -Be 1
+        $cmd.Tracks[0].id | Should -Be 0
+        $cmd.Tracks[0].type | Should -BeExactly 'video'
+        $cmd.Arguments | Should -Contain '--video-tracks'
+    }
+}
+
 Describe 'Invoke-MkvRepair' {
     It 'n''appelle pas la réparation sous -WhatIf' {
         $mkv = Join-Path $TestDrive 'whatif.mkv'
