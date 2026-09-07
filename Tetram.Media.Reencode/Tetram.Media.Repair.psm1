@@ -52,14 +52,7 @@ function ConvertTo-MkvDate {
         [System.Globalization.DateTimeStyles]::AssumeUniversal -bor
         [System.Globalization.DateTimeStyles]::AdjustToUniversal
 
-    if (
-        [datetimeoffset]::TryParse(
-            $text,
-            $culture,
-            $styles,
-            [ref] $parsed
-        )
-    ) {
+    if ([datetimeoffset]::TryParse($text, $culture, $styles, [ref] $parsed)) {
         return $parsed.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", $culture)
     }
 
@@ -208,9 +201,20 @@ function Invoke-MkvRepairFile {
         [switch] $PassThru
     )
 
+    # Le défaut public du builder est un voisin {basename}.repaired.mkv : mkvmerge -o
+    # l'écraserait, et en -Folder ce nom est déjà dans la liste matérialisée.
+    $normalPath = ConvertFrom-ExtendedLengthPath -Path $Path
+    $fullPath = [System.IO.Path]::GetFullPath($normalPath)
+    $directory = [System.IO.Path]::GetDirectoryName($fullPath)
+    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($fullPath)
+    $uniqueOutputPath = Join-Path $directory (
+        '{0}.{1}.mkv' -f $baseName, [guid]::NewGuid().ToString('N')
+    )
+
     $command =
         Get-MkvInterleaveRepairCommand `
             -Path $Path `
+            -OutputPath $uniqueOutputPath `
             -MkvMerge $MkvMerge `
             -ExtendedPathThreshold $ExtendedPathThreshold
 
@@ -662,8 +666,8 @@ function Invoke-MkvRepair {
     }
 
     # La liste est entièrement matérialisée avant la première réparation.
-    # Les fichiers .repaired.mkv créés pendant le traitement ne peuvent donc
-    # pas être ajoutés dynamiquement à cette liste.
+    # Les temporaires créés pendant le traitement ne peuvent donc pas être
+    # ajoutés dynamiquement à cette liste.
     $files = @(
         Get-ChildItem @getChildItemArgs |
             Where-Object {-not $_.IsReadOnly} |

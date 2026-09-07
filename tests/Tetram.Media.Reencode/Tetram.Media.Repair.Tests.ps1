@@ -97,16 +97,18 @@ BeforeAll {
     function script:Invoke-RepairFileUnderTest {
         param(
             [Parameter(Mandatory)] [string] $Path,
+            [string] $MkvMerge = 'mkvmerge.exe',
             [switch] $PassThru
         )
 
         InModuleScope 'Tetram.Media.Repair' -Parameters @{
             Path     = $Path
+            MkvMerge = $MkvMerge
             PassThru = [bool] $PassThru
         } {
-            param($Path, $PassThru)
+            param($Path, $MkvMerge, $PassThru)
 
-            Invoke-MkvRepairFile -Path $Path -MkvMerge 'mkvmerge.exe' -PassThru:$PassThru
+            Invoke-MkvRepairFile -Path $Path -MkvMerge $MkvMerge -PassThru:$PassThru
         }
     }
 }
@@ -406,6 +408,28 @@ Describe 'Invoke-MkvRepair' {
             $Path -eq (Get-Item -LiteralPath $nestedMkv).FullName
         }
     }
+
+    It 'en -Folder conserve un voisin .repaired.mkv et termine le lot' {
+        $folder = Join-Path $TestDrive 'lib'
+        New-Item -ItemType Directory -Path $folder | Out-Null
+        $src = Join-Path $folder 'film.mkv'
+        $neighbor = Join-Path $folder 'film.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-folder-temp.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        Set-Content -LiteralPath $neighbor -Value 'keep-me' -NoNewline
+        New-FakeToolScript -Path $tool -ExitCode 0 -OutputText 'repaired'
+        $script:mkvInfo = New-MkvMergeInfo -Tracks @(
+            (New-MkvTrack -Id 0 -Type video)
+        )
+        Mock -ModuleName Tetram.Media.Repair Get-MkvMergeInfo {
+            $script:mkvInfo
+        }
+
+        { Invoke-MkvRepair -Folder $folder -MkvMerge $tool } | Should -Not -Throw
+        Test-Path -LiteralPath $src | Should -BeTrue
+        Test-Path -LiteralPath $neighbor | Should -BeTrue
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired'
+    }
 }
 
 Describe 'Invoke-MkvRepairFile' {
@@ -473,5 +497,28 @@ Describe 'Invoke-MkvRepairFile' {
 
         { Invoke-RepairFileUnderTest -Path $src } | Should -Throw "*n'existe pas*"
         Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+    }
+
+    It 'n''écrase pas un voisin .repaired.mkv déjà présent' {
+        $src = Join-Path $TestDrive 'film.mkv'
+        $neighbor = Join-Path $TestDrive 'film.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-unique-temp.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        Set-Content -LiteralPath $neighbor -Value 'keep-me' -NoNewline
+        New-FakeToolScript -Path $tool -ExitCode 0 -OutputText 'repaired'
+        $script:mkvInfo = New-MkvMergeInfo -Tracks @(
+            (New-MkvTrack -Id 0 -Type video)
+        )
+        Mock -ModuleName Tetram.Media.Repair Get-MkvMergeInfo {
+            $script:mkvInfo
+        }
+
+        Invoke-RepairFileUnderTest -Path $src -MkvMerge $tool
+
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired'
+        Get-Content -LiteralPath $neighbor -Raw | Should -BeExactly 'keep-me'
+        @(Get-ChildItem -LiteralPath $TestDrive -Filter 'film*.mkv').Name |
+            Sort-Object |
+            Should -Be @('film.mkv', 'film.repaired.mkv')
     }
 }
