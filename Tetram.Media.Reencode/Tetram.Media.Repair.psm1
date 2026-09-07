@@ -223,49 +223,65 @@ function Invoke-MkvRepairFile {
         '{0}.{1}.mkv' -f $baseName, [guid]::NewGuid().ToString('N')
     )
 
-    $command =
-        Get-MkvInterleaveRepairCommand `
-            -Path $Path `
-            -OutputPath $uniqueOutputPath `
-            -MkvMerge $MkvMerge `
-            -ExtendedPathThreshold $ExtendedPathThreshold
+    $command = $null
+    $replaced = $false
+    try {
+        $command =
+            Get-MkvInterleaveRepairCommand `
+                -Path $Path `
+                -OutputPath $uniqueOutputPath `
+                -MkvMerge $MkvMerge `
+                -ExtendedPathThreshold $ExtendedPathThreshold
 
-	# Show-CommandLine $command.Executable $command.arguments
+        # Show-CommandLine $command.Executable $command.arguments
 
-    # stdout mkvmerge irait dans le pipeline et se mêlerait au FileInfo de -PassThru.
-    & $command.Executable $command.arguments > $null
+        # stdout mkvmerge irait dans le pipeline et se mêlerait au FileInfo de -PassThru.
+        & $command.Executable $command.arguments > $null
 
-    $exitCode = $LASTEXITCODE
+        $exitCode = $LASTEXITCODE
 
-    # Code 1 mkvmerge : avertissements, le mux a continué, fichier « peut être
-    # correct ou non ». On refuse tout non-nul avant d'écraser le source.
-    if ($exitCode -ne 0) {
-        throw (
-            "mkvmerge a échoué avec le code de sortie $exitCode. " +
-            "Le fichier source n'a pas été remplacé : $Path"
-        )
+        # Code 1 mkvmerge : avertissements, le mux a continué, fichier « peut être
+        # correct ou non ». On refuse tout non-nul avant d'écraser le source.
+        if ($exitCode -ne 0) {
+            throw (
+                "mkvmerge a échoué avec le code de sortie $exitCode. " +
+                "Le fichier source n'a pas été remplacé : $Path"
+            )
+        }
+
+        if (-not [System.IO.File]::Exists($command.ToolOutputPath)) {
+            throw (
+                "mkvmerge s'est terminé sans erreur, mais le fichier de sortie " +
+                "n'existe pas : $($command.OutputPath)"
+            )
+        }
+
+        Wait-FileReady `
+            -Path $command.ToolOutputPath `
+            -TimeoutSeconds $FileReadyTimeoutSeconds `
+            -RetryIntervalMilliseconds $RetryIntervalMilliseconds
+
+        Move-ItemWithRetry `
+            -LiteralPath $command.ToolOutputPath `
+            -Destination $command.ToolInputPath `
+            -TimeoutSeconds $FileReadyTimeoutSeconds `
+            -RetryIntervalMilliseconds $RetryIntervalMilliseconds
+
+        $replaced = $true
+
+        if ($PassThru) {
+            Get-Item -LiteralPath $command.ToolInputPath
+        }
     }
-
-    if (-not [System.IO.File]::Exists($command.ToolOutputPath)) {
-        throw (
-            "mkvmerge s'est terminé sans erreur, mais le fichier de sortie " +
-            "n'existe pas : $($command.OutputPath)"
-        )
-    }
-
-    Wait-FileReady `
-        -Path $command.ToolOutputPath `
-        -TimeoutSeconds $FileReadyTimeoutSeconds `
-        -RetryIntervalMilliseconds $RetryIntervalMilliseconds
-
-    Move-ItemWithRetry `
-        -LiteralPath $command.ToolOutputPath `
-        -Destination $command.ToolInputPath `
-        -TimeoutSeconds $FileReadyTimeoutSeconds `
-        -RetryIntervalMilliseconds $RetryIntervalMilliseconds
-
-    if ($PassThru) {
-        Get-Item -LiteralPath $command.ToolInputPath
+    finally {
+        # Temporaire unique à côté de la source : un échec après le mux
+        # laisserait un *.mkv qu'un prochain -Folder reprendrait.
+        if (-not $replaced -and $null -ne $command) {
+            $tempPath = $command.ToolOutputPath
+            if (-not [string]::IsNullOrWhiteSpace($tempPath)) {
+                Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 }
 

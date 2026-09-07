@@ -532,6 +532,28 @@ Describe 'Invoke-MkvRepairFile' {
         Test-Path -LiteralPath $out | Should -BeFalse
     }
 
+    It 'supprime le temporaire si mkvmerge a écrit puis rendu un code non nul' {
+        $src = Join-Path $TestDrive 'warn-written.mkv'
+        $out = Join-Path $TestDrive 'warn-written.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-warn-written.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript -Path $tool -ExitCode 1 -OutputText 'doubtful'
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        { Invoke-RepairFileUnderTest -Path $src } | Should -Throw "*mkvmerge a échoué*"
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+        Test-Path -LiteralPath $out | Should -BeFalse
+    }
+
     It 'conserve le source si mkvmerge rend 0 sans créer la sortie' {
         $src = Join-Path $TestDrive 'ghost.mkv'
         $out = Join-Path $TestDrive 'ghost.repaired.mkv'
