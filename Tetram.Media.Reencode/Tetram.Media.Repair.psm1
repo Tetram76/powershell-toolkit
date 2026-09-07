@@ -38,17 +38,11 @@ function ConvertTo-MkvDate {
     $culture = [System.Globalization.CultureInfo]::InvariantCulture
 
     if ($Value -is [datetimeoffset]) {
-        return $Value.ToUniversalTime().ToString(
-            "yyyy-MM-dd'T'HH:mm:ss'Z'",
-            $culture
-        )
+        return $Value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", $culture)
     }
 
     if ($Value -is [datetime]) {
-        return $Value.ToUniversalTime().ToString(
-            "yyyy-MM-dd'T'HH:mm:ss'Z'",
-            $culture
-        )
+        return $Value.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", $culture)
     }
 
     $text = [string] $Value
@@ -95,18 +89,12 @@ function Get-MkvMergeInfo {
             throw "mkvmerge -J a échoué avec le code $exitCode."
         }
 
-        $json = Get-Content `
-            -LiteralPath $tempFile `
-            -Raw `
-            -Encoding UTF8
+        $json = Get-Content -LiteralPath $tempFile -Raw -Encoding UTF8  
 
-        return $json | ConvertFrom-Json
+        return $json | ConvertFrom-Json -AsHashtable
     }
     finally {
-        Remove-Item `
-            -LiteralPath $tempFile `
-            -Force `
-            -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -301,43 +289,24 @@ function Get-MkvInterleaveRepairCommand {
     # -----------------------------------------------------------------------
 
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-        $directory =
-            [System.IO.Path]::GetDirectoryName($fullInputPath)
+        $directory = [System.IO.Path]::GetDirectoryName($fullInputPath)
+        $leaf = [System.IO.Path]::GetFileName($fullInputPath)
 
-        $leaf =
-            [System.IO.Path]::GetFileName($fullInputPath)
-
-        if (
-            $leaf.EndsWith(
-                '.mkv',
-                [System.StringComparison]::OrdinalIgnoreCase
-            )
-        ) {
-            $leaf =
-                $leaf.Substring(0, $leaf.Length - 4) +
-                '.repaired.mkv'
+        if ($leaf.EndsWith('.mkv', [System.StringComparison]::OrdinalIgnoreCase)) {
+            $leaf = $leaf.Substring(0, $leaf.Length - 4) + '.repaired.mkv'
         }
         else {
             $leaf += '.repaired.mkv'
-        }
-
-        $fullOutputPath =
-            [System.IO.Path]::Combine(
-                $directory,
-                $leaf
-            )
+        }    
+        $fullOutputPath = [System.IO.Path]::Combine($directory, $leaf)
     }
     else {
-        $normalOutputPath = ConvertFrom-ExtendedLengthPath -Path $OutputPath
-
-        $fullOutputPath = [System.IO.Path]::GetFullPath($normalOutputPath)
+        $fullOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
     }
 
     $toolOutputPath = ConvertTo-ExtendedLengthPath -Path $fullOutputPath -Threshold $ExtendedPathThreshold
 
-    if (
-        [System.StringComparer]::OrdinalIgnoreCase.Equals($toolInputPath, $toolOutputPath)
-    ) {
+    if ([System.StringComparer]::OrdinalIgnoreCase.Equals($toolInputPath, $toolOutputPath)) {
         throw 'Le fichier de sortie ne peut pas être le fichier source.'
     }
 
@@ -631,27 +600,15 @@ function Get-MkvInterleaveRepairCommand {
 
 
 function Invoke-MkvRepair {
-    [CmdletBinding(
-        DefaultParameterSetName = 'File',
-        SupportsShouldProcess
-    )]
+    [CmdletBinding(DefaultParameterSetName = 'File', SupportsShouldProcess)]
     param(
-        [Parameter(
-            Mandatory,
-            Position = 0,
-            ParameterSetName = 'File'
-        )]
+        [Parameter(Mandatory, Position = 0, ParameterSetName = 'File')] 
         [string] $Path,
 
-        [Parameter(
-            Mandatory,
-            ParameterSetName = 'Folder'
-        )]
+        [Parameter(Mandatory, ParameterSetName = 'Folder')] 
         [string] $Folder,
 
-        [Parameter(
-            ParameterSetName = 'Folder'
-        )]
+        [Parameter(ParameterSetName = 'Folder')] 
         [switch] $Recurse,
 
         [string] $MkvMerge = 'mkvmerge.exe',
