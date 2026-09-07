@@ -232,7 +232,8 @@ function Invoke-MkvRepairFile {
 
 	# Show-CommandLine $command.Executable $command.arguments
 
-    & $command.Executable $command.arguments
+    # stdout mkvmerge irait dans le pipeline et se mêlerait au FileInfo de -PassThru.
+    & $command.Executable $command.arguments > $null
 
     $exitCode = $LASTEXITCODE
 

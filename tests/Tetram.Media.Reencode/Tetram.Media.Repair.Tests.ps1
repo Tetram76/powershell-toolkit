@@ -54,6 +54,7 @@ BeforeAll {
             [Parameter(Mandatory)] [string] $Path,
             [int] $ExitCode = 0,
             [string] $OutputText,
+            [string] $StdoutText,
             [string] $Flag = '-o'
         )
 
@@ -65,12 +66,21 @@ BeforeAll {
         else {
             ''
         }
+        $hasStdout = $PSBoundParameters.ContainsKey('StdoutText')
+        $stdoutLiteral = if ($hasStdout) {
+            $StdoutText.Replace("'", "''")
+        }
+        else {
+            ''
+        }
 
         @(
             "`$exitCode = $ExitCode"
             "`$writeOutput = `$$hasOutput"
+            "`$writeStdout = `$$hasStdout"
             "`$flag = '$flagLiteral'"
             "`$text = '$outputLiteral'"
+            "`$stdout = '$stdoutLiteral'"
             # `& $exe $argumentArray` passe le tableau comme un seul $args[0] ; on aplatit.
             '$all = [System.Collections.Generic.List[object]]::new()'
             'foreach ($item in $args) {'
@@ -81,6 +91,7 @@ BeforeAll {
             '        [void]$all.Add($item)'
             '    }'
             '}'
+            'if ($writeStdout) { Write-Output $stdout }'
             'for ($i = 0; $i -lt $all.Count; $i++) {'
             '    if ($all[$i] -eq $flag -and ($i + 1) -lt $all.Count) {'
             '        if ($writeOutput) {'
@@ -471,6 +482,30 @@ Describe 'Invoke-MkvRepairFile' {
         Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired'
         Test-Path -LiteralPath $out | Should -BeFalse
         $item.FullName | Should -BeExactly ([System.IO.Path]::GetFullPath($src))
+    }
+
+    It 'ne mélange pas la progression mkvmerge au FileInfo de -PassThru' {
+        $src = Join-Path $TestDrive 'passthru.mkv'
+        $out = Join-Path $TestDrive 'passthru.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-stdout.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript -Path $tool -ExitCode 0 -OutputText 'repaired' -StdoutText 'Progress: 50%'
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        $output = @(Invoke-RepairFileUnderTest -Path $src -PassThru)
+
+        $output.Count | Should -Be 1
+        $output[0] | Should -BeOfType ([System.IO.FileInfo])
+        $output[0].FullName | Should -BeExactly ([System.IO.Path]::GetFullPath($src))
     }
 
     It 'conserve le source si mkvmerge échoue' {
