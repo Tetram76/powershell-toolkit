@@ -217,6 +217,32 @@ Describe 'Get-MkvInterleaveRepairCommand' {
         Should -Invoke -ModuleName Tetram.Media.Repair Get-MkvMergeInfo -Times 0
     }
 
+    It 'refuse une sortie identique écrite avec le préfixe \\?\' {
+        $mkv = Join-Path $TestDrive 'same-ext.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        $full = [System.IO.Path]::GetFullPath($mkv)
+        { Get-MkvInterleaveRepairCommand -Path $mkv -OutputPath ('\\?\' + $full) } |
+            Should -Throw '*ne peut pas être le fichier source*'
+        Should -Invoke -ModuleName Tetram.Media.Repair Get-MkvMergeInfo -Times 0
+    }
+
+    It 'autorise une sortie qui ne diffère que par la casse hors Windows' {
+        if ($IsWindows) {
+            Set-ItResult -Skipped -Because 'NTFS ne distingue pas deux noms qui ne diffèrent que par la casse'
+            return
+        }
+
+        $lower = Join-Path $TestDrive 'case.mkv'
+        $upper = Join-Path $TestDrive 'CASE.mkv'
+        Set-Content -LiteralPath $lower -Value 'fake'
+        Set-Content -LiteralPath $upper -Value 'fake'
+        $script:mkvInfo = New-MkvMergeInfo -Tracks @(
+            (New-MkvTrack -Id 0 -Type video)
+        )
+        { Get-MkvInterleaveRepairCommand -Path $lower -OutputPath $upper } |
+            Should -Not -Throw
+    }
+
     It 'dérive film.repaired.mkv à côté d''un .mkv, et suffixe sinon' {
         $mkv = Join-Path $TestDrive 'Film.MKV'
         $other = Join-Path $TestDrive 'clip.mp4'

@@ -71,6 +71,21 @@ function ConvertTo-MkvDate {
     throw "Date Matroska non reconnue : '$text'"
 }
 
+function Test-SameFilesystemPath {
+    param(
+        [Parameter(Mandatory)]
+        [string] $LiteralPath,
+
+        [Parameter(Mandatory)]
+        [string] $ReferenceLiteralPath
+    )
+
+    $left = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $LiteralPath))
+    $right = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $ReferenceLiteralPath))
+    # GetRelativePath applique les règles de casse du FS (Windows insensible, Unix sensible).
+    return [System.IO.Path]::GetRelativePath($left, $right) -eq '.'
+}
+
 function Get-DefaultMkvMergeExecutable {
     # Hors Windows, MKVToolNix pose `mkvmerge` dans le PATH, pas `mkvmerge.exe` :
     # un défaut Win32 unique ferait échouer les deux commandes publiques alors
@@ -359,12 +374,14 @@ function Get-MkvInterleaveRepairCommand {
         $fullOutputPath = [System.IO.Path]::Combine($directory, $leaf)
     }
     else {
-        $fullOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+        $fullOutputPath = [System.IO.Path]::GetFullPath(
+            (ConvertFrom-ExtendedLengthPath -Path $OutputPath)
+        )
     }
 
     $toolOutputPath = ConvertTo-ExtendedLengthPath -Path $fullOutputPath -Threshold $ExtendedPathThreshold
 
-    if ([System.StringComparer]::OrdinalIgnoreCase.Equals($toolInputPath, $toolOutputPath)) {
+    if (Test-SameFilesystemPath -LiteralPath $fullInputPath -ReferenceLiteralPath $fullOutputPath) {
         throw 'Le fichier de sortie ne peut pas être le fichier source.'
     }
 
