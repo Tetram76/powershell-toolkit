@@ -284,6 +284,24 @@ function ConvertTo-ExtendedLengthPath
     return '\\?\' + $fullPath
 }
 
+function Test-SameFilesystemPath
+{
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string] $LiteralPath,
+
+        [Parameter(Mandatory)]
+        [string] $ReferenceLiteralPath
+    )
+
+    $left = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $LiteralPath))
+    $right = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $ReferenceLiteralPath))
+    # GetRelativePath applique les règles de casse du FS (Windows insensible, Unix sensible).
+    return [System.IO.Path]::GetRelativePath($left, $right) -eq '.'
+}
+
 function ConvertTo-PowerShellLiteral
 {
     [CmdletBinding()]

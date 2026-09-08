@@ -210,6 +210,33 @@ Describe 'ConvertFrom-ExtendedLengthPath / ConvertTo-ExtendedLengthPath' {
     }
 }
 
+Describe 'Test-SameFilesystemPath' {
+
+    It 'identifie le même fichier malgré un préfixe \\?\' {
+        $full = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'same.mkv'))
+        Test-SameFilesystemPath -LiteralPath $full -ReferenceLiteralPath ('\\?\' + $full) |
+            Should -BeTrue
+    }
+
+    It 'suit la casse du système de fichiers' {
+        $lower = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'film.mkv'))
+        $upper = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'FILM.mkv'))
+        $sameCase = Test-SameFilesystemPath -LiteralPath $lower -ReferenceLiteralPath $upper
+        if ($IsWindows) {
+            $sameCase | Should -BeTrue
+        }
+        else {
+            $sameCase | Should -BeFalse
+        }
+    }
+
+    It 'distingue deux fichiers distincts' {
+        $a = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'a.mkv'))
+        $b = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'b.mkv'))
+        Test-SameFilesystemPath -LiteralPath $a -ReferenceLiteralPath $b | Should -BeFalse
+    }
+}
+
 Describe 'ConvertTo-PowerShellLiteral' {
 
     It 'entoure d''apostrophes et double les apostrophes internes' {

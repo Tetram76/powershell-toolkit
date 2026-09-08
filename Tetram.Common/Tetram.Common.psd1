@@ -23,7 +23,7 @@
         'Write-Log', 'Write-ErrorLog', 'Write-InfoLog', 'Write-InfoWarning', 'Write-DebugLog'
         'Format-FileSize', 'Format-Duration'
         'Show-CommandLine'
-        'Test-PowerShellSpecificPath'
+        'Test-PowerShellSpecificPath', 'Test-SameFilesystemPath'
         'ConvertFrom-ExtendedLengthPath', 'ConvertTo-ExtendedLengthPath'
         'ConvertTo-PowerShellLiteral'
     )
@@ -44,7 +44,7 @@
 - 1.1.0 : Renommage des fonctions pour verbes approuvés.
 - 1.2.0 : Détection de syntaxe PowerShell spécifique pour processus natifs.
 - 1.3.0 : Ajout de Write-InfoWarning, helper de journalisation jaune basé sur Write-InfoLog.
-- 1.4.0 : ConvertFrom-ExtendedLengthPath / ConvertTo-ExtendedLengthPath (préfixe Win32 \\?\, seuil 250) ; ConvertTo-PowerShellLiteral.
+- 1.4.0 : ConvertFrom-ExtendedLengthPath / ConvertTo-ExtendedLengthPath (préfixe Win32 \\?\, seuil 250) ; ConvertTo-PowerShellLiteral ; Test-SameFilesystemPath.
 '@
         }
     }

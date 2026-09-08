@@ -90,3 +90,4 @@ Complémentaire de `ConvertTo-ExtendedLengthPath` : les API .NET et les outils n
 ## RELATED LINKS
 
 - [ConvertTo-ExtendedLengthPath](ConvertTo-ExtendedLengthPath.md)
+- [Test-SameFilesystemPath](Test-SameFilesystemPath.md)

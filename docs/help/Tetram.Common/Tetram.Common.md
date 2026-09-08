@@ -34,6 +34,10 @@ Produit un littéral PowerShell à quotes simples, sûr à coller dans une ligne
 
 Indique si un chemin emploie de la syntaxe que seul PowerShell comprend.
 
+### [Test-SameFilesystemPath](Test-SameFilesystemPath.md)
+
+Indique si deux chemins désignent le même fichier (préfixe `\\?\`, casse du système de fichiers).
+
 ### [Write-InfoWarning](Write-InfoWarning.md)
 
 Affiche un message d'information de niveau warning en jaune.

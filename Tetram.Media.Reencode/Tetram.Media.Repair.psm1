@@ -71,30 +71,8 @@ function ConvertTo-MkvDate {
     throw "Date Matroska non reconnue : '$text'"
 }
 
-function Test-SameFilesystemPath {
-    param(
-        [Parameter(Mandatory)]
-        [string] $LiteralPath,
-
-        [Parameter(Mandatory)]
-        [string] $ReferenceLiteralPath
-    )
-
-    $left = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $LiteralPath))
-    $right = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $ReferenceLiteralPath))
-    # GetRelativePath applique les règles de casse du FS (Windows insensible, Unix sensible).
-    return [System.IO.Path]::GetRelativePath($left, $right) -eq '.'
-}
-
 function Get-DefaultMkvMergeExecutable {
-    # Hors Windows, MKVToolNix pose `mkvmerge` dans le PATH, pas `mkvmerge.exe` :
-    # un défaut Win32 unique ferait échouer les deux commandes publiques alors
-    # que l'outil est installé.
-    if ($IsWindows) {
-        return 'mkvmerge.exe'
-    }
-
-    return 'mkvmerge'
+    return $IsWindows ? 'mkvmerge.exe' : 'mkvmerge' 
 }
 
 function Get-MkvMergeInfo {

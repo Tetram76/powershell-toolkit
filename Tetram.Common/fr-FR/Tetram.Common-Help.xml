@@ -78,6 +78,10 @@ Cette conversion n'accède pas au disque et n'appelle pas `GetFullPath`.</maml:p
         <maml:linkText>ConvertTo-ExtendedLengthPath</maml:linkText>
         <maml:uri>ConvertTo-ExtendedLengthPath.md</maml:uri>
       </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>Test-SameFilesystemPath</maml:linkText>
+        <maml:uri>Test-SameFilesystemPath.md</maml:uri>
+      </maml:navigationLink>
     </command:relatedLinks>
   </command:command>
   <command:command>
@@ -325,6 +329,108 @@ Utile pour une ligne copiable (`&amp; 'mkvmerge.exe' 'C:\Media\It''s a film.mkv'
       <maml:navigationLink>
         <maml:linkText>Online Version</maml:linkText>
         <maml:uri />
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command>
+    <command:details>
+      <command:name>Test-SameFilesystemPath</command:name>
+      <maml:description>
+        <maml:para>Indique si deux chemins désignent le même fichier selon le système de fichiers.</maml:para>
+      </maml:description>
+      <command:verb>Test</command:verb>
+      <command:noun>SameFilesystemPath</command:noun>
+    </command:details>
+    <maml:description>
+      <maml:para>Retire un éventuel préfixe `\\?\` / `\\?\UNC\`, résout via `GetFullPath`, puis compare avec `Path.GetRelativePath`. Un résultat `.` signifie le même fichier. La casse suit le système de fichiers : insensible sous Windows, sensible sous Linux et macOS. N'accède pas au disque : les fichiers n'ont pas besoin d'exister.
+
+Sans ça, comparer les chaînes brutes rate `C:\film.mkv` contre `\\?\C:\film.mkv`, ou traite à tort `film.mkv` et `FILM.mkv` comme identiques hors Windows.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Test-SameFilesystemPath</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+          <maml:name>LiteralPath</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
+          <maml:name>ReferenceLiteralPath</maml:name>
+          <maml:description />
+          <command:parameterValue required="true" variableLength="false">string</command:parameterValue>
+          <dev:type>
+            <maml:name>System.String</maml:name>
+          </dev:type>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
+        <maml:name>LiteralPath</maml:name>
+        <maml:description>
+          <maml:para>Premier chemin (éventuellement préfixé `\\?\`).</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
+        <maml:name>ReferenceLiteralPath</maml:name>
+        <maml:description>
+          <maml:para>Second chemin à comparer.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes />
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Boolean</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para>`$true` si les deux chemins désignent le même fichier ; sinon `$false`.</maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Complémentaire de `ConvertFrom-ExtendedLengthPath` : la comparaison se fait sur les formes logiques.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>--------- Example 1: Même fichier, formes courte et étendue ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-SameFilesystemPath -LiteralPath 'C:\Media\film.mkv' -ReferenceLiteralPath '\\?\C:\Media\film.mkv'</dev:code>
+        <dev:remarks />
+      </command:example>
+      <command:example>
+        <maml:title>--------- Example 2: Fichiers distincts ---------</maml:title>
+        <maml:introduction></maml:introduction>
+        <dev:code>Test-SameFilesystemPath -LiteralPath 'C:\Media\film.mkv' -ReferenceLiteralPath 'C:\Media\film.repaired.mkv'</dev:code>
+        <dev:remarks />
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version</maml:linkText>
+        <maml:uri />
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>ConvertFrom-ExtendedLengthPath</maml:linkText>
+        <maml:uri>ConvertFrom-ExtendedLengthPath.md</maml:uri>
+      </maml:navigationLink>
+      <maml:navigationLink>
+        <maml:linkText>ConvertTo-ExtendedLengthPath</maml:linkText>
+        <maml:uri>ConvertTo-ExtendedLengthPath.md</maml:uri>
       </maml:navigationLink>
     </command:relatedLinks>
   </command:command>
