@@ -298,7 +298,11 @@ function Test-SameFilesystemPath
 
     $left = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $LiteralPath))
     $right = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $ReferenceLiteralPath))
-    # GetRelativePath applique les règles de casse du FS (Windows insensible, Unix sensible).
+    # GetRelativePath suit la casse compilée de l'OS (Windows insensible, Unix
+    # sensible), pas celle du volume. Un APFS macOS par défaut fusionnerait
+    # film.mkv et FILM.mkv ; ici ils restent distincts. On n'interroge pas le
+    # disque : -OutputPath n'existe souvent pas encore. Écart accepté hors
+    # Windows / ext4 Linux (pas de cible macOS pour ce dépôt).
     return [System.IO.Path]::GetRelativePath($left, $right) -eq '.'
 }
 
