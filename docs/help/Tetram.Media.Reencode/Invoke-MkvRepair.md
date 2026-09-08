@@ -48,7 +48,7 @@ Mode `-Folder` : uniquement des fichiers `*.mkv` non lecture seule. La liste est
 
 `-PassThru` émet le `FileInfo` du source après remplacement. Sans ce commutateur : aucun objet pipeline. Une barre de progression s'affiche en mode dossier.
 
-`mkvmerge` : `-MkvMerge`, défaut `mkvmerge.exe` (PATH). Chemins longs : même seuil 250 que `Get-MkvInterleaveRepairCommand`.
+`mkvmerge` : `-MkvMerge`, défaut `mkvmerge.exe` sous Windows et `mkvmerge` sinon (PATH). Chemins longs : même seuil 250 que `Get-MkvInterleaveRepairCommand`.
 
 ## EXAMPLES
 
@@ -173,11 +173,11 @@ HelpMessage: ''
 
 ### -MkvMerge
 
-Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` (PATH).
+Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` sous Windows, `mkvmerge` sinon (PATH).
 
 ```yaml
 Type: System.String
-DefaultValue: mkvmerge.exe
+DefaultValue: mkvmerge.exe (Windows) / mkvmerge
 SupportsWildcards: false
 Aliases: []
 ParameterSets:

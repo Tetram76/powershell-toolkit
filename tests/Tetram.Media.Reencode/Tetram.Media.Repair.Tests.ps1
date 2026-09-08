@@ -158,6 +158,19 @@ Describe 'Invoke-MkvRepair - surface publique' {
     }
 }
 
+Describe 'Get-DefaultMkvMergeExecutable' {
+    It 'donne mkvmerge.exe sous Windows et mkvmerge sinon, et les deux commandes publiques s''en servent' {
+        $expected = if ($IsWindows) { 'mkvmerge.exe' } else { 'mkvmerge' }
+        InModuleScope 'Tetram.Media.Repair' { Get-DefaultMkvMergeExecutable } |
+            Should -BeExactly $expected
+        # DefaultValue n'est pas exposé sur le paramètre (expression évaluée à l'appel).
+        (Get-Command Get-MkvInterleaveRepairCommand).Definition |
+            Should -BeLike '*Get-DefaultMkvMergeExecutable*'
+        (Get-Command Invoke-MkvRepair).Definition |
+            Should -BeLike '*Get-DefaultMkvMergeExecutable*'
+    }
+}
+
 Describe 'Get-MkvMergeInfo' {
     It 'lit le JSON redirigé quand mkvmerge rend 0 ou 1' {
         $tool = Join-Path $TestDrive 'mkvmerge-ok.ps1'
@@ -327,7 +340,7 @@ Describe 'Get-MkvInterleaveRepairCommand' {
         )
         $cmd.CommandLine | Should -BeLike "*'It''s a film'*"
         $cmd.Tracks.Count | Should -Be 3
-        $cmd.Executable | Should -BeExactly 'mkvmerge.exe'
+        $cmd.Executable | Should -BeExactly $(if ($IsWindows) { 'mkvmerge.exe' } else { 'mkvmerge' })
     }
 
     It 'utilise --audio-tracks / -D quand le carrier n''est pas une vidéo' {

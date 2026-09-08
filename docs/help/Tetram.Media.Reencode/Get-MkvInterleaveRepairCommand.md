@@ -81,11 +81,11 @@ HelpMessage: ''
 
 ### -MkvMerge
 
-Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` (PATH). Un chemin encheminé est soumis au même seuil de chemin étendu.
+Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` sous Windows, `mkvmerge` sinon (PATH). Un chemin encheminé est soumis au même seuil de chemin étendu.
 
 ```yaml
 Type: System.String
-DefaultValue: mkvmerge.exe
+DefaultValue: mkvmerge.exe (Windows) / mkvmerge
 SupportsWildcards: false
 Aliases: []
 ParameterSets:

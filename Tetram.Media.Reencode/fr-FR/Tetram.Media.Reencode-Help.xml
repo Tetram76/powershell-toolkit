@@ -71,7 +71,7 @@ Chemins Windows longs : au-delà de `-ExtendedPathThreshold` (défaut 250), les 
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>MkvMerge</maml:name>
         <maml:description>
-          <maml:para>Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` (PATH). Un chemin encheminé est soumis au même seuil de chemin étendu.</maml:para>
+          <maml:para>Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` sous Windows, `mkvmerge` sinon (PATH). Un chemin encheminé est soumis au même seuil de chemin étendu.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
@@ -162,7 +162,7 @@ Mode `-Folder` : uniquement des fichiers `*.mkv` non lecture seule. La liste est
 
 `-PassThru` émet le `FileInfo` du source après remplacement. Sans ce commutateur : aucun objet pipeline. Une barre de progression s'affiche en mode dossier.
 
-`mkvmerge` : `-MkvMerge`, défaut `mkvmerge.exe` (PATH). Chemins longs : même seuil 250 que `Get-MkvInterleaveRepairCommand`.</maml:para>
+`mkvmerge` : `-MkvMerge`, défaut `mkvmerge.exe` sous Windows et `mkvmerge` sinon (PATH). Chemins longs : même seuil 250 que `Get-MkvInterleaveRepairCommand`.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -344,7 +344,7 @@ Mode `-Folder` : uniquement des fichiers `*.mkv` non lecture seule. La liste est
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="Named" aliases="none">
         <maml:name>MkvMerge</maml:name>
         <maml:description>
-          <maml:para>Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` (PATH).</maml:para>
+          <maml:para>Chemin ou nom de `mkvmerge`. Défaut : `mkvmerge.exe` sous Windows, `mkvmerge` sinon (PATH).</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="true">System.String</command:parameterValue>
         <dev:type>
