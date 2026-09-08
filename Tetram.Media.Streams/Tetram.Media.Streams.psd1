@@ -5,7 +5,7 @@
     Author = 'TRL'
     CompanyName = 'Tetram'
     Description = 'Extraction de flux MKV (fichiers de flux nommés) et réinjection des sous-titres.'
-    PowerShellVersion = '7.0'
+    PowerShellVersion = '7.6'
     CompatiblePSEditions = @('Core')
     RequiredModules = @()
     RequiredAssemblies = @()

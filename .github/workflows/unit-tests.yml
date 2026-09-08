@@ -8,7 +8,7 @@ on:
 
 jobs:
   pester:
-    name: Pester (${{ matrix.os }})
+    name: Pester (${{ matrix.os }}, ${{ matrix.powershell }})
 
     strategy:
       fail-fast: false
@@ -16,6 +16,11 @@ jobs:
         os:
           - ubuntu-latest
           - windows-latest
+        powershell:
+          - '7.6.5'
+
+    env:
+      POWERSHELL_VERSION: ${{ matrix.powershell }}
 
     runs-on: ${{ matrix.os }}
     permissions:
@@ -24,6 +29,18 @@ jobs:
       checks: write
     steps:
       - uses: actions/checkout@v4
+
+      # Les manifestes exigent 7.6 ; le pwsh préinstallé du runner peut être plus ancien.
+      - name: Setup PowerShell
+        uses: PSModule/install-powershell@v1
+        with:
+          Version: ${{ matrix.powershell }}
+
+      - name: Check PowerShell version
+        shell: pwsh
+        run: |
+          Write-Host "Requested: $env:POWERSHELL_VERSION"
+          Write-Host "Running:   $($PSVersionTable.PSVersion)"
 
       - name: Install Pester
         shell: pwsh
@@ -50,7 +67,7 @@ jobs:
         uses: dorny/test-reporter@v2
         if: (success() || failure()) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
         with:
-          name: Pester Tests (${{ matrix.os }})
+          name: Pester Tests (${{ matrix.os }}, ${{ matrix.powershell }})
           path: TestResults.xml
           reporter: java-junit
           fail-on-error: false
@@ -62,24 +79,24 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           @'
-          ## Résultats Pester (${{ matrix.os }})
+          ## Résultats Pester (${{ matrix.os }}, ${{ matrix.powershell }})
 
           - **JUnit XML :** `TestResults.xml` (racine du workspace)
           - **Couverture JaCoCo :** `coverage.xml` (si généré par `Invoke-Tests.ps1` avec `-Coverage`)
           - **Rapport de tests (check / annotations) :** étape *Publish Pester test report* (`dorny/test-reporter`)
-          - **Fichiers bruts téléchargeables :** artefacts **pester-test-results-${{ matrix.os }}** et **pester-coverage-${{ matrix.os }}**
+          - **Fichiers bruts téléchargeables :** artefacts **pester-test-results-${{ matrix.os }}-${{ matrix.powershell }}** et **pester-coverage-${{ matrix.os }}-${{ matrix.powershell }}**
           '@ | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
 
       - name: Upload test results (JUnit)
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pester-test-results-${{ matrix.os }}
+          name: pester-test-results-${{ matrix.os }}-${{ matrix.powershell }}
           path: TestResults.xml
 
       - name: Upload code coverage (JaCoCo)
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pester-coverage-${{ matrix.os }}
+          name: pester-coverage-${{ matrix.os }}-${{ matrix.powershell }}
           path: coverage.xml

@@ -9,7 +9,7 @@
     Description = 'Identification de similarités visuelles entre vidéos via signatures MPEG-7.'
 
     # --- Compatibilité ---
-    PowerShellVersion = '7.0'
+    PowerShellVersion = '7.6'
     CompatiblePSEditions = @('Core')
 
     # --- Dépendances ---

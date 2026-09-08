@@ -9,7 +9,7 @@
     Description = 'Supprime les répertoires vides avec prise en charge de -WhatIf / -Confirm et DeepScan (PowerShell 7+).'
 
     # --- Compatibilité ---
-    PowerShellVersion = '7.0'
+    PowerShellVersion = '7.6'
     CompatiblePSEditions = @('Core')
 
     # --- Dépendances ---

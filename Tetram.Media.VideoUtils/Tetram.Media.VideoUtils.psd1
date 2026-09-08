@@ -9,7 +9,7 @@
     Description = 'Utilitaires pour l''analyse des flux vidéo (profondeur de bits, chroma, color space).'
 
     # --- Compatibilité ---
-    PowerShellVersion = '7.0'
+    PowerShellVersion = '7.6'
     CompatiblePSEditions = @('Core')
 
     # --- Dépendances ---

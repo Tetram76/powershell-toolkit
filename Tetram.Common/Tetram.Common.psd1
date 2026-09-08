@@ -9,7 +9,7 @@
     Description = 'Fonctions de journalisation, de formatage, et utilitaires de chemin.'
 
     # --- Compatibilité ---
-    PowerShellVersion = '7.0'
+    PowerShellVersion = '7.6'
     CompatiblePSEditions = @('Core')
 
     # --- Dépendances ---

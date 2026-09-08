@@ -9,7 +9,7 @@
     Description = 'Utilitaires pour l''analyse et la configuration des flux audio (codecs, bitrates).'
 
     # --- Compatibilité ---
-    PowerShellVersion = '7.0'
+    PowerShellVersion = '7.6'
     CompatiblePSEditions = @('Core')
 
     # --- Dépendances ---
