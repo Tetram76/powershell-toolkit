@@ -40,4 +40,4 @@ Indique si deux chemins désignent le même fichier (préfixe `\\?\`, casse du s
 
 ### [Write-InfoWarning](Write-InfoWarning.md)
 
-Affiche un message d'information de niveau warning en jaune.
+Affiche un message d'information de niveau avertissement en jaune.

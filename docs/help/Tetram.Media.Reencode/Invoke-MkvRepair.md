@@ -17,7 +17,7 @@ Répare l'interleaving d'un MKV (ou des `*.mkv` d'un dossier) et remplace le fic
 
 ## SYNTAX
 
-### File (Default)
+### File (Par défaut)
 
 ```
 Invoke-MkvRepair [-Path] <string> [-MkvMerge <string>] [-ExtendedPathThreshold <int>]
@@ -300,9 +300,9 @@ HelpMessage: ''
 
 ### CommonParameters
 
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable,
+Cette commande prend en charge les paramètres communs : -Debug, -ErrorAction, -ErrorVariable,
 -InformationAction, -InformationVariable, -OutBuffer, -OutVariable, -PipelineVariable,
--ProgressAction, -Verbose, -WarningAction, and -WarningVariable. For more information, see
+-ProgressAction, -Verbose, -WarningAction et -WarningVariable. Pour plus d'informations, voir
 [about_CommonParameters](https://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS

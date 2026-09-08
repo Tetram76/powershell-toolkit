@@ -13,7 +13,7 @@ title: Write-InfoWarning
 
 ## SYNOPSIS
 
-Affiche un message d'information de niveau warning en jaune.
+Affiche un message d'information de niveau avertissement en jaune.
 
 ## SYNTAX
 
@@ -27,7 +27,7 @@ Write-InfoWarning [-Text] <string> [-Force]
 
 ## DESCRIPTION
 
-Raccourci sémantique vers `Write-InfoLog` avec une couleur jaune fixe. Il n'introduit pas un nouveau système de journalisation et n'écrit pas dans le warning stream PowerShell (`Write-Warning` n'est pas appelé).
+Raccourci sémantique vers `Write-InfoLog` avec une couleur jaune fixe. Il n'introduit pas un nouveau système de journalisation et n'écrit pas dans le flux d'avertissement PowerShell (`Write-Warning` n'est pas appelé).
 
 Sans `-Force`, la visibilité suit exactement `Write-InfoLog` : le message n'apparaît que si `-Verbose` est présent ou si `$VerbosePreference` vaut `Continue`. Avec `-Force`, le message s'affiche indépendamment de `Verbose`.
 
@@ -35,7 +35,7 @@ Aucun objet n'est écrit dans le pipeline : il s'agit d'un affichage console, av
 
 ## EXAMPLES
 
-### Example 1: Warning forcé
+### Example 1: Avertissement forcé
 
 ```powershell
 Write-InfoWarning -Text 'durée incohérente acceptée' -Force
@@ -93,9 +93,9 @@ HelpMessage: ''
 
 ### CommonParameters
 
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable,
+Cette commande prend en charge les paramètres communs : -Debug, -ErrorAction, -ErrorVariable,
 -InformationAction, -InformationVariable, -OutBuffer, -OutVariable, -PipelineVariable,
--ProgressAction, -Verbose, -WarningAction, and -WarningVariable. For more information, see
+-ProgressAction, -Verbose, -WarningAction et -WarningVariable. Pour plus d'informations, voir
 [about_CommonParameters](https://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
@@ -104,6 +104,6 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Ne pas utiliser pour le warning stream PowerShell. Pour un message d'information bleu, utiliser `Write-InfoLog`.
+Ne pas utiliser pour le flux d'avertissement PowerShell. Pour un message d'information bleu, utiliser `Write-InfoLog`.
 
 ## RELATED LINKS
