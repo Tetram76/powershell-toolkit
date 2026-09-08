@@ -6,7 +6,7 @@
 
     Author = 'TRL'
     CompanyName = 'Tetram'
-    Description = 'Supprime les répertoires vides avec prise en charge de -WhatIf / -Confirm et DeepScan (PowerShell 7+).'
+    Description = 'Supprime les répertoires vides avec prise en charge de -WhatIf / -Confirm et DeepScan (PowerShell 7.6+).'
 
     # --- Compatibilité ---
     PowerShellVersion = '7.6'

@@ -1,4 +1,4 @@
-# Remove-Empty-Dirs.psm1 — PowerShell 7+
+# Remove-Empty-Dirs.psm1 — PowerShell 7.6+
 Set-StrictMode -Version 3.0
 
 @(
@@ -84,7 +84,7 @@ function Remove-EmptyDirs
     <#
 .EXTERNALHELP Tetram.Remove-Empty-Dirs-Help.xml
 .SYNOPSIS
-    Supprime les répertoires vides (PS7).
+    Supprime les répertoires vides (PS7.6+).
 #>
     [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium', PositionalBinding = $false)]
     param(

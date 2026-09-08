@@ -37,7 +37,7 @@ Invoke-MkvRepair -Folder <string> [-Recurse] [-MkvMerge <string>] [-ExtendedPath
 
 ## DESCRIPTION
 
-Importer `.\Tetram.Media.Reencode` (PowerShell 7+). Remux `mkvmerge` à readers A/V séparés (même construction que `Get-MkvInterleaveRepairCommand`), puis `Move-Item` de la sortie temporaire sur le source. Ce n'est pas un réencodage : les flux conservés sont recopiés. Jeux exclusifs : `-Path` (un fichier) ou `-Folder` (scan `*.mkv`).
+Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+). Remux `mkvmerge` à readers A/V séparés (même construction que `Get-MkvInterleaveRepairCommand`), puis `Move-Item` de la sortie temporaire sur le source. Ce n'est pas un réencodage : les flux conservés sont recopiés. Jeux exclusifs : `-Path` (un fichier) ou `-Folder` (scan `*.mkv`).
 
 Effet disque :
 
@@ -313,7 +313,7 @@ Sans `-PassThru` : rien. Avec `-PassThru` : `System.IO.FileInfo` du source rempl
 
 ## NOTES
 
-Prérequis : PowerShell 7+, `mkvmerge` (MKVToolNix).
+Prérequis : PowerShell 7.6+, `mkvmerge` (MKVToolNix).
 
 Ne pas faire : combiner `-Path` et `-Folder` ; prendre `-Folder` pour traiter un `.mp4` ; compter sur le skip lecture seule en mode `-Path` ; prendre cette commande pour un réencodage ffmpeg (`Invoke-ReencodeMedia`).
 

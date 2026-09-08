@@ -10,7 +10,7 @@
       <command:noun>MediaSimilarity</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Importer `.\Tetram.Media.Similarity` (PowerShell 7+). `-Path` est obligatoire.
+      <maml:para>Importer `.\Tetram.Media.Similarity` (PowerShell 7.6+). `-Path` est obligatoire.
 
 Deux phases :
 
@@ -196,7 +196,7 @@ Propriétés : `SourceFile` (string), `Matches` (collection de `TargetFile`, `Co
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Prérequis : PowerShell 7+, ffmpeg &gt;= 8.0.0 (hors 9.0.0 et 9.0.1). Comparaison O(n²) sur le nombre de signatures : coûteux sur de gros corpus.
+        <maml:para>Prérequis : PowerShell 7.6+, ffmpeg &gt;= 8.0.0 (hors 9.0.0 et 9.0.1). Comparaison O(n²) sur le nombre de signatures : coûteux sur de gros corpus.
 
 Ne pas faire : attendre une exception si ffmpeg manque ; interpréter l'absence d'objets comme un échec (souvent « 0 match » ou indexation seule) ; omettre `-Recurse` sur un chemin dossier sans joker.</maml:para>
       </maml:alert>

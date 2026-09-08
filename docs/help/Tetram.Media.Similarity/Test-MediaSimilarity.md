@@ -28,7 +28,7 @@ Test-MediaSimilarity [-Path] <string> [[-InputMasks] <string[]>] [[-ConfidenceTh
 
 ## DESCRIPTION
 
-Importer `.\Tetram.Media.Similarity` (PowerShell 7+). `-Path` est obligatoire.
+Importer `.\Tetram.Media.Similarity` (PowerShell 7.6+). `-Path` est obligatoire.
 
 Deux phases :
 
@@ -275,7 +275,7 @@ Propriétés : `SourceFile` (string), `Matches` (collection de `TargetFile`, `Co
 
 ## NOTES
 
-Prérequis : PowerShell 7+, ffmpeg >= 8.0.0 (hors 9.0.0 et 9.0.1). Comparaison O(n²) sur le nombre de signatures : coûteux sur de gros corpus.
+Prérequis : PowerShell 7.6+, ffmpeg >= 8.0.0 (hors 9.0.0 et 9.0.1). Comparaison O(n²) sur le nombre de signatures : coûteux sur de gros corpus.
 
 Ne pas faire : attendre une exception si ffmpeg manque ; interpréter l'absence d'objets comme un échec (souvent « 0 match » ou indexation seule) ; omettre `-Recurse` sur un chemin dossier sans joker.
 

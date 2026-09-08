@@ -1,9 +1,9 @@
-# Tetram.Common.psm1 — PowerShell 7+
+# Tetram.Common.psm1 — PowerShell 7.6+
 Set-StrictMode -Version 3.0
 
 <#
 .SYNOPSIS
-    Fonctions d’aide pour la journalisation colorée (PowerShell 7+).
+    Fonctions d’aide pour la journalisation colorée (PowerShell 7.6+).
 .DESCRIPTION
     Fournit des fonctions Write-Log*, conformes aux conventions PowerShell.
     - Write-Log         : affiche un message avec couleur.

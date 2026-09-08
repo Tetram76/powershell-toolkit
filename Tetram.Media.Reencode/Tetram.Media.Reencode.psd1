@@ -6,7 +6,7 @@
 
     Author = 'TRL'
     CompanyName = 'Tetram'
-    Description = 'Outils de ré-encodage/normalisation de médias (PS7+, WhatIf/Confirm), avec statistiques optionnelles. Réencodage vers MKV. Mode -NoTranscode : filtrage des pistes et nettoyage des métadonnées sans transcodage des flux conservés. Réparation d''interleaving MKV via mkvmerge (Get-MkvInterleaveRepairCommand / Invoke-MkvRepair).'
+    Description = 'Outils de ré-encodage/normalisation de médias (PS7.6+, WhatIf/Confirm), avec statistiques optionnelles. Réencodage vers MKV. Mode -NoTranscode : filtrage des pistes et nettoyage des métadonnées sans transcodage des flux conservés. Réparation d''interleaving MKV via mkvmerge (Get-MkvInterleaveRepairCommand / Invoke-MkvRepair).'
 
     # --- Compatibilité ---
     PowerShellVersion = '7.6'

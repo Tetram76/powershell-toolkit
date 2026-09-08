@@ -10,7 +10,7 @@
       <command:noun>MkvInterleaveRepairCommand</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Importer `.\Tetram.Media.Reencode` (PowerShell 7+). `-Path` est un fichier existant, Matroska reconnu par `mkvmerge -J`. Cette commande **n'exécute pas** le remux : elle identifie le fichier (`mkvmerge -J`) puis retourne un objet décrivant l'exécutable, les arguments, la ligne PowerShell copiable et les chemins (logiques vs outils). Pour remplacer in-place, utiliser `Invoke-MkvRepair`.
+      <maml:para>Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+). `-Path` est un fichier existant, Matroska reconnu par `mkvmerge -J`. Cette commande **n'exécute pas** le remux : elle identifie le fichier (`mkvmerge -J`) puis retourne un objet décrivant l'exécutable, les arguments, la ligne PowerShell copiable et les chemins (logiques vs outils). Pour remplacer in-place, utiliser `Invoke-MkvRepair`.
 
 Sans `-OutputPath`, la sortie est un voisin `{basename}.repaired.mkv` (le suffixe `.mkv` source, casse indifférente, est remplacé ; sinon `.repaired.mkv` est concaténé, ex. `clip.mp4.repaired.mkv`). La sortie ne peut pas être le fichier source.
 
@@ -103,7 +103,7 @@ Chemins Windows longs : au-delà de `-ExtendedPathThreshold` (défaut 250), les 
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Prérequis : PowerShell 7+, `mkvmerge` (MKVToolNix). Identification seulement : pas de `ShouldProcess`, pas de remplacement du source.
+        <maml:para>Prérequis : PowerShell 7.6+, `mkvmerge` (MKVToolNix). Identification seulement : pas de `ShouldProcess`, pas de remplacement du source.
 
 Ne pas faire : prendre cette commande pour un remux ; pointer `-OutputPath` sur le source ; l'utiliser sur un non-Matroska.</maml:para>
       </maml:alert>
@@ -151,7 +151,7 @@ Ne pas faire : prendre cette commande pour un remux ; pointer `-OutputPath` sur 
       <command:noun>MkvRepair</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Importer `.\Tetram.Media.Reencode` (PowerShell 7+). Remux `mkvmerge` à readers A/V séparés (même construction que `Get-MkvInterleaveRepairCommand`), puis `Move-Item` de la sortie temporaire sur le source. Ce n'est pas un réencodage : les flux conservés sont recopiés. Jeux exclusifs : `-Path` (un fichier) ou `-Folder` (scan `*.mkv`).
+      <maml:para>Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+). Remux `mkvmerge` à readers A/V séparés (même construction que `Get-MkvInterleaveRepairCommand`), puis `Move-Item` de la sortie temporaire sur le source. Ce n'est pas un réencodage : les flux conservés sont recopiés. Jeux exclusifs : `-Path` (un fichier) ou `-Folder` (scan `*.mkv`).
 
 Effet disque :
 
@@ -403,7 +403,7 @@ Mode `-Folder` : uniquement des fichiers `*.mkv` non lecture seule. La liste est
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Prérequis : PowerShell 7+, `mkvmerge` (MKVToolNix).
+        <maml:para>Prérequis : PowerShell 7.6+, `mkvmerge` (MKVToolNix).
 
 Ne pas faire : combiner `-Path` et `-Folder` ; prendre `-Folder` pour traiter un `.mp4` ; compter sur le skip lecture seule en mode `-Path` ; prendre cette commande pour un réencodage ffmpeg (`Invoke-ReencodeMedia`).</maml:para>
       </maml:alert>
@@ -467,7 +467,7 @@ Ne pas faire : combiner `-Path` et `-Folder` ; prendre `-Folder` pour traiter un
       <command:noun>ReencodeMedia</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Point d'entrée unique du module. Importer `.\Tetram.Media.Reencode` (PowerShell 7+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
+      <maml:para>Point d'entrée unique du module. Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
 
 Choisir exactement un mode (jeux de paramètres exclusifs) :
 
@@ -1588,7 +1588,7 @@ quand même append `reencode-errors.log` (hors `ShouldProcess`).</maml:para>
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Prérequis : PowerShell 7+, module chargé depuis son `.psd1`. ffmpeg/ffprobe &gt;= 8.0.0 (hors 9.0.0 et 9.0.1).
+        <maml:para>Prérequis : PowerShell 7.6+, module chargé depuis son `.psd1`. ffmpeg/ffprobe &gt;= 8.0.0 (hors 9.0.0 et 9.0.1).
 
 Audio hors MP4 : High/Medium → EAC3 ; Low → Opus (y compris avec une vidéo finale AV1).
 AV1 + AAC n'impose EAC3 qu'en High et Medium.

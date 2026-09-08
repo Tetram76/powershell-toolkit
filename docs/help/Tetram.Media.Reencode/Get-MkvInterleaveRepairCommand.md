@@ -28,7 +28,7 @@ Get-MkvInterleaveRepairCommand [-Path] <string> [-OutputPath <string>] [-MkvMerg
 
 ## DESCRIPTION
 
-Importer `.\Tetram.Media.Reencode` (PowerShell 7+). `-Path` est un fichier existant, Matroska reconnu par `mkvmerge -J`. Cette commande **n'exécute pas** le remux : elle identifie le fichier (`mkvmerge -J`) puis retourne un objet décrivant l'exécutable, les arguments, la ligne PowerShell copiable et les chemins (logiques vs outils). Pour remplacer in-place, utiliser `Invoke-MkvRepair`.
+Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+). `-Path` est un fichier existant, Matroska reconnu par `mkvmerge -J`. Cette commande **n'exécute pas** le remux : elle identifie le fichier (`mkvmerge -J`) puis retourne un objet décrivant l'exécutable, les arguments, la ligne PowerShell copiable et les chemins (logiques vs outils). Pour remplacer in-place, utiliser `Invoke-MkvRepair`.
 
 Sans `-OutputPath`, la sortie est un voisin `{basename}.repaired.mkv` (le suffixe `.mkv` source, casse indifférente, est remplacé ; sinon `.repaired.mkv` est concaténé, ex. `clip.mp4.repaired.mkv`). La sortie ne peut pas être le fichier source.
 
@@ -157,7 +157,7 @@ PSCustomObject : `InputPath`, `OutputPath`, `ToolInputPath`, `ToolOutputPath`, `
 
 ## NOTES
 
-Prérequis : PowerShell 7+, `mkvmerge` (MKVToolNix). Identification seulement : pas de `ShouldProcess`, pas de remplacement du source.
+Prérequis : PowerShell 7.6+, `mkvmerge` (MKVToolNix). Identification seulement : pas de `ShouldProcess`, pas de remplacement du source.
 
 Ne pas faire : prendre cette commande pour un remux ; pointer `-OutputPath` sur le source ; l'utiliser sur un non-Matroska.
 
