@@ -42,7 +42,7 @@ Importer `.\Tetram.Media.Reencode` (PowerShell 7+). Remux `mkvmerge` à readers 
 Effet disque :
 
 - `-WhatIf` : pas de remux, pas de remplacement. `ConfirmImpact` Medium : pas de prompt sauf `-Confirm`.
-- run réel : `mkvmerge` écrit un temporaire unique à côté du source (`{basename}.{guid}.mkv`, distinct du voisin `.repaired.mkv` du builder public), attend que le fichier soit disponible en exclusivité, puis déplace ce temporaire par-dessus le source. Si `mkvmerge` rend un code non nul, ou si la sortie n'existe pas, le source est conservé et une exception est levée.
+- run réel : `mkvmerge` écrit un temporaire unique à côté du source (`{basename}.{guid}.mkv`, distinct du voisin `.repaired.mkv` du builder public), attend que le fichier soit disponible en exclusivité, puis déplace ce temporaire par-dessus le source. Après un remplacement réussi, `CreationTime` / `LastWriteTime` / `LastAccessTime` du source sont restitués (comme `Invoke-ReencodeFile`). Si `mkvmerge` rend un code non nul, ou si la sortie n'existe pas, le source est conservé et une exception est levée.
 
 Mode `-Folder` : uniquement des fichiers `*.mkv` non lecture seule. La liste est **entièrement matérialisée** avant la première réparation : un temporaire créé pendant le run n'est pas ajouté à la file. Un voisin `.repaired.mkv` déjà présent n'est pas écrasé par la réparation de `{basename}.mkv` (c'est un candidat distinct). `-Recurse` descend dans les sous-dossiers. Un dossier absent lève ; un dossier sans candidat retourne sans erreur. Le mode `-Path` ne saute pas un fichier lecture seule : ce filtre n'existe que pour `-Folder`.
 

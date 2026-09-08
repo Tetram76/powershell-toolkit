@@ -508,6 +508,34 @@ Describe 'Invoke-MkvRepairFile' {
         $item.FullName | Should -BeExactly ([System.IO.Path]::GetFullPath($src))
     }
 
+    It 'restitue CreationTime et LastWriteTime du source après le remplacement' {
+        $src = Join-Path $TestDrive 'stamps.mkv'
+        $out = Join-Path $TestDrive 'stamps.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-stamps.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        $stamp = [datetime]::new(2020, 6, 15, 12, 0, 0, [System.DateTimeKind]::Utc)
+        $before = Get-Item -LiteralPath $src
+        $before.CreationTimeUtc = $stamp
+        $before.LastWriteTimeUtc = $stamp
+        New-FakeToolScript -Path $tool -ExitCode 0 -OutputText 'repaired'
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        Invoke-RepairFileUnderTest -Path $src
+        $after = Get-Item -LiteralPath $src
+        $after.CreationTimeUtc | Should -Be $stamp
+        $after.LastWriteTimeUtc | Should -Be $stamp
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired'
+    }
+
     It 'ne mélange pas la progression mkvmerge au FileInfo de -PassThru' {
         $src = Join-Path $TestDrive 'passthru.mkv'
         $out = Join-Path $TestDrive 'passthru.repaired.mkv'

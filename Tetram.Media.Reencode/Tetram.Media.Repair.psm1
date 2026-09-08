@@ -234,6 +234,13 @@ function Invoke-MkvRepairFile {
         '{0}.{1}.mkv' -f $baseName, [guid]::NewGuid().ToString('N')
     )
 
+    # Même contrat qu'Invoke-ReencodeFile : un remplacement in-place ne doit
+    # pas faire passer le fichier pour « nouveau » auprès des backups / bibliothèques.
+    $sourceFile = Get-Item -LiteralPath $fullPath
+    $originalCreationTime = $sourceFile.CreationTime
+    $originalLastWriteTime = $sourceFile.LastWriteTime
+    $originalLastAccessTime = $sourceFile.LastAccessTime
+
     $command = $null
     $replaced = $false
     try {
@@ -277,6 +284,11 @@ function Invoke-MkvRepairFile {
             -Destination $command.ToolInputPath `
             -TimeoutSeconds $FileReadyTimeoutSeconds `
             -RetryIntervalMilliseconds $RetryIntervalMilliseconds
+
+        $replacedFile = Get-Item -LiteralPath $command.ToolInputPath
+        $replacedFile.CreationTime = $originalCreationTime
+        $replacedFile.LastWriteTime = $originalLastWriteTime
+        $replacedFile.LastAccessTime = $originalLastAccessTime
 
         $replaced = $true
 
