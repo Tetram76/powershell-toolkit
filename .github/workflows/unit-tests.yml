@@ -8,8 +8,16 @@ on:
 
 jobs:
   pester:
-    name: Pester
-    runs-on: ubuntu-latest
+    name: Pester (${{ matrix.os }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
       actions: read
@@ -42,7 +50,7 @@ jobs:
         uses: dorny/test-reporter@v2
         if: (success() || failure()) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
         with:
-          name: Pester Tests
+          name: Pester Tests (${{ matrix.os }})
           path: TestResults.xml
           reporter: java-junit
           fail-on-error: false
@@ -54,24 +62,24 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           @'
-          ## Résultats Pester
+          ## Résultats Pester (${{ matrix.os }})
 
           - **JUnit XML :** `TestResults.xml` (racine du workspace)
           - **Couverture JaCoCo :** `coverage.xml` (si généré par `Invoke-Tests.ps1` avec `-Coverage`)
           - **Rapport de tests (check / annotations) :** étape *Publish Pester test report* (`dorny/test-reporter`)
-          - **Fichiers bruts téléchargeables :** artefacts **pester-test-results** et **pester-coverage**
+          - **Fichiers bruts téléchargeables :** artefacts **pester-test-results-${{ matrix.os }}** et **pester-coverage-${{ matrix.os }}**
           '@ | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
 
       - name: Upload test results (JUnit)
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pester-test-results
+          name: pester-test-results-${{ matrix.os }}
           path: TestResults.xml
 
       - name: Upload code coverage (JaCoCo)
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pester-coverage
+          name: pester-coverage-${{ matrix.os }}
           path: coverage.xml
