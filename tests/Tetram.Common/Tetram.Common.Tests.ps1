@@ -153,6 +153,102 @@ Describe 'Write-InfoWarning' {
     }
 }
 
+Describe 'ConvertFrom-ExtendedLengthPath / ConvertTo-ExtendedLengthPath' {
+
+    It 'retire le préfixe \\?\ et \\?\UNC\' {
+        ConvertFrom-ExtendedLengthPath -Path '\\?\C:\Media\film.mkv' |
+            Should -BeExactly 'C:\Media\film.mkv'
+        ConvertFrom-ExtendedLengthPath -Path '\\?\UNC\server\share\film.mkv' |
+            Should -BeExactly '\\server\share\film.mkv'
+        ConvertFrom-ExtendedLengthPath -Path 'C:\Media\film.mkv' |
+            Should -BeExactly 'C:\Media\film.mkv'
+    }
+
+    It 'préfixe seulement au-delà du seuil sous Windows, et laisse un chemin déjà étendu' {
+        $short = 'C:\Windows'
+        $fullShort = [System.IO.Path]::GetFullPath($short)
+        ConvertTo-ExtendedLengthPath -Path $short -Threshold 250 |
+            Should -BeExactly $fullShort
+
+        $beyond = ConvertTo-ExtendedLengthPath -Path $short -Threshold 1
+        if ($IsWindows) {
+            $beyond | Should -BeExactly ('\\?\' + $fullShort)
+        }
+        else {
+            $beyond | Should -BeExactly $fullShort
+        }
+
+        ConvertTo-ExtendedLengthPath -Path '\\?\C:\already' -Threshold 1 |
+            Should -BeExactly '\\?\C:\already'
+    }
+
+    It 'applique le préfixe UNC Win32, et ignore un chemin déjà sous le seuil par défaut (250)' {
+        $unc = '\\server\share\' + ('a' * 240)
+        $fullUnc = [System.IO.Path]::GetFullPath($unc)
+        $uncPrefixed = ConvertTo-ExtendedLengthPath -Path $unc -Threshold 1
+        if ($IsWindows) {
+            $uncPrefixed | Should -BeExactly ('\\?\UNC\' + $fullUnc.Substring(2))
+        }
+        else {
+            $uncPrefixed | Should -BeExactly $fullUnc
+        }
+
+        $mid = 'C:\' + ('x' * 200)
+        $full = [System.IO.Path]::GetFullPath($mid)
+        if ($IsWindows) {
+            $full.Length | Should -BeGreaterThan 160
+            $full.Length | Should -BeLessOrEqual 250
+            ConvertTo-ExtendedLengthPath -Path $mid |
+                Should -BeExactly $full
+            ConvertTo-ExtendedLengthPath -Path $mid -Threshold 160 |
+                Should -BeExactly ('\\?\' + $full)
+        }
+        else {
+            ConvertTo-ExtendedLengthPath -Path $mid -Threshold 1 |
+                Should -BeExactly $full
+        }
+    }
+}
+
+Describe 'Test-SameFilesystemPath' {
+
+    It 'identifie le même fichier malgré un préfixe \\?\' {
+        $full = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'same.mkv'))
+        Test-SameFilesystemPath -LiteralPath $full -ReferenceLiteralPath ('\\?\' + $full) |
+            Should -BeTrue
+    }
+
+    It 'suit la casse du système de fichiers' {
+        $lower = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'film.mkv'))
+        $upper = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'FILM.mkv'))
+        $sameCase = Test-SameFilesystemPath -LiteralPath $lower -ReferenceLiteralPath $upper
+        if ($IsWindows) {
+            $sameCase | Should -BeTrue
+        }
+        else {
+            $sameCase | Should -BeFalse
+        }
+    }
+
+    It 'distingue deux fichiers distincts' {
+        $a = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'a.mkv'))
+        $b = [System.IO.Path]::GetFullPath((Join-Path $TestDrive 'b.mkv'))
+        Test-SameFilesystemPath -LiteralPath $a -ReferenceLiteralPath $b | Should -BeFalse
+    }
+}
+
+Describe 'ConvertTo-PowerShellLiteral' {
+
+    It 'entoure d''apostrophes et double les apostrophes internes' {
+        ConvertTo-PowerShellLiteral -Value 'C:\Windows' |
+            Should -BeExactly "'C:\Windows'"
+        ConvertTo-PowerShellLiteral -Value "It's a film" |
+            Should -BeExactly "'It''s a film'"
+        ConvertTo-PowerShellLiteral -Value '' |
+            Should -BeExactly "''"
+    }
+}
+
 Describe 'Test-PowerShellSpecificPath' {
 
     It 'reconnaît les crochets et l''échappement backtick' {

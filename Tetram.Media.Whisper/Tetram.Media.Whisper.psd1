@@ -5,7 +5,7 @@
     Author = 'TRL'
     CompanyName = 'Tetram'
     Description = 'Transcription des pistes audio via le binaire Purfview Standalone Faster-Whisper.'
-    PowerShellVersion = '7.0'
+    PowerShellVersion = '7.6'
     CompatiblePSEditions = @('Core')
     RequiredModules = @()
     RequiredAssemblies = @()

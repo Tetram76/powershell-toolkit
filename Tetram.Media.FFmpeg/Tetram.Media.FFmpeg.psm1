@@ -300,5 +300,3 @@ function Get-MediaFastHash
     $hash = [System.Security.Cryptography.MD5]::Create().ComputeHash($buffer)
     return "$size-$([System.BitConverter]::ToString($hash).Replace('-', '').Substring(0, 8) )"
 }
-
-Export-ModuleMember -Function Get-FFmpegPath, Get-FfprobePath, Invoke-FFmpeg, Get-MediaFastHash

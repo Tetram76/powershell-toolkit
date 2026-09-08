@@ -1,9 +1,9 @@
-# Tetram.Common.psm1 — PowerShell 7+
+# Tetram.Common.psm1 — PowerShell 7.6+
 Set-StrictMode -Version 3.0
 
 <#
 .SYNOPSIS
-    Fonctions d’aide pour la journalisation colorée (PowerShell 7+).
+    Fonctions d’aide pour la journalisation colorée (PowerShell 7.6+).
 .DESCRIPTION
     Fournit des fonctions Write-Log*, conformes aux conventions PowerShell.
     - Write-Log         : affiche un message avec couleur.
@@ -223,6 +223,102 @@ function Test-PowerShellSpecificPath
     return $false
 }
 
+function ConvertFrom-ExtendedLengthPath
+{
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path
+    )
+
+    if ($Path.StartsWith('\\?\UNC\', [System.StringComparison]::OrdinalIgnoreCase))
+    {
+        return '\\' + $Path.Substring(8)
+    }
+
+    if ($Path.StartsWith('\\?\', [System.StringComparison]::OrdinalIgnoreCase))
+    {
+        return $Path.Substring(4)
+    }
+
+    return $Path
+}
+
+function ConvertTo-ExtendedLengthPath
+{
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path,
+
+        # Marge sous MAX_PATH (260) : certains outils Win32 échouent avant la limite documentée.
+        [int] $Threshold = 250
+    )
+
+    if ($Path.StartsWith('\\?\', [System.StringComparison]::OrdinalIgnoreCase))
+    {
+        return $Path
+    }
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+
+    if ($fullPath.Length -le $Threshold)
+    {
+        return $fullPath
+    }
+
+    # \\?\ / \\?\UNC\ : contournement MAX_PATH Win32. Hors Windows le préfixe
+    # n'existe pas et GetFullPath ne produit pas de UNC \\server\...
+    if (-not $IsWindows)
+    {
+        return $fullPath
+    }
+
+    if ($fullPath.StartsWith('\\'))
+    {
+        return '\\?\UNC\' + $fullPath.Substring(2)
+    }
+
+    return '\\?\' + $fullPath
+}
+
+function Test-SameFilesystemPath
+{
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string] $LiteralPath,
+
+        [Parameter(Mandatory)]
+        [string] $ReferenceLiteralPath
+    )
+
+    $left = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $LiteralPath))
+    $right = [System.IO.Path]::GetFullPath((ConvertFrom-ExtendedLengthPath -Path $ReferenceLiteralPath))
+    # GetRelativePath suit la casse compilée de l'OS (Windows insensible, Unix
+    # sensible), pas celle du volume. Un APFS macOS par défaut fusionnerait
+    # film.mkv et FILM.mkv ; ici ils restent distincts. On n'interroge pas le
+    # disque : -OutputPath n'existe souvent pas encore. Écart accepté hors
+    # Windows / ext4 Linux (pas de cible macOS pour ce dépôt).
+    return [System.IO.Path]::GetRelativePath($left, $right) -eq '.'
+}
+
+function ConvertTo-PowerShellLiteral
+{
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [AllowEmptyString()]
+        [string] $Value
+    )
+
+    # EscapeSingleQuotedStringContent n'entoure pas : la recette documentée est "'" + Escape(...) + "'".
+    return "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($Value) + "'"
+}
+
 function Show-CommandLine
 {
     [CmdletBinding()]
@@ -360,10 +456,3 @@ function Show-Colors()
         Write-Host "$color" -Foreground $color
     }
 }
-
-Export-ModuleMember -Function `
-	Show-Colors,
-Write-Log, Write-ErrorLog, Write-InfoLog, Write-InfoWarning, Write-DebugLog,
-Format-FileSize, Format-Duration,
-Show-CommandLine,
-Test-PowerShellSpecificPath

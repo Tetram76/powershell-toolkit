@@ -10,7 +10,7 @@
       <command:noun>EmptyDirs</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Importer `.\Tetram.Remove-Empty-Dirs` (PowerShell 7+). Cible : `-Path` doit être un dossier existant (défaut `.`).
+      <maml:para>Importer `.\Tetram.Remove-Empty-Dirs` (PowerShell 7.6+). Cible : `-Path` doit être un dossier existant (défaut `.`).
 
 Fait : `Get-ChildItem -Directory -Recurse` sous la racine, tri par longueur de chemin décroissante (enfant avant parent), puis `Remove-Item` si le dossier n'a aucun enfant. Un `parent/child` tous deux vides : `child` puis `parent` dans le même passage. Ce n'est pas « feuilles seulement ».
 
@@ -107,7 +107,7 @@ défaut : répertoire courant (`.`).</maml:para>
     <command:returnValues />
     <maml:alertSet>
       <maml:alert>
-        <maml:para>Prérequis : PowerShell 7+. La racine `-Path` n'est jamais supprimée : le scan ne liste que ses sous-dossiers.
+        <maml:para>Prérequis : PowerShell 7.6+. La racine `-Path` n'est jamais supprimée : le scan ne liste que ses sous-dossiers.
 
 Ne pas faire : l'utiliser pour effacer des fichiers ; omettre `-WhatIf` sur un arbre inconnu ; prendre un passage unique pour « feuilles seulement » (les parents vidés dans ce passage partent aussi) ; conclure du `-WhatIf` la liste exacte des suppressions d'un run réel (le WhatIf ne vide pas les enfants, donc pas les parents).</maml:para>
       </maml:alert>

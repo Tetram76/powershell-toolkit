@@ -9,7 +9,7 @@
     Description = 'Utilitaires d''exécution FFmpeg et génération de hash rapide pour les médias.'
 
     # --- Compatibilité ---
-    PowerShellVersion = '7.0'
+    PowerShellVersion = '7.6'
     CompatiblePSEditions = @('Core')
 
     # --- Dépendances ---

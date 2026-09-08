@@ -161,5 +161,3 @@ function Test-HasBitrateGain
     # Gain si la cible est suffisamment plus basse que la source
     return ($targetBps -lt ($SourceBitrate / $MinGainRatio))
 }
-
-Export-ModuleMember -Function Test-IsLosslessAudioCodec, Get-TargetAudioCodec, Get-TargetAudioBitrate, ConvertTo-IntBitrate, ConvertTo-IntBitrateK, Test-HasBitrateGain

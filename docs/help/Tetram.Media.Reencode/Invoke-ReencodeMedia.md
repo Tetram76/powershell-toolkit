@@ -17,7 +17,7 @@ Remplace in-place des fichiers média : réencodage HEVC/AV1 vers MKV, `-NoTrans
 
 ## SYNTAX
 
-### ReencodeFromPath (Default)
+### ReencodeFromPath (Par défaut)
 
 ```
 Invoke-ReencodeMedia [[-Path] <string[]>] [-Recurse] [-Sort <string>] [-ScanReadOnlyDirectory]
@@ -77,7 +77,7 @@ Invoke-ReencodeMedia -ListFile <string> -CheckOnly [-UpdateList] [-Sort <string>
 
 ## DESCRIPTION
 
-Point d'entrée unique du module. Importer `.\Tetram.Media.Reencode` (PowerShell 7+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
+Point d'entrée unique du module. Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
 
 Choisir exactement un mode (jeux de paramètres exclusifs) :
 
@@ -1179,9 +1179,9 @@ HelpMessage: ''
 
 ### CommonParameters
 
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable,
+Cette commande prend en charge les paramètres communs : -Debug, -ErrorAction, -ErrorVariable,
 -InformationAction, -InformationVariable, -OutBuffer, -OutVariable, -PipelineVariable,
--ProgressAction, -Verbose, -WarningAction, and -WarningVariable. For more information, see
+-ProgressAction, -Verbose, -WarningAction et -WarningVariable. Pour plus d'informations, voir
 [about_CommonParameters](https://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
@@ -1190,7 +1190,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Prérequis : PowerShell 7+, module chargé depuis son `.psd1`. ffmpeg/ffprobe >= 8.0.0 (hors 9.0.0 et 9.0.1).
+Prérequis : PowerShell 7.6+, module chargé depuis son `.psd1`. ffmpeg/ffprobe >= 8.0.0 (hors 9.0.0 et 9.0.1).
 
 Audio hors MP4 : High/Medium → EAC3 ; Low → Opus (y compris avec une vidéo finale AV1).
 AV1 + AAC n'impose EAC3 qu'en High et Medium.
@@ -1203,5 +1203,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
 
 ## RELATED LINKS
 
+- [Get-MkvInterleaveRepairCommand]()
+- [Invoke-MkvRepair]()
 - [Test-MediaSimilarity]()
 - [Remove-EmptyDirs]()

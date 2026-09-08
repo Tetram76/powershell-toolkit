@@ -1,4 +1,4 @@
-﻿---
+---
 document type: cmdlet
 external help file: Tetram.Remove-Empty-Dirs-Help.xml
 HelpUri: ''
@@ -27,7 +27,7 @@ Remove-EmptyDirs [[-Path] <string>] [-DeepScan] [-WhatIf] [-Confirm] [<CommonPar
 
 ## DESCRIPTION
 
-Importer `.\Tetram.Remove-Empty-Dirs` (PowerShell 7+). Cible : `-Path` doit être un dossier existant (défaut `.`).
+Importer `.\Tetram.Remove-Empty-Dirs` (PowerShell 7.6+). Cible : `-Path` doit être un dossier existant (défaut `.`).
 
 Fait : `Get-ChildItem -Directory -Recurse` sous la racine, tri par longueur de chemin décroissante (enfant avant parent), puis `Remove-Item` si le dossier n'a aucun enfant. Un `parent/child` tous deux vides : `child` puis `parent` dans le même passage. Ce n'est pas « feuilles seulement ».
 
@@ -169,9 +169,9 @@ HelpMessage: ''
 
 ### CommonParameters
 
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable,
+Cette commande prend en charge les paramètres communs : -Debug, -ErrorAction, -ErrorVariable,
 -InformationAction, -InformationVariable, -OutBuffer, -OutVariable, -PipelineVariable,
--ProgressAction, -Verbose, -WarningAction, and -WarningVariable. For more information, see
+-ProgressAction, -Verbose, -WarningAction et -WarningVariable. Pour plus d'informations, voir
 [about_CommonParameters](https://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
@@ -180,7 +180,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## NOTES
 
-Prérequis : PowerShell 7+. La racine `-Path` n'est jamais supprimée : le scan ne liste que ses sous-dossiers.
+Prérequis : PowerShell 7.6+. La racine `-Path` n'est jamais supprimée : le scan ne liste que ses sous-dossiers.
 
 Ne pas faire : l'utiliser pour effacer des fichiers ; omettre `-WhatIf` sur un arbre inconnu ; prendre un passage unique pour « feuilles seulement » (les parents vidés dans ce passage partent aussi) ; conclure du `-WhatIf` la liste exacte des suppressions d'un run réel (le WhatIf ne vide pas les enfants, donc pas les parents).
 

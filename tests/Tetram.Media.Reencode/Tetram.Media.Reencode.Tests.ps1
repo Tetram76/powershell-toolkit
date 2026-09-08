@@ -1,8 +1,9 @@
 # Étendre la suite autour du module SUD Tetram.Media.Reencode (Exports / comportement public après chargement réel du .psm1).
 #
 # RepoRoot depuis tests/<Module> : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
-# Sanity : Test-ModuleManifest (Join-Path $RepoRoot 'Tetram.Media.Reencode' 'Tetram.Media.Reencode.psd1') avant Import-Module sur ce chemin avec -Force
-# Nouvelle couverture : un Describe par commande FunctionsToExport (ou famille logique), It minimaux puis mocks sur Utils/ffmpeg si nécessaires
+# Manifeste : Tetram.Media.Reencode.Manifest.Tests.ps1
+# Repair.psm1 : Tetram.Media.Repair.Tests.ps1
+# Nouvelle couverture : un Describe par commande du .psm1 Reencode, It minimaux puis mocks sur Utils/ffmpeg si nécessaires
 
 Describe 'Invoke-ReencodeMedia - surface publique' {
     BeforeAll {
