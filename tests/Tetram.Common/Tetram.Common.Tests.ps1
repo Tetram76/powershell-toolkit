@@ -164,30 +164,49 @@ Describe 'ConvertFrom-ExtendedLengthPath / ConvertTo-ExtendedLengthPath' {
             Should -BeExactly 'C:\Media\film.mkv'
     }
 
-    It 'préfixe seulement au-delà du seuil, et laisse un chemin déjà étendu' {
+    It 'préfixe seulement au-delà du seuil sous Windows, et laisse un chemin déjà étendu' {
         $short = 'C:\Windows'
+        $fullShort = [System.IO.Path]::GetFullPath($short)
         ConvertTo-ExtendedLengthPath -Path $short -Threshold 250 |
-            Should -BeExactly ([System.IO.Path]::GetFullPath($short))
-        ConvertTo-ExtendedLengthPath -Path $short -Threshold 1 |
-            Should -BeExactly ('\\?\' + [System.IO.Path]::GetFullPath($short))
+            Should -BeExactly $fullShort
+
+        $beyond = ConvertTo-ExtendedLengthPath -Path $short -Threshold 1
+        if ($IsWindows) {
+            $beyond | Should -BeExactly ('\\?\' + $fullShort)
+        }
+        else {
+            $beyond | Should -BeExactly $fullShort
+        }
+
         ConvertTo-ExtendedLengthPath -Path '\\?\C:\already' -Threshold 1 |
             Should -BeExactly '\\?\C:\already'
     }
 
-    It 'applique le préfixe UNC et ignore un chemin déjà sous le seuil par défaut (250)' {
+    It 'applique le préfixe UNC Win32, et ignore un chemin déjà sous le seuil par défaut (250)' {
         $unc = '\\server\share\' + ('a' * 240)
         $fullUnc = [System.IO.Path]::GetFullPath($unc)
-        ConvertTo-ExtendedLengthPath -Path $unc -Threshold 1 |
-            Should -BeExactly ('\\?\UNC\' + $fullUnc.Substring(2))
+        $uncPrefixed = ConvertTo-ExtendedLengthPath -Path $unc -Threshold 1
+        if ($IsWindows) {
+            $uncPrefixed | Should -BeExactly ('\\?\UNC\' + $fullUnc.Substring(2))
+        }
+        else {
+            $uncPrefixed | Should -BeExactly $fullUnc
+        }
 
         $mid = 'C:\' + ('x' * 200)
         $full = [System.IO.Path]::GetFullPath($mid)
-        $full.Length | Should -BeGreaterThan 160
-        $full.Length | Should -BeLessOrEqual 250
-        ConvertTo-ExtendedLengthPath -Path $mid |
-            Should -BeExactly $full
-        ConvertTo-ExtendedLengthPath -Path $mid -Threshold 160 |
-            Should -BeExactly ('\\?\' + $full)
+        if ($IsWindows) {
+            $full.Length | Should -BeGreaterThan 160
+            $full.Length | Should -BeLessOrEqual 250
+            ConvertTo-ExtendedLengthPath -Path $mid |
+                Should -BeExactly $full
+            ConvertTo-ExtendedLengthPath -Path $mid -Threshold 160 |
+                Should -BeExactly ('\\?\' + $full)
+        }
+        else {
+            ConvertTo-ExtendedLengthPath -Path $mid -Threshold 1 |
+                Should -BeExactly $full
+        }
     }
 }
 

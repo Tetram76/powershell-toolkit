@@ -269,6 +269,13 @@ function ConvertTo-ExtendedLengthPath
         return $fullPath
     }
 
+    # \\?\ / \\?\UNC\ : contournement MAX_PATH Win32. Hors Windows le préfixe
+    # n'existe pas et GetFullPath ne produit pas de UNC \\server\...
+    if (-not $IsWindows)
+    {
+        return $fullPath
+    }
+
     if ($fullPath.StartsWith('\\'))
     {
         return '\\?\UNC\' + $fullPath.Substring(2)

@@ -230,9 +230,20 @@ Describe 'Get-MkvInterleaveRepairCommand' {
         )
 
         $cmd = Get-MkvInterleaveRepairCommand -Path $mkv -MkvMerge $exe -ExtendedPathThreshold 1
-        $cmd.ToolInputPath | Should -Match '^[\\][\\][?][\\]'
-        $cmd.ToolOutputPath | Should -Match '^[\\][\\][?][\\]'
-        $cmd.Executable | Should -Match '^[\\][\\][?][\\]'
+        $fullIn = [System.IO.Path]::GetFullPath($mkv)
+        $fullExe = [System.IO.Path]::GetFullPath($exe)
+        if ($IsWindows) {
+            $cmd.ToolInputPath | Should -Match '^[\\][\\][?][\\]'
+            $cmd.ToolOutputPath | Should -Match '^[\\][\\][?][\\]'
+            $cmd.Executable | Should -Match '^[\\][\\][?][\\]'
+        }
+        else {
+            $cmd.ToolInputPath | Should -BeExactly $fullIn
+            $cmd.Executable | Should -BeExactly $fullExe
+            $cmd.ToolInputPath | Should -Not -Match '^[\\][\\][?][\\]'
+            $cmd.ToolOutputPath | Should -Not -Match '^[\\][\\][?][\\]'
+            $cmd.Executable | Should -Not -Match '^[\\][\\][?][\\]'
+        }
         $cmd.InputPath | Should -Not -Match '^[\\][\\][?][\\]'
         $cmd.OutputPath | Should -Not -Match '^[\\][\\][?][\\]'
     }
