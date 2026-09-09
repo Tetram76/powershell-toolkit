@@ -75,6 +75,21 @@ function Get-DefaultMkvMergeExecutable {
     return $IsWindows ? 'mkvmerge.exe' : 'mkvmerge' 
 }
 
+# Write-MkvMergeCapturedDiagnostics ne reconnaît que les préfixes anglais
+# Warning:/Error: ; sans --ui-language, un mkvmerge localisé les traduit.
+function Get-MkvMergeMessageCaptureArguments {
+    param(
+        [Parameter(Mandatory)]
+        [string] $LogPath
+    )
+
+    @(
+        '--ui-language', 'en_US',
+        '--output-charset', 'UTF-8',
+        '--redirect-output', $LogPath
+    )
+}
+
 function Get-MkvMergeInfo {
     param(
         [Parameter(Mandatory)]
@@ -87,14 +102,16 @@ function Get-MkvMergeInfo {
     $tempFile = [System.IO.Path]::GetTempFileName()
 
     try {
-        & $MkvMerge `
-            --output-charset UTF-8 `
-            --redirect-output $tempFile `
-            -J $Path
+        & $MkvMerge @(
+            (Get-MkvMergeMessageCaptureArguments -LogPath $tempFile)
+            '-J'
+            $Path
+        )
 
         $exitCode = $LASTEXITCODE
 
         if ($exitCode -ge 2) {
+            $null = Write-MkvMergeCapturedDiagnostics -LogPath $tempFile
             throw "mkvmerge -J a échoué avec le code $exitCode."
         }
 
@@ -106,6 +123,43 @@ function Get-MkvMergeInfo {
         Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
     }
 }
+
+function Write-MkvMergeCapturedDiagnostics {
+    param(
+        [string] $LogPath
+    )
+
+    $warningCount = 0
+    if ([string]::IsNullOrWhiteSpace($LogPath) -or -not [System.IO.File]::Exists($LogPath)) {
+        return $warningCount
+    }
+
+    $logText = Get-Content -LiteralPath $LogPath -Raw -Encoding utf8
+    if ([string]::IsNullOrWhiteSpace($logText)) {
+        return $warningCount
+    }
+
+    # Parcours unique : l'ordre Warning:/Error: de mkvmerge doit être conservé.
+    foreach ($line in @($logText -split '[\r\n]+')) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) {
+            continue
+        }
+
+        if ($trimmed.StartsWith('Warning:')) {
+            Write-Warning ($trimmed.Substring('Warning:'.Length).TrimStart())
+            $warningCount++
+            continue
+        }
+
+        if ($trimmed.StartsWith('Error:')) {
+            Write-Error -Message ($trimmed.Substring('Error:'.Length).TrimStart()) -ErrorAction Continue
+        }
+    }
+
+    return $warningCount
+}
+
 
 function Wait-FileReady {
     [CmdletBinding()]
@@ -236,6 +290,7 @@ function Invoke-MkvRepairFile {
 
     $command = $null
     $replaced = $false
+    $mkvmergeLogPath = $null
     try {
         $command =
             Get-MkvInterleaveRepairCommand `
@@ -246,13 +301,34 @@ function Invoke-MkvRepairFile {
 
         # Show-CommandLine $command.Executable $command.arguments
 
-        # stdout mkvmerge irait dans le pipeline et se mêlerait au FileInfo de -PassThru.
-        & $command.Executable $command.arguments > $null
+        # --quiet : la progression mkvmerge utilise un CR sans LF et collerait
+        # les Warning: au milieu d'une ligne Progress. Absent de -J (pas de barre).
+        $mkvmergeLogPath = [System.IO.Path]::GetTempFileName()
+        $mkvmergeArguments = @(
+            (Get-MkvMergeMessageCaptureArguments -LogPath $mkvmergeLogPath)
+            '--quiet'
+        ) + @($command.Arguments)
+
+        & $command.Executable $mkvmergeArguments > $null
 
         $exitCode = $LASTEXITCODE
 
-        # ExitCode 1: avertissements, le mux a continué, fichier « peut être correct ou non ». On refuse tout non-nul avant d'écraser le source.
+        # Code 1 : mkvmerge a muxé avec avertissements ; le fichier produit n'est
+        # pas assez fiable pour remplacer la source, mais ce n'est pas bloquant.
+        if ($exitCode -eq 1) {
+            $warningCount = Write-MkvMergeCapturedDiagnostics -LogPath $mkvmergeLogPath
+            if ($warningCount -eq 0) {
+                Write-Warning "mkvmerge a émis des avertissements (code 1). Le fichier source n'a pas été remplacé : $Path"
+            }
+            else {
+                Write-Warning "Le fichier source n'a pas été remplacé : $Path"
+            }
+
+            return
+        }
+
         if ($exitCode -ne 0) {
+            $null = Write-MkvMergeCapturedDiagnostics -LogPath $mkvmergeLogPath
             throw (
                 "mkvmerge a échoué avec le code de sortie $exitCode. " +
                 "Le fichier source n'a pas été remplacé : $Path"
@@ -289,6 +365,10 @@ function Invoke-MkvRepairFile {
         }
     }
     finally {
+        if (-not [string]::IsNullOrWhiteSpace($mkvmergeLogPath)) {
+            Remove-Item -LiteralPath $mkvmergeLogPath -Force -ErrorAction SilentlyContinue
+        }
+
         # Temporaire unique à côté de la source : un échec après le mux
         # laisserait un *.mkv qu'un prochain -Folder reprendrait.
         if (-not $replaced -and $null -ne $command) {
@@ -663,6 +743,9 @@ function Invoke-MkvRepair {
         [Parameter(ParameterSetName = 'Folder')] 
         [switch] $Recurse,
 
+        [Parameter(ParameterSetName = 'Folder')]
+        [switch] $ContinueOnError,
+
         [string] $MkvMerge = (Get-DefaultMkvMergeExecutable),
 
         [ValidateRange(1, 32767)]
@@ -743,13 +826,23 @@ function Invoke-MkvRepair {
                 -PercentComplete (($i / $count) * 100)
 
             if ($PSCmdlet.ShouldProcess($file, 'Réparer l''interleaving MKV et remplacer le fichier source')) {
-                Invoke-MkvRepairFile `
-                    -Path $file `
-                    -MkvMerge $MkvMerge `
-                    -ExtendedPathThreshold $ExtendedPathThreshold `
-                    -FileReadyTimeoutSeconds $FileReadyTimeoutSeconds `
-                    -RetryIntervalMilliseconds $RetryIntervalMilliseconds `
-                    -PassThru:$PassThru
+                try {
+                    Invoke-MkvRepairFile `
+                        -Path $file `
+                        -MkvMerge $MkvMerge `
+                        -ExtendedPathThreshold $ExtendedPathThreshold `
+                        -FileReadyTimeoutSeconds $FileReadyTimeoutSeconds `
+                        -RetryIntervalMilliseconds $RetryIntervalMilliseconds `
+                        -PassThru:$PassThru
+                }
+                catch {
+                    if ($ContinueOnError) {
+                        Write-Error -ErrorRecord $_ -ErrorAction Continue
+                        continue
+                    }
+
+                    throw
+                }
             }
         }
     }
