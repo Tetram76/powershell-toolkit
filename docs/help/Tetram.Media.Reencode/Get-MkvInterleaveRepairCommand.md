@@ -36,7 +36,7 @@ Les pistes audio/vidéo sont chacune lues par un reader `mkvmerge` distinct (car
 
 Chemins Windows longs : au-delà de `-ExtendedPathThreshold` (défaut 250), les chemins **outils** (`ToolInputPath`, `ToolOutputPath`, et `-MkvMerge` s'il est encheminé) reçoivent le préfixe `\\?\` / `\\?\UNC\`. `InputPath` / `OutputPath` restent les chemins logiques.
 
-Échecs (exception) : fichier absent, sortie = source, conteneur non reconnu/non supporté, type autre que Matroska, aucune piste, aucune piste A/V, date Matroska illisible, `mkvmerge -J` code >= 2.
+Échecs (exception) : fichier absent, sortie = source, conteneur non reconnu/non supporté, type autre que Matroska, aucune piste, aucune piste A/V, date Matroska illisible, `mkvmerge -J` code >= 2 (le message identifie le fichier).
 
 ## EXAMPLES
 

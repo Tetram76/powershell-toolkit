@@ -76,7 +76,10 @@ function Get-DefaultMkvMergeExecutable {
 }
 
 # Write-MkvMergeCapturedDiagnostics ne reconnaît que les préfixes anglais
-# Warning:/Error: ; sans --ui-language, un mkvmerge localisé les traduit.
+# Warning:/Error: ; sans --ui-language, un mkvmerge localisé les traduit
+# (Erreur : / Avertissement :). MKVToolNix n'a pas de locale en_US : l'anglais
+# est la langue source. --ui-language en_US fait échouer l'outil avant toute
+# identification, avec un message localisé que le parser Warning:/Error: ignore.
 function Get-MkvMergeMessageCaptureArguments {
     param(
         [Parameter(Mandatory)]
@@ -84,10 +87,22 @@ function Get-MkvMergeMessageCaptureArguments {
     )
 
     @(
-        '--ui-language', 'en_US',
+        '--ui-language', 'en',
         '--output-charset', 'UTF-8',
         '--redirect-output', $LogPath
     )
+}
+
+function New-MkvMergeDiagnosticCounts {
+    param(
+        [int] $WarningCount = 0,
+        [int] $ErrorCount = 0
+    )
+
+    [pscustomobject]@{
+        WarningCount = $WarningCount
+        ErrorCount   = $ErrorCount
+    }
 }
 
 function Get-MkvMergeJsonDiagnosticMessageList {
@@ -123,15 +138,22 @@ function Write-MkvMergeIdentificationDiagnostics {
         [object] $Info
     )
 
+    $warningCount = 0
+    $errorCount = 0
+
     $warnings = Get-OptionalPropertyValue -InputObject $Info -Name 'warnings'
     foreach ($message in (Get-MkvMergeJsonDiagnosticMessageList -Value $warnings)) {
         Write-Warning $message
+        $warningCount++
     }
 
     $errors = Get-OptionalPropertyValue -InputObject $Info -Name 'errors'
     foreach ($message in (Get-MkvMergeJsonDiagnosticMessageList -Value $errors)) {
         Write-Error -Message $message -ErrorAction Continue
+        $errorCount++
     }
+
+    New-MkvMergeDiagnosticCounts -WarningCount $warningCount -ErrorCount $errorCount
 }
 
 function Get-MkvMergeInfo {
@@ -169,14 +191,22 @@ function Get-MkvMergeInfo {
         # Code 0/1 : le JSON d'identification peut déjà porter des warnings
         # repris au remux ; on ne les rejoue pas ici pour éviter le double affichage.
         if ($exitCode -ge 2) {
-            if ($null -ne $info) {
+            $diagnostics = if ($null -ne $info) {
                 Write-MkvMergeIdentificationDiagnostics -Info $info
             }
             else {
-                $null = Write-MkvMergeCapturedDiagnostics -LogPath $tempFile
+                Write-MkvMergeCapturedDiagnostics -LogPath $tempFile
             }
 
-            throw "mkvmerge -J a échoué avec le code $exitCode."
+            $emitted = ($diagnostics.WarningCount + $diagnostics.ErrorCount) -gt 0
+            # JSON parsable sans warnings/errors : ne pas dumper le document, il
+            # n'apporte rien. Le brut n'est qu'un dernier recours si rien n'a
+            # été reconnu alors que mkvmerge a réellement écrit quelque chose.
+            if (-not $emitted -and $null -eq $info -and -not [string]::IsNullOrWhiteSpace($raw)) {
+                Write-Error -Message $raw.TrimEnd() -ErrorAction Continue
+            }
+
+            throw "mkvmerge -J a échoué avec le code $exitCode pour '$Path'."
         }
 
         if ($null -eq $info) {
@@ -196,13 +226,14 @@ function Write-MkvMergeCapturedDiagnostics {
     )
 
     $warningCount = 0
+    $errorCount = 0
     if ([string]::IsNullOrWhiteSpace($LogPath) -or -not [System.IO.File]::Exists($LogPath)) {
-        return $warningCount
+        return (New-MkvMergeDiagnosticCounts)
     }
 
     $logText = Get-Content -LiteralPath $LogPath -Raw -Encoding utf8
     if ([string]::IsNullOrWhiteSpace($logText)) {
-        return $warningCount
+        return (New-MkvMergeDiagnosticCounts)
     }
 
     # Parcours unique : l'ordre Warning:/Error: de mkvmerge doit être conservé.
@@ -220,10 +251,11 @@ function Write-MkvMergeCapturedDiagnostics {
 
         if ($trimmed.StartsWith('Error:')) {
             Write-Error -Message ($trimmed.Substring('Error:'.Length).TrimStart()) -ErrorAction Continue
+            $errorCount++
         }
     }
 
-    return $warningCount
+    New-MkvMergeDiagnosticCounts -WarningCount $warningCount -ErrorCount $errorCount
 }
 
 
@@ -382,8 +414,8 @@ function Invoke-MkvRepairFile {
         # Code 1 : mkvmerge a muxé avec avertissements ; le fichier produit n'est
         # pas assez fiable pour remplacer la source, mais ce n'est pas bloquant.
         if ($exitCode -eq 1) {
-            $warningCount = Write-MkvMergeCapturedDiagnostics -LogPath $mkvmergeLogPath
-            if ($warningCount -eq 0) {
+            $diagnostics = Write-MkvMergeCapturedDiagnostics -LogPath $mkvmergeLogPath
+            if ($diagnostics.WarningCount -eq 0) {
                 Write-Warning "mkvmerge a émis des avertissements (code 1). Le fichier source n'a pas été remplacé : $Path"
             }
             else {
