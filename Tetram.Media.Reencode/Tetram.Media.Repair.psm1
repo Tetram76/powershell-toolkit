@@ -90,6 +90,50 @@ function Get-MkvMergeMessageCaptureArguments {
     )
 }
 
+function Get-MkvMergeJsonDiagnosticMessageList {
+    param($Value)
+
+    # List plutôt que @() : un tableau vide renvoyé par une fonction PowerShell
+    # s'effondre en $null, et foreach ($x in $null) est inoffensif mais
+    # foreach ($x in 'text') énumère les caractères.
+    $messages = [System.Collections.Generic.List[string]]::new()
+    if ($null -eq $Value) {
+        return $messages
+    }
+
+    if ($Value -is [string]) {
+        $messages.Add($Value)
+        return $messages
+    }
+
+    foreach ($item in $Value) {
+        if ($null -eq $item) {
+            continue
+        }
+
+        $messages.Add([string] $item)
+    }
+
+    return $messages
+}
+
+function Write-MkvMergeIdentificationDiagnostics {
+    param(
+        [Parameter(Mandatory)]
+        [object] $Info
+    )
+
+    $warnings = Get-OptionalPropertyValue -InputObject $Info -Name 'warnings'
+    foreach ($message in (Get-MkvMergeJsonDiagnosticMessageList -Value $warnings)) {
+        Write-Warning $message
+    }
+
+    $errors = Get-OptionalPropertyValue -InputObject $Info -Name 'errors'
+    foreach ($message in (Get-MkvMergeJsonDiagnosticMessageList -Value $errors)) {
+        Write-Error -Message $message -ErrorAction Continue
+    }
+}
+
 function Get-MkvMergeInfo {
     param(
         [Parameter(Mandatory)]
@@ -109,15 +153,37 @@ function Get-MkvMergeInfo {
         )
 
         $exitCode = $LASTEXITCODE
+        $raw = Get-Content -LiteralPath $tempFile -Raw -Encoding UTF8
 
+        $info = $null
+        if (-not [string]::IsNullOrWhiteSpace($raw)) {
+            try {
+                $info = $raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+            }
+            catch {
+                # ConvertFrom-Json ne doit pas devenir l'exception visible du code >= 2.
+                $info = $null
+            }
+        }
+
+        # Code 0/1 : le JSON d'identification peut déjà porter des warnings
+        # repris au remux ; on ne les rejoue pas ici pour éviter le double affichage.
         if ($exitCode -ge 2) {
-            $null = Write-MkvMergeCapturedDiagnostics -LogPath $tempFile
+            if ($null -ne $info) {
+                Write-MkvMergeIdentificationDiagnostics -Info $info
+            }
+            else {
+                $null = Write-MkvMergeCapturedDiagnostics -LogPath $tempFile
+            }
+
             throw "mkvmerge -J a échoué avec le code $exitCode."
         }
 
-        $json = Get-Content -LiteralPath $tempFile -Raw -Encoding UTF8  
+        if ($null -eq $info) {
+            return $raw | ConvertFrom-Json -AsHashtable
+        }
 
-        return $json | ConvertFrom-Json -AsHashtable
+        return $info
     }
     finally {
         Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
