@@ -55,7 +55,7 @@ BeforeAll {
             [int] $ExitCode = 0,
             [string] $OutputText,
             [string] $StdoutText,
-            [Alias('MuxDiagnostics')]
+            [Alias('MuxDiagnostics', 'UnstructuredRedirectText')]
             [string] $RedirectOutputText,
             [string] $IdentificationJson,
             [string] $RedirectPathRecord,
@@ -291,6 +291,20 @@ BeforeAll {
         $state
     }
 
+    function script:Assert-MkvMergeJFailedException {
+        param(
+            $Exception,
+            [Parameter(Mandatory)] [string] $Path,
+            [int] $ExitCode = 2
+        )
+
+        $Exception | Should -Not -BeNullOrEmpty
+        $message = [string]$Exception.Exception.Message
+        $message | Should -Match 'mkvmerge -J'
+        $message | Should -Match "code $ExitCode"
+        $message | Should -Match ([regex]::Escape($Path))
+    }
+
     function script:New-FakeMkvMergeWithIdentificationFailure {
         param(
             [Parameter(Mandatory)] [string] $Path,
@@ -478,8 +492,7 @@ Describe 'Get-MkvMergeInfo' {
             -RedirectPathRecord $record
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception | Should -Not -BeNullOrEmpty
-        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
         $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'simulated identification failure')
         $native | Should -HaveCount 1
@@ -507,8 +520,7 @@ Describe 'Get-MkvMergeInfo' {
 '@)
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception | Should -Not -BeNullOrEmpty
-        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(
             Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
                 'first identification warning'
@@ -540,7 +552,7 @@ Describe 'Get-MkvMergeInfo' {
 '@)
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception | Should -Not -BeNullOrEmpty
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(
             Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
                 'warning before failure'
@@ -571,7 +583,7 @@ Describe 'Get-MkvMergeInfo' {
 '@)
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception | Should -Not -BeNullOrEmpty
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(
             Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
                 'piste « Français » — durée incohérente'
@@ -590,7 +602,7 @@ Describe 'Get-MkvMergeInfo' {
         New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{"warnings":[],"errors":[]}'
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
         @($sequence | Where-Object { $_.Kind -eq 'Warning' }) | Should -HaveCount 0
         @($sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -notmatch 'mkvmerge -J a échoué' }) |
@@ -602,7 +614,7 @@ Describe 'Get-MkvMergeInfo' {
         New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{"warnings":null,"errors":null}'
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
         @($sequence | Where-Object { $_.Kind -eq 'Warning' }) | Should -HaveCount 0
         @($sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -notmatch 'mkvmerge -J a échoué' }) |
@@ -614,7 +626,7 @@ Describe 'Get-MkvMergeInfo' {
         New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{"errors":["failure"]}'
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'failure')
         $native | Should -HaveCount 1
         $native[0].Kind | Should -Be 'Error'
@@ -625,7 +637,7 @@ Describe 'Get-MkvMergeInfo' {
         New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{"warnings":["warning"]}'
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'warning')
         $native | Should -HaveCount 1
         $native[0].Kind | Should -Be 'Warning'
@@ -636,9 +648,11 @@ Describe 'Get-MkvMergeInfo' {
         New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{ invalid json'
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception | Should -Not -BeNullOrEmpty
-        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $captured.Exception.Exception.Message | Should -Not -Match 'JSON'
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text '{ invalid json')
+        $native | Should -HaveCount 1
+        $native[0].Kind | Should -Be 'Error'
     }
 
     It 'ne laisse pas une capture vide masquer l''échec mkvmerge -J' {
@@ -646,9 +660,11 @@ Describe 'Get-MkvMergeInfo' {
         New-FakeToolScript -Path $tool -ExitCode 2
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception | Should -Not -BeNullOrEmpty
-        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $captured.Exception.Exception.Message | Should -Not -Match 'JSON'
+        $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
+        @($sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -notmatch 'mkvmerge -J a échoué' }) |
+            Should -HaveCount 0
     }
 
     It 'rejoue un fallback texte Warning:/Error: seulement si le JSON d''identification est illisible' {
@@ -656,7 +672,7 @@ Describe 'Get-MkvMergeInfo' {
         New-FakeToolScript -Path $tool -ExitCode 2 -MuxDiagnostics "Warning: fallback warning`nError: fallback error"
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
-        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(
             Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
                 'fallback warning'
@@ -671,7 +687,112 @@ Describe 'Get-MkvMergeInfo' {
         )
     }
 
-    It 'force --ui-language en_US sur mkvmerge -J pour figer le JSON d''identification' {
+    It 'expose un diagnostic brut non structuré avant l''exception synthétique avec le Path' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-unstructured.ps1'
+        $path = 'V:\fake\problem.mkv'
+        $rawText = 'some native mkvmerge diagnostic without Error prefix'
+        New-FakeToolScript -Path $tool -ExitCode 2 -UnstructuredRedirectText $rawText
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool -Path $path
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path $path
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text $rawText)
+        $native | Should -HaveCount 1
+        $native[0].Kind | Should -Be 'Error'
+
+        $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
+        $nativeIdx = -1
+        $synthIdx = -1
+        for ($i = 0; $i -lt $sequence.Count; $i++) {
+            if ($nativeIdx -lt 0 -and $sequence[$i].Text -eq $rawText) {
+                $nativeIdx = $i
+            }
+            if ($synthIdx -lt 0 -and $sequence[$i].Text -match 'mkvmerge -J a échoué') {
+                $synthIdx = $i
+            }
+        }
+        $nativeIdx | Should -BeGreaterThan -1
+        $synthIdx | Should -BeGreaterThan $nativeIdx
+    }
+
+    It 'n''affiche pas deux fois un JSON d''identification déjà interprété' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-no-json-dump.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{"warnings":["warning"],"errors":["error"]}'
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text @('warning', 'error'))
+        @(
+            $native | ForEach-Object { '{0} {1}' -f $_.Kind, $_.Text }
+        ) | Should -BeExactly @(
+            'Warning warning'
+            'Error error'
+        )
+        $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
+        @($sequence | Where-Object { $_.Text -match '"warnings"' -or $_.Text -match '"errors"' }) |
+            Should -HaveCount 0
+    }
+
+    It 'n''affiche pas deux fois un fallback texte Warning:/Error: déjà interprété' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-no-text-dump.ps1'
+        $rawText = "Warning: warning`nError: error"
+        New-FakeToolScript -Path $tool -ExitCode 2 -RedirectOutputText $rawText
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text @('warning', 'error'))
+        @(
+            $native | ForEach-Object { '{0} {1}' -f $_.Kind, $_.Text }
+        ) | Should -BeExactly @(
+            'Warning warning'
+            'Error error'
+        )
+        $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
+        @($sequence | Where-Object { $_.Text -eq $rawText }) | Should -HaveCount 0
+    }
+
+    It 'conserve toutes les lignes d''un diagnostic brut multi-ligne, dans l''ordre' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-multiline-raw.ps1'
+        $rawText = "first native line`nsecond native line`nthird native line"
+        New-FakeToolScript -Path $tool -ExitCode 2 -UnstructuredRedirectText $rawText
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
+        $native = @(
+            Get-DiagnosticSequence -Records $captured.Records |
+                Where-Object { $_.Kind -eq 'Error' -and $_.Text -notmatch 'mkvmerge -J a échoué' }
+        )
+        $native | Should -HaveCount 1
+        $native[0].Text | Should -BeExactly $rawText
+        $native[0].Text | Should -Match '(?s)first native line.*second native line.*third native line'
+    }
+
+    It 'restitue exactement un diagnostic brut UTF-8 non structuré' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-utf8-raw.ps1'
+        $rawText = "échec d'accès à « épisode Français ».mkv — donnée invalide"
+        New-FakeToolScript -Path $tool -ExitCode 2 -UnstructuredRedirectText $rawText
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text $rawText)
+        $native | Should -HaveCount 1
+        $native[0].Kind | Should -Be 'Error'
+        $native[0].Text | Should -BeExactly $rawText
+    }
+
+    It 'expose le message localisé réel de --ui-language en_US (préfixe Erreur :, pas Error:)' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-erreur-fr.ps1'
+        $rawText = "Erreur : Aucune traduction n'est disponible pour «en_US»."
+        New-FakeToolScript -Path $tool -ExitCode 2 -UnstructuredRedirectText $rawText
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text $rawText)
+        $native | Should -HaveCount 1
+        $native[0].Kind | Should -Be 'Error'
+        $native[0].Text | Should -BeExactly $rawText
+    }
+
+    It 'force --ui-language en sur mkvmerge -J : MKVToolNix n''a pas de locale en_US' {
         $tool = Join-Path $TestDrive 'mkvmerge-ui-lang.ps1'
         $record = Join-Path $TestDrive 'mkvmerge-j-args.txt'
         New-FakeToolScript `
@@ -690,7 +811,8 @@ Describe 'Get-MkvMergeInfo' {
         $recorded = @(Get-Content -LiteralPath $record)
         $idx = [array]::IndexOf($recorded, '--ui-language')
         $idx | Should -BeGreaterThan -1
-        $recorded[$idx + 1] | Should -BeExactly 'en_US'
+        $recorded[$idx + 1] | Should -BeExactly 'en'
+        $recorded | Should -Not -Contain 'en_US'
     }
 }
 
@@ -1307,7 +1429,7 @@ Describe 'Invoke-MkvRepair' {
         }
 
         $exception | Should -Not -BeNullOrEmpty
-        $exception.Exception.Message | Should -Match 'mkvmerge -J a échoué'
+        Assert-MkvMergeJFailedException -Exception $exception -Path $failSrc
         $native = @(
             Get-NativeDiagnosticSequence -Records $records -Text @(
                 'warning file 1'
@@ -1355,8 +1477,11 @@ Describe 'Invoke-MkvRepair' {
             'Error identification failure file 1'
         )
         $sequence = @(Get-DiagnosticSequence -Records $records)
-        @($sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -match 'mkvmerge -J a échoué' }) |
-            Should -HaveCount 1
+        $synthetic = @(
+            $sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -match 'mkvmerge -J a échoué' }
+        )
+        $synthetic | Should -HaveCount 1
+        $synthetic[0].Text | Should -Match ([regex]::Escape($failSrc))
         Get-Content -LiteralPath $failSrc -Raw | Should -BeExactly 'original-fail'
         Get-Content -LiteralPath $okSrc -Raw | Should -BeExactly 'repaired-ok'
         @(Get-ChildItem -LiteralPath $folder -Filter '*.mkv').Name |

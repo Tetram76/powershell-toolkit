@@ -1,7 +1,7 @@
 @{
 # --- Identité du module ---
     RootModule = 'Tetram.Media.Reencode.psm1'
-    ModuleVersion = '3.4.1'
+    ModuleVersion = '3.4.2'
     GUID = 'd4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95'
 
     Author = 'TRL'
@@ -62,6 +62,7 @@
 - 3.3.0 : Export de Get-MkvInterleaveRepairCommand et Invoke-MkvRepair (Tetram.Media.Repair.psm1) : remux mkvmerge à readers séparés pour réparer l'interleaving, remplacement in-place.
 - 3.4.0 : Invoke-MkvRepair : diagnostics mkvmerge Warning:/Error: restitués dans l'ordre d'émission ; code 1 en warning non bloquant (source conservée, poursuite en -Folder) ; -ContinueOnError (jeu Folder) poursuit le lot après un échec réel, sans masquer l'erreur ni remplacer la source.
 - 3.4.1 : Invoke-MkvRepair : correction des diagnostics mkvmerge -J (tableaux JSON warnings/errors restitués via Write-Warning / Write-Error) ; les tests d'identification suivent le format réel de l'outil.
+- 3.4.2 : Invoke-MkvRepair : fallback final si un diagnostic mkvmerge -J n'est ni JSON warnings/errors ni Warning:/Error: ; l'erreur synthétique identifie le fichier ; --ui-language en (en_US n'existe pas dans MKVToolNix).
 '@
         }
     }
