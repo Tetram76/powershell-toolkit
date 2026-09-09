@@ -4,7 +4,7 @@ external help file: Tetram.Media.Reencode-Help.xml
 HelpUri: ''
 Locale: fr-FR
 Module Name: Tetram.Media.Reencode
-ms.date: 09/08/2026
+ms.date: 09/09/2026
 PlatyPS schema version: 2024-05-01
 title: Invoke-MkvRepair
 ---
@@ -28,9 +28,9 @@ Invoke-MkvRepair [-Path] <string> [-MkvMerge <string>] [-ExtendedPathThreshold <
 ### Folder
 
 ```
-Invoke-MkvRepair -Folder <string> [-Recurse] [-MkvMerge <string>] [-ExtendedPathThreshold <int>]
- [-FileReadyTimeoutSeconds <int>] [-RetryIntervalMilliseconds <int>] [-PassThru] [-WhatIf]
- [-Confirm] [<CommonParameters>]
+Invoke-MkvRepair -Folder <string> [-Recurse] [-ContinueOnError] [-MkvMerge <string>]
+ [-ExtendedPathThreshold <int>] [-FileReadyTimeoutSeconds <int>] [-RetryIntervalMilliseconds <int>]
+ [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## ALIASES
@@ -42,11 +42,15 @@ Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+). Remux `mkvmerge` à reader
 Effet disque :
 
 - `-WhatIf` : pas de remux, pas de remplacement. `ConfirmImpact` Medium : pas de prompt sauf `-Confirm`.
-- run réel : `mkvmerge` écrit un temporaire unique à côté du source (`{basename}.{guid}.mkv`, distinct du voisin `.repaired.mkv` du builder public), attend que le fichier soit disponible en exclusivité, puis déplace ce temporaire par-dessus le source. Après un remplacement réussi, `CreationTime` / `LastWriteTime` / `LastAccessTime` du source sont restitués (comme `Invoke-ReencodeFile`). Si `mkvmerge` rend un code non nul, ou si la sortie n'existe pas, le source est conservé et une exception est levée.
+- run réel : `mkvmerge` écrit un temporaire unique à côté du source (`{basename}.{guid}.mkv`, distinct du voisin `.repaired.mkv` du builder public), attend que le fichier soit disponible en exclusivité, puis déplace ce temporaire par-dessus le source. Après un remplacement réussi, `CreationTime` / `LastWriteTime` / `LastAccessTime` du source sont restitués (comme `Invoke-ReencodeFile`).
+- code retour `mkvmerge` :
+  - `0` : la sortie est validée puis remplace le source.
+  - `1` : warning PowerShell (`Write-Warning`) reprenant le ou les messages `Warning:` émis par `mkvmerge`, dans l'ordre d'origine ; le source n'est pas remplacé ; le temporaire est abandonné et nettoyé. En mode `-Folder`, le fichier suivant est traité immédiatement, que `-ContinueOnError` soit présent ou non. Ce n'est pas une exception.
+  - `>= 2` : warnings éventuels puis erreur(s) `mkvmerge` restitués dans l'ordre d'origine (`Write-Warning` / `Write-Error`) ; le source est conservé et le temporaire est nettoyé. Sans `-ContinueOnError`, le traitement s'arrête après ce fichier. Avec `-ContinueOnError` (jeu `Folder` uniquement), l'échec reste écrit dans le flux d'erreur et le scan continue.
 
-Mode `-Folder` : uniquement des fichiers `*.mkv` non lecture seule. La liste est **entièrement matérialisée** avant la première réparation : un temporaire créé pendant le run n'est pas ajouté à la file. Un voisin `.repaired.mkv` déjà présent n'est pas écrasé par la réparation de `{basename}.mkv` (c'est un candidat distinct). `-Recurse` descend dans les sous-dossiers. Un dossier absent lève ; un dossier sans candidat retourne sans erreur. Le mode `-Path` ne saute pas un fichier lecture seule : ce filtre n'existe que pour `-Folder`.
+Mode `-Folder` : uniquement des fichiers `*.mkv` non lecture seule. La liste est **entièrement matérialisée** avant la première réparation : un temporaire créé pendant le run n'est pas ajouté à la file. Un voisin `.repaired.mkv` déjà présent n'est pas écrasé par la réparation de `{basename}.mkv` (c'est un candidat distinct). `-Recurse` descend dans les sous-dossiers. Un dossier absent lève ; un dossier sans candidat retourne sans erreur. Le mode `-Path` ne saute pas un fichier lecture seule : ce filtre n'existe que pour `-Folder`. Un warning `mkvmerge` (code `1`) n'interrompt pas le lot. Une erreur réelle (code `>= 2`, identification `-J` en échec, sortie absente, ou autre exception propre au fichier) arrête le lot par défaut ; `-ContinueOnError` expose l'erreur et passe au fichier suivant. Les erreurs qui empêchent de démarrer le lot (dossier inexistant, binding) restent terminantes. `-ContinueOnError` n'existe pas en mode `-Path`.
 
-`-PassThru` émet le `FileInfo` du source après remplacement. Sans ce commutateur : aucun objet pipeline. Une barre de progression s'affiche en mode dossier.
+`-PassThru` émet le `FileInfo` du source après remplacement. Sans ce commutateur : aucun objet pipeline. Un fichier abandonné sur warning (code `1`) ou sur erreur n'émet rien. Une barre de progression s'affiche en mode dossier.
 
 `mkvmerge` : `-MkvMerge`, défaut `mkvmerge.exe` sous Windows et `mkvmerge` sinon (PATH). Chemins longs : même seuil 250 que `Get-MkvInterleaveRepairCommand`.
 
@@ -62,7 +66,7 @@ Invoke-MkvRepair -Path 'D:\Media\film.mkv' -WhatIf
 
 ### Example 2: Réparer un MKV in-place
 
-Intention : remux puis écraser l'original. L'échec mkvmerge conserve le source.
+Intention : remux puis écraser l'original. Un code `mkvmerge` `>= 2` conserve le source, restitue les diagnostics natifs dans l'ordre, puis lève ; un code `1` conserve aussi le source, via un warning PowerShell, sans exception.
 
 ```powershell
 Invoke-MkvRepair -Path 'D:\Media\film.mkv'
@@ -76,7 +80,15 @@ Intention : scan récursif `*.mkv`, ignore lecture seule, file figée avant le p
 Invoke-MkvRepair -Folder 'D:\Media' -Recurse
 ```
 
-### Example 4: Récupérer le FileInfo après remplacement
+### Example 4: Poursuivre le scan après une erreur réelle
+
+Intention : afficher l'échec du fichier courant (diagnostics `mkvmerge` compris), laisser ce fichier intact, et continuer avec les suivants. Sans ce commutateur, le premier véritable échec arrête le lot.
+
+```powershell
+Invoke-MkvRepair -Folder 'D:\Media' -Recurse -ContinueOnError
+```
+
+### Example 5: Récupérer le FileInfo après remplacement
 
 Intention : enchaîner sur le fichier déjà réécrit. Sans effet sous `-WhatIf`.
 
@@ -98,6 +110,27 @@ Aliases:
 - cf
 ParameterSets:
 - Name: (All)
+  Position: Named
+  IsRequired: false
+  ValueFromPipeline: false
+  ValueFromPipelineByPropertyName: false
+  ValueFromRemainingArguments: false
+DontShow: false
+AcceptedValues: []
+HelpMessage: ''
+```
+
+### -ContinueOnError
+
+En mode `-Folder` uniquement : après un échec propre à un fichier, écrit l'erreur dans le flux d'erreur, conserve le source intact, et poursuit avec le fichier suivant. Absent / faux par défaut : le premier véritable échec arrête le lot. N'a aucun effet sur un warning `mkvmerge` (code `1`), qui continue déjà. Ne remplace pas `-ErrorAction`.
+
+```yaml
+Type: System.Management.Automation.SwitchParameter
+DefaultValue: ''
+SupportsWildcards: false
+Aliases: []
+ParameterSets:
+- Name: Folder
   Position: Named
   IsRequired: false
   ValueFromPipeline: false
@@ -309,13 +342,13 @@ Cette commande prend en charge les paramètres communs : -Debug, -ErrorAction, -
 
 ## OUTPUTS
 
-Sans `-PassThru` : rien. Avec `-PassThru` : `System.IO.FileInfo` du source remplacé (un par fichier traité).
+Sans `-PassThru` : rien. Avec `-PassThru` : `System.IO.FileInfo` du source remplacé (un par fichier effectivement remplacé). Aucun objet pour un fichier abandonné sur warning `mkvmerge` (code `1`) ni pour un fichier en erreur.
 
 ## NOTES
 
 Prérequis : PowerShell 7.6+, `mkvmerge` (MKVToolNix).
 
-Ne pas faire : combiner `-Path` et `-Folder` ; prendre `-Folder` pour traiter un `.mp4` ; compter sur le skip lecture seule en mode `-Path` ; prendre cette commande pour un réencodage ffmpeg (`Invoke-ReencodeMedia`).
+Ne pas faire : combiner `-Path` et `-Folder` ; passer `-ContinueOnError` avec `-Path` ; prendre `-Folder` pour traiter un `.mp4` ; compter sur le skip lecture seule en mode `-Path` ; prendre cette commande pour un réencodage ffmpeg (`Invoke-ReencodeMedia`) ; interpréter un warning `mkvmerge` (code `1`) comme un remplacement réussi ; interpréter `-ContinueOnError` comme un silence des erreurs.
 
 ## RELATED LINKS
 

@@ -1,7 +1,7 @@
 @{
 # --- Identité du module ---
     RootModule = 'Tetram.Media.Reencode.psm1'
-    ModuleVersion = '3.3.0'
+    ModuleVersion = '3.4.0'
     GUID = 'd4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95'
 
     Author = 'TRL'
@@ -60,6 +60,7 @@
 - 3.1.0 : Ajout de -AllowIntegrityMismatch (jeux Reencode* uniquement) : un mismatch de durée reste rejeté par défaut ; avec le switch, le contrôle s'exécute toujours mais l'écart devient un warning et la sortie est acceptée. Absent de -NoTranscode et -CheckOnly ; aucun contrôle d'intégrité de durée en -NoTranscode.
 - 3.2.0 : Ajout de -RemoveAttachments (Reencode* et NoTranscode*) pour supprimer tous les flux de type attachment de la sortie ; comportement inchangé par défaut.
 - 3.3.0 : Export de Get-MkvInterleaveRepairCommand et Invoke-MkvRepair (Tetram.Media.Repair.psm1) : remux mkvmerge à readers séparés pour réparer l'interleaving, remplacement in-place.
+- 3.4.0 : Invoke-MkvRepair : diagnostics mkvmerge Warning:/Error: restitués dans l'ordre d'émission ; code 1 en warning non bloquant (source conservée, poursuite en -Folder) ; -ContinueOnError (jeu Folder) poursuit le lot après un échec réel, sans masquer l'erreur ni remplacer la source.
 '@
         }
     }
