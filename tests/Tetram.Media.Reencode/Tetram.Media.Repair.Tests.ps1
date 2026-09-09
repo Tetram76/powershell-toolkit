@@ -55,7 +55,9 @@ BeforeAll {
             [int] $ExitCode = 0,
             [string] $OutputText,
             [string] $StdoutText,
+            [Alias('MuxDiagnostics')]
             [string] $RedirectOutputText,
+            [string] $IdentificationJson,
             [string] $RedirectPathRecord,
             [string] $ArgumentRecord,
             [string] $Flag = '-o'
@@ -83,6 +85,13 @@ BeforeAll {
         else {
             ''
         }
+        $hasIdentification = $PSBoundParameters.ContainsKey('IdentificationJson')
+        $identificationB64 = if ($hasIdentification) {
+            [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($IdentificationJson))
+        }
+        else {
+            ''
+        }
         $hasRedirectRecord = $PSBoundParameters.ContainsKey('RedirectPathRecord')
         $redirectRecordLiteral = if ($hasRedirectRecord) {
             $RedirectPathRecord.Replace("'", "''")
@@ -103,12 +112,14 @@ BeforeAll {
             "`$writeOutput = `$$hasOutput"
             "`$writeStdout = `$$hasStdout"
             "`$writeRedirect = `$$hasRedirect"
+            "`$writeIdentification = `$$hasIdentification"
             "`$recordRedirect = `$$hasRedirectRecord"
             "`$recordArguments = `$$hasArgumentRecord"
             "`$flag = '$flagLiteral'"
             "`$text = '$outputLiteral'"
             "`$stdout = '$stdoutLiteral'"
             "`$redirect = '$redirectLiteral'"
+            "`$identificationB64 = '$identificationB64'"
             "`$redirectRecord = '$redirectRecordLiteral'"
             "`$argumentRecord = '$argumentRecordLiteral'"
             # `& $exe $argumentArray` passe le tableau comme un seul $args[0] ; on aplatit.
@@ -122,13 +133,27 @@ BeforeAll {
             '    }'
             '}'
             'if ($writeStdout) { Write-Output $stdout }'
+            '$isIdentify = $false'
+            'foreach ($item in $all) {'
+            '    if ([string]$item -eq ''-J'') { $isIdentify = $true }'
+            '}'
             # Plusieurs flags possibles : -o (sortie MKV) et --redirect-output (journal mkvmerge).
+            # -J écrit un document JSON : ne pas le confondre avec le journal texte du remux.
             'for ($i = 0; $i -lt $all.Count; $i++) {'
-            '    if ($writeOutput -and $all[$i] -eq $flag -and ($i + 1) -lt $all.Count) {'
+            '    if ($writeIdentification -and $isIdentify -and $all[$i] -eq ''--redirect-output'' -and ($i + 1) -lt $all.Count) {'
+            '        $identBytes = [byte[]]::new(0)'
+            '        if (-not [string]::IsNullOrEmpty($identificationB64)) {'
+            '            $identBytes = [Convert]::FromBase64String($identificationB64)'
+            '        }'
+            '        [System.IO.File]::WriteAllBytes([string]$all[$i + 1], $identBytes)'
+            '    }'
+            '    elseif ($writeOutput -and $all[$i] -eq $flag -and ($i + 1) -lt $all.Count) {'
             '        [System.IO.File]::WriteAllText([string]$all[$i + 1], $text)'
             '    }'
             '    if ($writeRedirect -and $all[$i] -eq ''--redirect-output'' -and ($i + 1) -lt $all.Count) {'
-            '        [System.IO.File]::WriteAllText([string]$all[$i + 1], $redirect)'
+            '        if (-not ($writeIdentification -and $isIdentify)) {'
+            '            [System.IO.File]::WriteAllText([string]$all[$i + 1], $redirect)'
+            '        }'
             '    }'
             '    if ($recordRedirect -and $all[$i] -eq ''--redirect-output'' -and ($i + 1) -lt $all.Count) {'
             '        [System.IO.File]::WriteAllText($redirectRecord, [string]$all[$i + 1])'
@@ -215,6 +240,98 @@ BeforeAll {
                 [pscustomobject]@{ Kind = 'Error'; Text = [string]$item.Exception.Message }
             }
         }
+    }
+
+    function script:Get-NativeDiagnosticSequence {
+        param(
+            $Records,
+            [string[]] $Text
+        )
+
+        $wanted = [System.Collections.Generic.HashSet[string]]::new([string[]]@($Text))
+        @(
+            Get-DiagnosticSequence -Records $Records |
+                Where-Object { $wanted.Contains([string]$_.Text) }
+        )
+    }
+
+    function script:Invoke-MkvMergeInfoCapturingDiagnostics {
+        param(
+            [Parameter(Mandatory)] [string] $MkvMerge,
+            [string] $Path = 'ignored.mkv'
+        )
+
+        $state = @{
+            MkvMerge  = $MkvMerge
+            Path      = $Path
+            Records   = [System.Collections.Generic.List[object]]::new()
+            Exception = $null
+            Output    = @()
+        }
+
+        InModuleScope 'Tetram.Media.Repair' -Parameters @{ State = $state } {
+            param($State)
+
+            try {
+                Get-MkvMergeInfo -MkvMerge $State.MkvMerge -Path $State.Path -WarningAction Continue -ErrorAction Continue 2>&1 3>&1 |
+                    ForEach-Object { [void]$State.Records.Add($_) }
+            }
+            catch {
+                $State.Exception = $_
+                [void]$State.Records.Add($_)
+            }
+        }
+
+        $state.Output = @(
+            $state.Records | Where-Object {
+                $_ -isnot [System.Management.Automation.WarningRecord] -and
+                $_ -isnot [System.Management.Automation.ErrorRecord]
+            }
+        )
+        $state
+    }
+
+    function script:New-FakeMkvMergeWithIdentificationFailure {
+        param(
+            [Parameter(Mandatory)] [string] $Path,
+            [Parameter(Mandatory)] [string] $FailFileName,
+            [Parameter(Mandatory)] [string] $FailJson,
+            [Parameter(Mandatory)] [string] $OkJson
+        )
+
+        $failLiteral = $FailFileName.Replace("'", "''")
+        $failB64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($FailJson))
+        $okB64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($OkJson))
+
+        @(
+            "`$failName = '$failLiteral'"
+            "`$failB64 = '$failB64'"
+            "`$okB64 = '$okB64'"
+            '$all = [System.Collections.Generic.List[object]]::new()'
+            'foreach ($item in $args) {'
+            '    if ($item -is [System.Array]) {'
+            '        foreach ($nested in $item) { [void]$all.Add($nested) }'
+            '    }'
+            '    else { [void]$all.Add($item) }'
+            '}'
+            '$isFail = $false'
+            '$isIdentify = $false'
+            'foreach ($item in $all) {'
+            '    if ([string]$item -like ("*{0}" -f $failName)) { $isFail = $true }'
+            '    if ([string]$item -eq ''-J'') { $isIdentify = $true }'
+            '}'
+            'for ($i = 0; $i -lt $all.Count; $i++) {'
+            '    if ($all[$i] -eq ''--redirect-output'' -and ($i + 1) -lt $all.Count -and $isIdentify) {'
+            '        $payload = if ($isFail) { $failB64 } else { $okB64 }'
+            '        [System.IO.File]::WriteAllBytes([string]$all[$i + 1], [Convert]::FromBase64String($payload))'
+            '    }'
+            '    if ($all[$i] -eq ''-o'' -and ($i + 1) -lt $all.Count -and -not $isFail) {'
+            '        [System.IO.File]::WriteAllText([string]$all[$i + 1], ''repaired-ok'')'
+            '    }'
+            '}'
+            'if ($isIdentify -and $isFail) { exit 2 } else { exit 0 }'
+        ) -join [Environment]::NewLine |
+            Set-Content -LiteralPath $Path -Encoding utf8
     }
 
     # 2>&1 3>&1 dans le même appel : l'ordre des WarningRecord/ErrorRecord
@@ -329,7 +446,7 @@ Describe 'Get-DefaultMkvMergeExecutable' {
 Describe 'Get-MkvMergeInfo' {
     It 'lit le JSON redirigé quand mkvmerge rend 0 ou 1' {
         $tool = Join-Path $TestDrive 'mkvmerge-ok.ps1'
-        New-FakeToolScript -Path $tool -ExitCode 1 -Flag '--redirect-output' -OutputText '{"ok":true}'
+        New-FakeToolScript -Path $tool -ExitCode 1 -IdentificationJson '{"ok":true}'
 
         $info = InModuleScope 'Tetram.Media.Repair' -Parameters @{ Tool = $tool } {
             param($Tool)
@@ -339,42 +456,228 @@ Describe 'Get-MkvMergeInfo' {
         $info.ok | Should -BeTrue
     }
 
-    It 'lève quand mkvmerge -J rend un code >= 2' {
-        $tool = Join-Path $TestDrive 'mkvmerge-fail.ps1'
-        New-FakeToolScript -Path $tool -ExitCode 2 -Flag '--redirect-output' -OutputText 'Error: simulated identification failure'
+    It 'ne rejoue pas les warnings JSON de mkvmerge -J pour un code 0 ou 1' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-code1-warnings.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 1 -IdentificationJson '{"ok":true,"warnings":["identification warning on success"],"errors":[]}'
 
-        $state = @{
-            Tool      = $tool
-            Records   = [System.Collections.Generic.List[object]]::new()
-            Exception = $null
-        }
-        InModuleScope 'Tetram.Media.Repair' -Parameters @{ State = $state } {
-            param($State)
-            try {
-                Get-MkvMergeInfo -MkvMerge $State.Tool -Path 'ignored.mkv' 2>&1 3>&1 |
-                    ForEach-Object { [void]$State.Records.Add($_) }
-            }
-            catch {
-                $State.Exception = $_
-                [void]$State.Records.Add($_)
-            }
-        }
-
-        $state.Exception | Should -Not -BeNullOrEmpty
-        $state.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué'
-        $sequence = @(Get-DiagnosticSequence -Records $state.Records)
-        @($sequence | Where-Object { $_.Text -match 'simulated identification failure' }) |
-            Should -HaveCount 1
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception | Should -BeNullOrEmpty
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'identification warning on success')
+        $native | Should -HaveCount 0
+        $captured.Output.Count | Should -Be 1
+        $captured.Output[0].ok | Should -BeTrue
     }
 
-    It 'force --ui-language en_US sur mkvmerge -J pour figer les préfixes Warning:/Error:' {
+    It 'restitue errors[] du JSON -J puis lève quand mkvmerge rend un code >= 2' {
+        $tool = Join-Path $TestDrive 'mkvmerge-fail.ps1'
+        $record = Join-Path $TestDrive 'mkvmerge-fail-redirect-path.txt'
+        New-FakeToolScript `
+            -Path $tool `
+            -ExitCode 2 `
+            -IdentificationJson '{"errors":["simulated identification failure"],"warnings":[]}' `
+            -RedirectPathRecord $record
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception | Should -Not -BeNullOrEmpty
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'simulated identification failure')
+        $native | Should -HaveCount 1
+        $native[0].Kind | Should -Be 'Error'
+        @($sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -match 'mkvmerge -J a échoué' }) |
+            Should -HaveCount 1
+        Test-Path -LiteralPath $record | Should -BeTrue
+        $logPath = (Get-Content -LiteralPath $record -Raw).Trim()
+        $logPath | Should -Not -BeNullOrEmpty
+        Test-Path -LiteralPath $logPath | Should -BeFalse
+    }
+
+    It 'restitue warnings[] puis errors[] dans l''ordre des tableaux JSON' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-warn-then-error.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson (@'
+{
+  "warnings": [
+    "first identification warning",
+    "second identification warning"
+  ],
+  "errors": [
+    "final identification error"
+  ]
+}
+'@)
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception | Should -Not -BeNullOrEmpty
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        $native = @(
+            Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
+                'first identification warning'
+                'second identification warning'
+                'final identification error'
+            )
+        )
+        @(
+            $native | ForEach-Object { '{0} {1}' -f $_.Kind, $_.Text }
+        ) | Should -BeExactly @(
+            'Warning first identification warning'
+            'Warning second identification warning'
+            'Error final identification error'
+        )
+    }
+
+    It 'restitue plusieurs errors[] après le warning, sans en perdre' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-multi-error.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson (@'
+{
+  "warnings": [
+    "warning before failure"
+  ],
+  "errors": [
+    "first identification error",
+    "second identification error"
+  ]
+}
+'@)
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception | Should -Not -BeNullOrEmpty
+        $native = @(
+            Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
+                'warning before failure'
+                'first identification error'
+                'second identification error'
+            )
+        )
+        @(
+            $native | ForEach-Object { '{0} {1}' -f $_.Kind, $_.Text }
+        ) | Should -BeExactly @(
+            'Warning warning before failure'
+            'Error first identification error'
+            'Error second identification error'
+        )
+    }
+
+    It 'conserve l''UTF-8 des warnings et errors JSON' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-utf8.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson (@'
+{
+  "warnings": [
+    "piste « Français » — durée incohérente"
+  ],
+  "errors": [
+    "échec d'accès au fichier « Français ».mkv"
+  ]
+}
+'@)
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception | Should -Not -BeNullOrEmpty
+        $native = @(
+            Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
+                'piste « Français » — durée incohérente'
+                "échec d'accès au fichier « Français ».mkv"
+            )
+        )
+        $native.Count | Should -Be 2
+        $native[0].Kind | Should -Be 'Warning'
+        $native[0].Text | Should -BeExactly 'piste « Français » — durée incohérente'
+        $native[1].Kind | Should -Be 'Error'
+        $native[1].Text | Should -BeExactly "échec d'accès au fichier « Français ».mkv"
+    }
+
+    It 'lève sans inventer de diagnostic quand warnings[] et errors[] sont vides' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-empty-arrays.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{"warnings":[],"errors":[]}'
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
+        @($sequence | Where-Object { $_.Kind -eq 'Warning' }) | Should -HaveCount 0
+        @($sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -notmatch 'mkvmerge -J a échoué' }) |
+            Should -HaveCount 0
+    }
+
+    It 'traite warnings/errors JSON null comme des collections vides' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-null-arrays.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{"warnings":null,"errors":null}'
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
+        @($sequence | Where-Object { $_.Kind -eq 'Warning' }) | Should -HaveCount 0
+        @($sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -notmatch 'mkvmerge -J a échoué' }) |
+            Should -HaveCount 0
+    }
+
+    It 'accepte un JSON sans propriété warnings sous StrictMode' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-no-warnings.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{"errors":["failure"]}'
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'failure')
+        $native | Should -HaveCount 1
+        $native[0].Kind | Should -Be 'Error'
+    }
+
+    It 'accepte un JSON sans propriété errors sous StrictMode' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-no-errors.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{"warnings":["warning"]}'
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'warning')
+        $native | Should -HaveCount 1
+        $native[0].Kind | Should -Be 'Warning'
+    }
+
+    It 'ne laisse pas un JSON invalide masquer l''échec mkvmerge -J' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-invalid.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -IdentificationJson '{ invalid json'
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception | Should -Not -BeNullOrEmpty
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        $captured.Exception.Exception.Message | Should -Not -Match 'JSON'
+    }
+
+    It 'ne laisse pas une capture vide masquer l''échec mkvmerge -J' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-empty.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception | Should -Not -BeNullOrEmpty
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        $captured.Exception.Exception.Message | Should -Not -Match 'JSON'
+    }
+
+    It 'rejoue un fallback texte Warning:/Error: seulement si le JSON d''identification est illisible' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-text-fallback.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 2 -MuxDiagnostics "Warning: fallback warning`nError: fallback error"
+
+        $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué avec le code 2'
+        $native = @(
+            Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
+                'fallback warning'
+                'fallback error'
+            )
+        )
+        @(
+            $native | ForEach-Object { '{0} {1}' -f $_.Kind, $_.Text }
+        ) | Should -BeExactly @(
+            'Warning fallback warning'
+            'Error fallback error'
+        )
+    }
+
+    It 'force --ui-language en_US sur mkvmerge -J pour figer le JSON d''identification' {
         $tool = Join-Path $TestDrive 'mkvmerge-ui-lang.ps1'
         $record = Join-Path $TestDrive 'mkvmerge-j-args.txt'
         New-FakeToolScript `
             -Path $tool `
             -ExitCode 2 `
-            -Flag '--redirect-output' `
-            -OutputText 'Error: simulated identification failure' `
+            -IdentificationJson '{"errors":["simulated identification failure"],"warnings":[]}' `
             -ArgumentRecord $record
 
         InModuleScope 'Tetram.Media.Repair' -Parameters @{ Tool = $tool } {
@@ -978,6 +1281,49 @@ Describe 'Invoke-MkvRepair' {
         }
     }
 
+    It 'en -Folder, un échec JSON de mkvmerge -J arrête le lot sans -ContinueOnError' {
+        $folder = Join-Path $TestDrive 'ident-fail-stop'
+        New-Item -ItemType Directory -Path $folder | Out-Null
+        $failSrc = Join-Path $folder 'a-ident-fail.mkv'
+        $okSrc = Join-Path $folder 'b-ok.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-ident-fail-stop.ps1'
+        Set-Content -LiteralPath $failSrc -Value 'original-fail' -NoNewline
+        Set-Content -LiteralPath $okSrc -Value 'original-ok' -NoNewline
+        New-FakeMkvMergeWithIdentificationFailure `
+            -Path $tool `
+            -FailFileName 'a-ident-fail.mkv' `
+            -FailJson '{"warnings":["warning file 1"],"errors":["identification failure file 1"]}' `
+            -OkJson '{"container":{"recognized":true,"supported":true,"type":"Matroska"},"tracks":[{"id":0,"type":"video","codec":"V"}]}'
+
+        $records = [System.Collections.Generic.List[object]]::new()
+        $exception = $null
+        try {
+            Invoke-MkvRepair -Folder $folder -MkvMerge $tool -WarningAction Continue -ErrorAction Continue 2>&1 3>&1 |
+                ForEach-Object { [void]$records.Add($_) }
+        }
+        catch {
+            $exception = $_
+            [void]$records.Add($_)
+        }
+
+        $exception | Should -Not -BeNullOrEmpty
+        $exception.Exception.Message | Should -Match 'mkvmerge -J a échoué'
+        $native = @(
+            Get-NativeDiagnosticSequence -Records $records -Text @(
+                'warning file 1'
+                'identification failure file 1'
+            )
+        )
+        @(
+            $native | ForEach-Object { '{0} {1}' -f $_.Kind, $_.Text }
+        ) | Should -BeExactly @(
+            'Warning warning file 1'
+            'Error identification failure file 1'
+        )
+        Get-Content -LiteralPath $failSrc -Raw | Should -BeExactly 'original-fail'
+        Get-Content -LiteralPath $okSrc -Raw | Should -BeExactly 'original-ok'
+    }
+
     It 'en -Folder -ContinueOnError poursuit si l''identification -J échoue' {
         $folder = Join-Path $TestDrive 'ident-fail-continue'
         New-Item -ItemType Directory -Path $folder | Out-Null
@@ -986,44 +1332,36 @@ Describe 'Invoke-MkvRepair' {
         $tool = Join-Path $TestDrive 'mkvmerge-ident-fail.ps1'
         Set-Content -LiteralPath $failSrc -Value 'original-fail' -NoNewline
         Set-Content -LiteralPath $okSrc -Value 'original-ok' -NoNewline
-        $okJson = '{"container":{"recognized":true,"supported":true,"type":"Matroska"},"tracks":[{"id":0,"type":"video","codec":"V"}]}'
+        New-FakeMkvMergeWithIdentificationFailure `
+            -Path $tool `
+            -FailFileName 'a-ident-fail.mkv' `
+            -FailJson '{"warnings":["warning file 1"],"errors":["identification failure file 1"]}' `
+            -OkJson '{"container":{"recognized":true,"supported":true,"type":"Matroska"},"tracks":[{"id":0,"type":"video","codec":"V"}]}'
 
+        $records = [System.Collections.Generic.List[object]]::new()
+        Invoke-MkvRepair -Folder $folder -MkvMerge $tool -ContinueOnError -WarningAction Continue -ErrorAction Continue 2>&1 3>&1 |
+            ForEach-Object { [void]$records.Add($_) }
+
+        $native = @(
+            Get-NativeDiagnosticSequence -Records $records -Text @(
+                'warning file 1'
+                'identification failure file 1'
+            )
+        )
         @(
-            '$all = [System.Collections.Generic.List[object]]::new()'
-            'foreach ($item in $args) {'
-            '    if ($item -is [System.Array]) {'
-            '        foreach ($nested in $item) { [void]$all.Add($nested) }'
-            '    }'
-            '    else { [void]$all.Add($item) }'
-            '}'
-            '$isFail = $false'
-            '$isIdentify = $false'
-            'foreach ($item in $all) {'
-            '    if ([string]$item -like ''*a-ident-fail.mkv'') { $isFail = $true }'
-            '    if ([string]$item -eq ''-J'') { $isIdentify = $true }'
-            '}'
-            'for ($i = 0; $i -lt $all.Count; $i++) {'
-            '    if ($all[$i] -eq ''--redirect-output'' -and ($i + 1) -lt $all.Count) {'
-            '        if ($isIdentify -and $isFail) {'
-            '            [System.IO.File]::WriteAllText([string]$all[$i + 1], "Error: simulated identification failure")'
-            '        }'
-            '        elseif ($isIdentify) {'
-            "            [System.IO.File]::WriteAllText([string]`$all[`$i + 1], '$okJson')"
-            '        }'
-            '    }'
-            '    if ($all[$i] -eq ''-o'' -and ($i + 1) -lt $all.Count -and -not $isFail) {'
-            '        [System.IO.File]::WriteAllText([string]$all[$i + 1], ''repaired-ok'')'
-            '    }'
-            '}'
-            'if ($isIdentify -and $isFail) { exit 2 } else { exit 0 }'
-        ) -join [Environment]::NewLine |
-            Set-Content -LiteralPath $tool -Encoding utf8
-
-        $errs = $null
-        Invoke-MkvRepair -Folder $folder -MkvMerge $tool -ContinueOnError -ErrorAction Continue -ErrorVariable errs
-        ($errs | Out-String) | Should -Match 'simulated identification failure'
+            $native | ForEach-Object { '{0} {1}' -f $_.Kind, $_.Text }
+        ) | Should -BeExactly @(
+            'Warning warning file 1'
+            'Error identification failure file 1'
+        )
+        $sequence = @(Get-DiagnosticSequence -Records $records)
+        @($sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -match 'mkvmerge -J a échoué' }) |
+            Should -HaveCount 1
         Get-Content -LiteralPath $failSrc -Raw | Should -BeExactly 'original-fail'
         Get-Content -LiteralPath $okSrc -Raw | Should -BeExactly 'repaired-ok'
+        @(Get-ChildItem -LiteralPath $folder -Filter '*.mkv').Name |
+            Sort-Object |
+            Should -Be @('a-ident-fail.mkv', 'b-ok.mkv')
     }
 
     It 'en -Folder, une erreur PowerShell propre au fichier obéit à -ContinueOnError' {
