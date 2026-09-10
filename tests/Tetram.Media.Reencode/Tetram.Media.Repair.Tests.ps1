@@ -171,15 +171,17 @@ BeforeAll {
         param(
             [Parameter(Mandatory)] [string] $Path,
             [string] $MkvMerge = 'mkvmerge.exe',
-            [switch] $PassThru
+            [switch] $PassThru,
+            [switch] $ForceReplaceOnWarning
         )
 
         $state = @{
-            Path     = $Path
-            MkvMerge = $MkvMerge
-            PassThru = [bool] $PassThru
-            Warnings = @()
-            Output   = $null
+            Path                   = $Path
+            MkvMerge               = $MkvMerge
+            PassThru               = [bool] $PassThru
+            ForceReplaceOnWarning  = [bool] $ForceReplaceOnWarning
+            Warnings               = @()
+            Output                 = $null
         }
 
         try {
@@ -192,6 +194,7 @@ BeforeAll {
                         -Path $State.Path `
                         -MkvMerge $State.MkvMerge `
                         -PassThru:$State.PassThru `
+                        -ForceReplaceOnWarning:$State.ForceReplaceOnWarning `
                         -WarningAction SilentlyContinue `
                         -WarningVariable warningMessages
                 }
@@ -354,16 +357,18 @@ BeforeAll {
         param(
             [Parameter(Mandatory)] [string] $Path,
             [string] $MkvMerge = 'mkvmerge.exe',
-            [switch] $PassThru
+            [switch] $PassThru,
+            [switch] $ForceReplaceOnWarning
         )
 
         $state = @{
-            Path      = $Path
-            MkvMerge  = $MkvMerge
-            PassThru  = [bool] $PassThru
-            Records   = [System.Collections.Generic.List[object]]::new()
-            Threw     = $false
-            Exception = $null
+            Path                  = $Path
+            MkvMerge              = $MkvMerge
+            PassThru              = [bool] $PassThru
+            ForceReplaceOnWarning = [bool] $ForceReplaceOnWarning
+            Records               = [System.Collections.Generic.List[object]]::new()
+            Threw                 = $false
+            Exception             = $null
         }
 
         InModuleScope 'Tetram.Media.Repair' -Parameters @{ State = $state } {
@@ -374,6 +379,7 @@ BeforeAll {
                     -Path $State.Path `
                     -MkvMerge $State.MkvMerge `
                     -PassThru:$State.PassThru `
+                    -ForceReplaceOnWarning:$State.ForceReplaceOnWarning `
                     -WarningAction Continue `
                     -ErrorAction Continue `
                     2>&1 3>&1 |
@@ -441,6 +447,22 @@ Describe 'Invoke-MkvRepair - surface publique' {
         $mkv = Join-Path $TestDrive 'binding-continue.mkv'
         Set-Content -LiteralPath $mkv -Value 'fake'
         { Invoke-MkvRepair -Path $mkv -ContinueOnError } | Should -Throw
+    }
+
+    It 'expose ForceReplaceOnWarning optionnel sur File et Folder, sans nouveau ParameterSet' {
+        $meta = Get-Command Invoke-MkvRepair
+        $meta.Parameters.ContainsKey('ForceReplaceOnWarning') | Should -BeTrue
+        $param = $meta.Parameters['ForceReplaceOnWarning']
+        $param.ParameterType | Should -Be ([System.Management.Automation.SwitchParameter])
+        $param.ParameterSets.ContainsKey('__AllParameterSets') | Should -BeTrue
+        $param.ParameterSets['__AllParameterSets'].IsMandatory | Should -BeFalse
+        $fileSet = @($meta.ParameterSets | Where-Object { $_.Name -eq 'File' })[0]
+        $folderSet = @($meta.ParameterSets | Where-Object { $_.Name -eq 'Folder' })[0]
+        @($fileSet.Parameters.Name) | Should -Contain 'ForceReplaceOnWarning'
+        @($folderSet.Parameters.Name) | Should -Contain 'ForceReplaceOnWarning'
+        @($meta.ParameterSets | Select-Object -ExpandProperty Name | Sort-Object) | Should -Be @('File', 'Folder')
+        $meta.DefaultParameterSet | Should -Be 'File'
+        $meta.Parameters['ContinueOnError'].ParameterSets.ContainsKey('File') | Should -BeFalse
     }
 }
 
@@ -1052,6 +1074,16 @@ Describe 'Invoke-MkvRepair' {
         Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 0
     }
 
+    It 'n''appelle pas la réparation sous -ForceReplaceOnWarning -WhatIf' {
+        $mkv = Join-Path $TestDrive 'whatif-force.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake' -NoNewline
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile { throw 'ne doit pas tourner' }
+
+        { Invoke-MkvRepair -Path $mkv -ForceReplaceOnWarning -WhatIf } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 0
+        Get-Content -LiteralPath $mkv -Raw | Should -BeExactly 'fake'
+    }
+
     It 'délègue un fichier au réparateur interne' {
         $mkv = Join-Path $TestDrive 'one.mkv'
         Set-Content -LiteralPath $mkv -Value 'fake'
@@ -1060,6 +1092,19 @@ Describe 'Invoke-MkvRepair' {
         Invoke-MkvRepair -Path $mkv
         Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 1 -ParameterFilter {
             $Path -eq $mkv
+        }
+    }
+
+    It 'propage ForceReplaceOnWarning au réparateur interne en File et Folder' {
+        $mkv = Join-Path $TestDrive 'force-one.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {}
+
+        Invoke-MkvRepair -Path $mkv -ForceReplaceOnWarning
+        Invoke-MkvRepair -Folder $TestDrive -ForceReplaceOnWarning
+
+        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 2 -ParameterFilter {
+            $ForceReplaceOnWarning
         }
     }
 
@@ -1885,5 +1930,424 @@ Describe 'Invoke-MkvRepairFile' {
         @(Get-ChildItem -LiteralPath $TestDrive -Filter 'film*.mkv').Name |
             Sort-Object |
             Should -Be @('film.mkv', 'film.repaired.mkv')
+    }
+}
+
+Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
+    It 'sans switch, un code 1 avec sortie conserve la source, avertit et n''émet pas de PassThru' {
+        $src = Join-Path $TestDrive 'warn-default.mkv'
+        $out = Join-Path $TestDrive 'warn-default.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-warn-default.ps1'
+        $nativeWarning = New-MkvMergeMuxLog -WarningLine 'Warning: The track timestamp scale is invalid'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript -Path $tool -ExitCode 1 -OutputText 'doubtful' -RedirectOutputText $nativeWarning
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        $passThru = @(Invoke-RepairFileUnderTest -Path $src -PassThru)
+        $passThru | Should -HaveCount 0
+        ($script:LastRepairWarnings -join [Environment]::NewLine) | Should -Match 'The track timestamp scale is invalid'
+        ($script:LastRepairWarnings -join [Environment]::NewLine) | Should -Match "n'a pas été remplacé"
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+        Test-Path -LiteralPath $out | Should -BeFalse
+    }
+
+    It 'remplace la source après un code 1 avec sortie valide' {
+        $src = Join-Path $TestDrive 'force-replace.mkv'
+        $out = Join-Path $TestDrive 'force-replace.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-replace.ps1'
+        $record = Join-Path $TestDrive 'force-replace-redirect-path.txt'
+        $nativeWarning = New-MkvMergeMuxLog -WarningLine 'Warning: The track timestamp scale is invalid'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript `
+            -Path $tool `
+            -ExitCode 1 `
+            -OutputText 'repaired-warn' `
+            -RedirectOutputText $nativeWarning `
+            -RedirectPathRecord $record
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        { Invoke-RepairFileUnderTest -Path $src -ForceReplaceOnWarning } | Should -Not -Throw
+        ($script:LastRepairWarnings -join [Environment]::NewLine) | Should -Match 'The track timestamp scale is invalid'
+        ($script:LastRepairWarnings -join [Environment]::NewLine) | Should -Not -Match "n'a pas été remplacé"
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired-warn'
+        Test-Path -LiteralPath $out | Should -BeFalse
+        $logPath = (Get-Content -LiteralPath $record -Raw).Trim()
+        Test-Path -LiteralPath $logPath | Should -BeFalse
+    }
+
+    It 'restitue plusieurs Warning: dans l''ordre puis remplace' {
+        $src = Join-Path $TestDrive 'force-multi.mkv'
+        $out = Join-Path $TestDrive 'force-multi.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-multi.ps1'
+        $nativeLog = New-MkvMergeMuxLog -WarningLine @(
+            'Warning: The track timestamp scale is invalid'
+            'Warning: ''Default'' flag is not set on any track'
+        )
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript -Path $tool -ExitCode 1 -OutputText 'repaired-multi' -RedirectOutputText $nativeLog
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        Invoke-RepairFileUnderTest -Path $src -ForceReplaceOnWarning
+        $script:LastRepairWarnings.Count | Should -Be 2
+        $script:LastRepairWarnings[0] | Should -Match 'The track timestamp scale is invalid'
+        $script:LastRepairWarnings[1] | Should -Match "'Default' flag is not set on any track"
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired-multi'
+    }
+
+    It 'émet un warning synthétique sans prétendre que la source est conservée quand aucun Warning: n''est parsé' {
+        $src = Join-Path $TestDrive 'force-synthetic.mkv'
+        $out = Join-Path $TestDrive 'force-synthetic.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-synthetic.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript -Path $tool -ExitCode 1 -OutputText 'repaired-silent'
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        Invoke-RepairFileUnderTest -Path $src
+        ($script:LastRepairWarnings -join [Environment]::NewLine) | Should -Match "n'a pas été remplacé"
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+
+        Invoke-RepairFileUnderTest -Path $src -ForceReplaceOnWarning
+        $warningText = $script:LastRepairWarnings -join [Environment]::NewLine
+        $warningText | Should -Match 'code 1'
+        $warningText | Should -Match 'ForceReplaceOnWarning'
+        $warningText | Should -Not -Match "n'a pas été remplacé"
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired-silent'
+        Test-Path -LiteralPath $out | Should -BeFalse
+    }
+
+    It 'émet le FileInfo du source remplacé avec -PassThru' {
+        $src = Join-Path $TestDrive 'force-passthru.mkv'
+        $out = Join-Path $TestDrive 'force-passthru.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-passthru.ps1'
+        $nativeWarning = New-MkvMergeMuxLog -WarningLine 'Warning: The track number 2 was not found'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript -Path $tool -ExitCode 1 -OutputText 'repaired-pt' -RedirectOutputText $nativeWarning
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        $without = @(Invoke-RepairFileUnderTest -Path $src -PassThru)
+        $without | Should -HaveCount 0
+
+        $with = @(Invoke-RepairFileUnderTest -Path $src -PassThru -ForceReplaceOnWarning)
+        $with.Count | Should -Be 1
+        $with[0] | Should -BeOfType ([System.IO.FileInfo])
+        $with[0].FullName | Should -BeExactly ([System.IO.Path]::GetFullPath($src))
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired-pt'
+    }
+
+    It 'restitue les timestamps du source après un code 1 accepté' {
+        $src = Join-Path $TestDrive 'force-stamps.mkv'
+        $out = Join-Path $TestDrive 'force-stamps.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-stamps.ps1'
+        $nativeWarning = New-MkvMergeMuxLog -WarningLine 'Warning: No default track for audio'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        $stamp = [datetime]::new(2020, 6, 15, 12, 0, 0, [System.DateTimeKind]::Utc)
+        $before = Get-Item -LiteralPath $src
+        $before.CreationTimeUtc = $stamp
+        $before.LastWriteTimeUtc = $stamp
+        $before.LastAccessTimeUtc = $stamp
+        New-FakeToolScript -Path $tool -ExitCode 1 -OutputText 'repaired' -RedirectOutputText $nativeWarning
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        Invoke-RepairFileUnderTest -Path $src -ForceReplaceOnWarning
+        $after = Get-Item -LiteralPath $src
+        $after.CreationTimeUtc | Should -Be $stamp
+        $after.LastWriteTimeUtc | Should -Be $stamp
+        $after.LastAccessTimeUtc | Should -Be $stamp
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired'
+    }
+
+    It 'lève si la sortie est absente après un code 1 forcé, sans remplacer la source' {
+        $src = Join-Path $TestDrive 'force-ghost.mkv'
+        $out = Join-Path $TestDrive 'force-ghost.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-ghost.ps1'
+        $nativeWarning = New-MkvMergeMuxLog -WarningLine 'Warning: The track timestamp scale is invalid'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript -Path $tool -ExitCode 1 -RedirectOutputText $nativeWarning
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        $captured = Invoke-RepairFileCapturingDiagnostics -Path $src -PassThru -ForceReplaceOnWarning
+        $captured.Threw | Should -BeTrue
+        $captured.Exception.Exception.Message | Should -Match "n'existe pas"
+        ($captured.Records | Out-String) | Should -Match 'The track timestamp scale is invalid'
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+        Test-Path -LiteralPath $out | Should -BeFalse
+        @($captured.Records | Where-Object { $_ -is [System.IO.FileInfo] }) | Should -HaveCount 0
+    }
+
+    It 'ne remplace pas un code 1 avec diagnostic Error: même avec le switch' {
+        $src = Join-Path $TestDrive 'force-code1-error.mkv'
+        $out = Join-Path $TestDrive 'force-code1-error.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-code1-error.ps1'
+        $record = Join-Path $TestDrive 'force-code1-error-redirect-path.txt'
+        $nativeLog = @(
+            'Warning: The track timestamp scale is invalid'
+            'Error: simulated failure'
+        ) -join "`n"
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript `
+            -Path $tool `
+            -ExitCode 1 `
+            -OutputText 'doubtful' `
+            -RedirectOutputText $nativeLog `
+            -RedirectPathRecord $record
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        $captured = Invoke-RepairFileCapturingDiagnostics -Path $src -PassThru -ForceReplaceOnWarning
+        $captured.Threw | Should -BeFalse
+        ($captured.Records | Out-String) | Should -Match 'The track timestamp scale is invalid'
+        ($captured.Records | Out-String) | Should -Match 'simulated failure'
+        ($captured.Records | Out-String) | Should -Match "n'a pas été remplacé"
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+        Test-Path -LiteralPath $out | Should -BeFalse
+        $logPath = (Get-Content -LiteralPath $record -Raw).Trim()
+        Test-Path -LiteralPath $logPath | Should -BeFalse
+        @($captured.Records | Where-Object { $_ -is [System.IO.FileInfo] }) | Should -HaveCount 0
+    }
+
+    It 'ne remplace jamais après un code >= 2 même avec le switch' {
+        $src = Join-Path $TestDrive 'force-error.mkv'
+        $out = Join-Path $TestDrive 'force-error.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-error.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript `
+            -Path $tool `
+            -ExitCode 2 `
+            -OutputText 'partial' `
+            -RedirectOutputText 'Error: simulated failure'
+        $script:repairCommand = [pscustomobject]@{
+            Executable     = $tool
+            Arguments      = @('-o', $out, $src)
+            ToolOutputPath = $out
+            ToolInputPath  = $src
+            OutputPath     = $out
+        }
+        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+            $script:repairCommand
+        }
+
+        $captured = Invoke-RepairFileCapturingDiagnostics -Path $src -PassThru -ForceReplaceOnWarning
+        $captured.Threw | Should -BeTrue
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge a échoué'
+        ($captured.Records | Out-String) | Should -Match 'simulated failure'
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+        Test-Path -LiteralPath $out | Should -BeFalse
+        @($captured.Records | Where-Object { $_ -is [System.IO.FileInfo] }) | Should -HaveCount 0
+    }
+
+    It 'laisse un échec mkvmerge -J inchangé avec le switch' {
+        $src = Join-Path $TestDrive 'force-ident-fail.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-ident-fail.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeMkvMergeWithIdentificationFailure `
+            -Path $tool `
+            -FailFileName 'force-ident-fail.mkv' `
+            -FailJson '{"warnings":[],"errors":["identification failure"]}' `
+            -OkJson '{"container":{"recognized":true,"supported":true,"type":"Matroska"},"tracks":[{"id":0,"type":"video","codec":"V"}]}'
+
+        { Invoke-MkvRepair -Path $src -MkvMerge $tool -ForceReplaceOnWarning } |
+            Should -Throw '*mkvmerge -J a échoué*'
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+    }
+
+    It 'en -Folder remplace le fichier en code 1 et le fichier en code 0' {
+        $folder = Join-Path $TestDrive 'force-folder-ok'
+        New-Item -ItemType Directory -Path $folder | Out-Null
+        $warnSrc = Join-Path $folder 'a-warn.mkv'
+        $okSrc = Join-Path $folder 'b-ok.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-folder-ok.ps1'
+        Set-Content -LiteralPath $warnSrc -Value 'original-warn' -NoNewline
+        Set-Content -LiteralPath $okSrc -Value 'original-ok' -NoNewline
+
+        @(
+            '$all = [System.Collections.Generic.List[object]]::new()'
+            'foreach ($item in $args) {'
+            '    if ($item -is [System.Array]) {'
+            '        foreach ($nested in $item) { [void]$all.Add($nested) }'
+            '    }'
+            '    else { [void]$all.Add($item) }'
+            '}'
+            '$isWarn = $false'
+            'foreach ($item in $all) {'
+            '    if ([string]$item -like ''*a-warn.mkv'') { $isWarn = $true }'
+            '}'
+            'for ($i = 0; $i -lt $all.Count; $i++) {'
+            '    if ($all[$i] -eq ''--redirect-output'' -and ($i + 1) -lt $all.Count -and $isWarn) {'
+            '        [System.IO.File]::WriteAllText([string]$all[$i + 1], "Warning: The track timestamp scale is invalid")'
+            '    }'
+            '    if ($all[$i] -eq ''-o'' -and ($i + 1) -lt $all.Count) {'
+            '        [System.IO.File]::WriteAllText([string]$all[$i + 1], $(if ($isWarn) { ''repaired-warn'' } else { ''repaired-ok'' }))'
+            '    }'
+            '}'
+            'if ($isWarn) { exit 1 } else { exit 0 }'
+        ) -join [Environment]::NewLine |
+            Set-Content -LiteralPath $tool -Encoding utf8
+
+        $script:mkvInfo = New-MkvMergeInfo -Tracks @(
+            (New-MkvTrack -Id 0 -Type video)
+        )
+        Mock -ModuleName Tetram.Media.Repair Get-MkvMergeInfo {
+            $script:mkvInfo
+        }
+
+        $warnings = $null
+        $passThru = @(
+            Invoke-MkvRepair -Folder $folder -MkvMerge $tool -ForceReplaceOnWarning -PassThru -WarningVariable warnings -WarningAction SilentlyContinue
+        )
+
+        ($warnings -join [Environment]::NewLine) | Should -Match 'The track timestamp scale is invalid'
+        Get-Content -LiteralPath $warnSrc -Raw | Should -BeExactly 'repaired-warn'
+        Get-Content -LiteralPath $okSrc -Raw | Should -BeExactly 'repaired-ok'
+        $passThru.Count | Should -Be 2
+        $passThru[0].FullName | Should -BeExactly ([System.IO.Path]::GetFullPath($warnSrc))
+        $passThru[1].FullName | Should -BeExactly ([System.IO.Path]::GetFullPath($okSrc))
+    }
+
+    It 'en -Folder sépare code 1 forcé et erreur réelle selon -ContinueOnError' {
+        $folder = Join-Path $TestDrive 'force-folder-mix'
+        New-Item -ItemType Directory -Path $folder | Out-Null
+        $warnSrc = Join-Path $folder 'a-warn.mkv'
+        $failSrc = Join-Path $folder 'b-fail.mkv'
+        $okSrc = Join-Path $folder 'c-ok.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-force-folder-mix.ps1'
+        Set-Content -LiteralPath $warnSrc -Value 'original-warn' -NoNewline
+        Set-Content -LiteralPath $failSrc -Value 'original-fail' -NoNewline
+        Set-Content -LiteralPath $okSrc -Value 'original-ok' -NoNewline
+
+        @(
+            '$all = [System.Collections.Generic.List[object]]::new()'
+            'foreach ($item in $args) {'
+            '    if ($item -is [System.Array]) {'
+            '        foreach ($nested in $item) { [void]$all.Add($nested) }'
+            '    }'
+            '    else { [void]$all.Add($item) }'
+            '}'
+            '$kind = ''ok'''
+            'foreach ($item in $all) {'
+            '    if ([string]$item -like ''*a-warn.mkv'') { $kind = ''warn'' }'
+            '    if ([string]$item -like ''*b-fail.mkv'') { $kind = ''fail'' }'
+            '}'
+            'for ($i = 0; $i -lt $all.Count; $i++) {'
+            '    if ($all[$i] -eq ''--redirect-output'' -and ($i + 1) -lt $all.Count) {'
+            '        if ($kind -eq ''warn'') {'
+            '            [System.IO.File]::WriteAllText([string]$all[$i + 1], "Warning: The track timestamp scale is invalid")'
+            '        }'
+            '        elseif ($kind -eq ''fail'') {'
+            '            [System.IO.File]::WriteAllText([string]$all[$i + 1], "Error: simulated failure")'
+            '        }'
+            '    }'
+            '    if ($all[$i] -eq ''-o'' -and ($i + 1) -lt $all.Count -and $kind -ne ''fail'') {'
+            '        [System.IO.File]::WriteAllText([string]$all[$i + 1], $(if ($kind -eq ''warn'') { ''repaired-warn'' } else { ''repaired-ok'' }))'
+            '    }'
+            '}'
+            'if ($kind -eq ''warn'') { exit 1 } elseif ($kind -eq ''fail'') { exit 2 } else { exit 0 }'
+        ) -join [Environment]::NewLine |
+            Set-Content -LiteralPath $tool -Encoding utf8
+
+        $script:mkvInfo = New-MkvMergeInfo -Tracks @(
+            (New-MkvTrack -Id 0 -Type video)
+        )
+        Mock -ModuleName Tetram.Media.Repair Get-MkvMergeInfo {
+            $script:mkvInfo
+        }
+
+        { Invoke-MkvRepair -Folder $folder -MkvMerge $tool -ForceReplaceOnWarning } |
+            Should -Throw '*mkvmerge a échoué*'
+        Get-Content -LiteralPath $warnSrc -Raw | Should -BeExactly 'repaired-warn'
+        Get-Content -LiteralPath $failSrc -Raw | Should -BeExactly 'original-fail'
+        Get-Content -LiteralPath $okSrc -Raw | Should -BeExactly 'original-ok'
+
+        Set-Content -LiteralPath $warnSrc -Value 'original-warn' -NoNewline
+        Set-Content -LiteralPath $failSrc -Value 'original-fail' -NoNewline
+        Set-Content -LiteralPath $okSrc -Value 'original-ok' -NoNewline
+
+        $warnings = $null
+        $errs = $null
+        Invoke-MkvRepair `
+            -Folder $folder `
+            -MkvMerge $tool `
+            -ForceReplaceOnWarning `
+            -ContinueOnError `
+            -WarningVariable warnings `
+            -WarningAction SilentlyContinue `
+            -ErrorAction Continue `
+            -ErrorVariable errs
+
+        ($warnings -join [Environment]::NewLine) | Should -Match 'The track timestamp scale is invalid'
+        ($errs | Out-String) | Should -Match 'simulated failure'
+        Get-Content -LiteralPath $warnSrc -Raw | Should -BeExactly 'repaired-warn'
+        Get-Content -LiteralPath $failSrc -Raw | Should -BeExactly 'original-fail'
+        Get-Content -LiteralPath $okSrc -Raw | Should -BeExactly 'repaired-ok'
     }
 }

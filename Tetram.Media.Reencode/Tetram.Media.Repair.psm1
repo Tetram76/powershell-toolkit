@@ -366,7 +366,9 @@ function Invoke-MkvRepairFile {
         [ValidateRange(10, 5000)]
         [int] $RetryIntervalMilliseconds = 200,
 
-        [switch] $PassThru
+        [switch] $PassThru,
+
+        [switch] $ForceReplaceOnWarning
     )
 
     # Le défaut public du builder est un voisin {basename}.repaired.mkv : mkvmerge -o
@@ -411,21 +413,28 @@ function Invoke-MkvRepairFile {
 
         $exitCode = $LASTEXITCODE
 
-        # Code 1 : mkvmerge a muxé avec avertissements ; le fichier produit n'est
-        # pas assez fiable pour remplacer la source, mais ce n'est pas bloquant.
+        # Code 1 : mux avec avertissements. Par défaut on conserve la source.
+        # -ForceReplaceOnWarning rejoint le chemin code 0 seulement s'il n'y a
+        # aucun diagnostic Error: : une erreur native reste non remplaçable,
+        # sans transformer ce code 1 en exception (ContinueOnError inchangé).
         if ($exitCode -eq 1) {
             $diagnostics = Write-MkvMergeCapturedDiagnostics -LogPath $mkvmergeLogPath
+            if (-not $ForceReplaceOnWarning -or $diagnostics.ErrorCount -gt 0) {
+                if ($diagnostics.WarningCount -eq 0) {
+                    Write-Warning "mkvmerge a émis des avertissements (code 1). Le fichier source n'a pas été remplacé : $Path"
+                }
+                else {
+                    Write-Warning "Le fichier source n'a pas été remplacé : $Path"
+                }
+
+                return
+            }
+
             if ($diagnostics.WarningCount -eq 0) {
-                Write-Warning "mkvmerge a émis des avertissements (code 1). Le fichier source n'a pas été remplacé : $Path"
+                Write-Warning "mkvmerge a émis des avertissements (code 1). Le remplacement est poursuivi parce que -ForceReplaceOnWarning est actif : $Path"
             }
-            else {
-                Write-Warning "Le fichier source n'a pas été remplacé : $Path"
-            }
-
-            return
         }
-
-        if ($exitCode -ne 0) {
+        elseif ($exitCode -ne 0) {
             $null = Write-MkvMergeCapturedDiagnostics -LogPath $mkvmergeLogPath
             throw (
                 "mkvmerge a échoué avec le code de sortie $exitCode. " +
@@ -844,6 +853,8 @@ function Invoke-MkvRepair {
         [Parameter(ParameterSetName = 'Folder')]
         [switch] $ContinueOnError,
 
+        [switch] $ForceReplaceOnWarning,
+
         [string] $MkvMerge = (Get-DefaultMkvMergeExecutable),
 
         [ValidateRange(1, 32767)]
@@ -866,7 +877,8 @@ function Invoke-MkvRepair {
                 -ExtendedPathThreshold $ExtendedPathThreshold `
                 -FileReadyTimeoutSeconds $FileReadyTimeoutSeconds `
                 -RetryIntervalMilliseconds $RetryIntervalMilliseconds `
-                -PassThru:$PassThru
+                -PassThru:$PassThru `
+                -ForceReplaceOnWarning:$ForceReplaceOnWarning
         }
 
         return
@@ -931,7 +943,8 @@ function Invoke-MkvRepair {
                         -ExtendedPathThreshold $ExtendedPathThreshold `
                         -FileReadyTimeoutSeconds $FileReadyTimeoutSeconds `
                         -RetryIntervalMilliseconds $RetryIntervalMilliseconds `
-                        -PassThru:$PassThru
+                        -PassThru:$PassThru `
+                        -ForceReplaceOnWarning:$ForceReplaceOnWarning
                 }
                 catch {
                     if ($ContinueOnError) {
