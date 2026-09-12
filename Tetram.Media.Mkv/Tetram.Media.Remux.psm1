@@ -33,7 +33,7 @@ $PrivateRoot = Join-Path $PSScriptRoot 'Private'
 # -----------------------------------------------------------------------------
 # Types et enums
 #   Note : la classe `EncodingResult` reste confinée au module racine — elle
-#   sert d'API interne pour `Invoke-ReencodeFile`/`Invoke-ReencodeMedia` et ne
+#   sert d'API interne pour `Invoke-ReencodeFile`/`Invoke-MkvRemux` et ne
 #   doit pas traverser la frontière des sous-modules privés.
 # -----------------------------------------------------------------------------
 class EncodingResult
@@ -649,10 +649,10 @@ function Invoke-ReencodeFile
 # -----------------------------------------------------------------------------
 # Fonction publique
 # -----------------------------------------------------------------------------
-function Invoke-ReencodeMedia
+function Invoke-MkvRemux
 {
     <#
-.EXTERNALHELP Tetram.Media.Reencode-Help.xml
+.EXTERNALHELP Tetram.Media.Mkv-Help.xml
 #>
     [CmdletBinding(
         PositionalBinding = $false,

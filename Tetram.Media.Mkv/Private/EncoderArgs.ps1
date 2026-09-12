@@ -4,7 +4,7 @@ Set-StrictMode -Version 3.0
 
 # -----------------------------------------------------------------------------
 # EncoderArgs.psm1 — construction des arguments ffmpeg (V/A) + assemblage global
-# Sous-module privé de Tetram.Media.Reencode (chargé via NestedModules).
+# Sous-module privé de Tetram.Media.Mkv (chargé via NestedModules).
 # Pas d'Export-ModuleMember : les fonctions restent dans le scope du module.
 # -----------------------------------------------------------------------------
 
@@ -394,7 +394,7 @@ function Get-FFmpegArgs
     )
 
     # and then, override with custom metadata
-    $encodingTool = 'Tetram.Media.Reencode {0}' -f $ExecutionContext.SessionState.Module.Version
+    $encodingTool = 'Tetram.Media.Mkv {0}' -f $ExecutionContext.SessionState.Module.Version
     $ffmpegArgs += @(
         '-metadata', 'creation_time=now'
         '-metadata', "encoding_tool=$encodingTool"

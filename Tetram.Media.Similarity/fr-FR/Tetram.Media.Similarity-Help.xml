@@ -242,7 +242,7 @@ Ne pas faire : attendre une exception si ffmpeg manque ; interpréter l'absence 
         <maml:uri />
       </maml:navigationLink>
       <maml:navigationLink>
-        <maml:linkText>Invoke-ReencodeMedia</maml:linkText>
+        <maml:linkText>Invoke-MkvRemux</maml:linkText>
         <maml:uri />
       </maml:navigationLink>
     </command:relatedLinks>

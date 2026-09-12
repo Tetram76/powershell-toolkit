@@ -1,14 +1,14 @@
 # Étendre la suite autour de Tetram.Media.Repair.psm1 (Get-MkvInterleaveRepairCommand / Invoke-MkvRepair).
 #
 # RepoRoot depuis tests/<Module> : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
-# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Reencode') ; mocks -ModuleName Tetram.Media.Repair
+# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Mkv') ; mocks -ModuleName Tetram.Media.Repair
 # Get-MkvMergeInfo / Invoke-MkvRepairFile : InModuleScope 'Tetram.Media.Repair'
 # Fichiers factices sous $TestDrive ; mkvmerge simulé par un .ps1 (pas de binaire réel).
 
 BeforeAll {
     Set-StrictMode -Version Latest
     $script:RepoRootRepair = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
-    Import-Module -Name (Join-Path $script:RepoRootRepair 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+    Import-Module -Name (Join-Path $script:RepoRootRepair 'Tetram.Media.Mkv') -Force -ErrorAction Stop
 
     function script:New-MkvTrack {
         param(
@@ -488,7 +488,7 @@ BeforeAll {
 }
 
 AfterAll {
-    Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+    Remove-Module -Name 'Tetram.Media.Mkv' -Force -ErrorAction SilentlyContinue
 }
 
 Describe 'Get-MkvInterleaveRepairCommand - surface publique' {

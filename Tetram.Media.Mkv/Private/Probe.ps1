@@ -5,9 +5,9 @@ Set-StrictMode -Version 3.0
 
 # -----------------------------------------------------------------------------
 # Probe.psm1 — ffprobe + extraction des durées + contrôle d'intégrité
-# Sous-module privé de Tetram.Media.Reencode (chargé via NestedModules).
+# Sous-module privé de Tetram.Media.Mkv (chargé via NestedModules).
 # Ne fait pas Export-ModuleMember : les fonctions restent visibles dans le
-# scope du module Reencode mais ne fuient pas vers la session utilisateur.
+# scope du module Tetram.Media.Mkv mais ne fuient pas vers la session utilisateur.
 # -----------------------------------------------------------------------------
 
 function Get-FFprobeJson([string] $FFPROBE, [string] $File)

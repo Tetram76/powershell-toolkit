@@ -1,15 +1,15 @@
 ---
 document type: cmdlet
-external help file: Tetram.Media.Reencode-Help.xml
+external help file: Tetram.Media.Mkv-Help.xml
 HelpUri: ''
 Locale: fr-FR
-Module Name: Tetram.Media.Reencode
+Module Name: Tetram.Media.Mkv
 ms.date: 09/05/2026
 PlatyPS schema version: 2024-05-01
-title: Invoke-ReencodeMedia
+title: Invoke-MkvRemux
 ---
 
-# Invoke-ReencodeMedia
+# Invoke-MkvRemux
 
 ## SYNOPSIS
 
@@ -20,7 +20,7 @@ Remplace in-place des fichiers média : réencodage HEVC/AV1 vers MKV, `-NoTrans
 ### ReencodeFromPath (Par défaut)
 
 ```
-Invoke-ReencodeMedia [[-Path] <string[]>] [-Recurse] [-Sort <string>] [-ScanReadOnlyDirectory]
+Invoke-MkvRemux [[-Path] <string[]>] [-Recurse] [-Sort <string>] [-ScanReadOnlyDirectory]
  [-InputMasks <string[]>] [-VideoCodec <string>] [-ClearStreamsTitle] [-ForceRecodeVideo]
  [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>] [-UpscaleWidth <int>]
  [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion] [-AllowIntegrityMismatch]
@@ -31,7 +31,7 @@ Invoke-ReencodeMedia [[-Path] <string[]>] [-Recurse] [-Sort <string>] [-ScanRead
 ### ReencodeFromFile
 
 ```
-Invoke-ReencodeMedia -ListFile <string> [-UpdateList] [-Sort <string>] [-ScanReadOnlyDirectory]
+Invoke-MkvRemux -ListFile <string> [-UpdateList] [-Sort <string>] [-ScanReadOnlyDirectory]
  [-InputMasks <string[]>] [-VideoCodec <string>] [-ClearStreamsTitle] [-ForceRecodeVideo]
  [-AllowVideoCodecUpgrade] [-Quality <string>] [-Upscale <string>] [-UpscaleWidth <int>]
  [-UpscaleFit <string>] [-Deinterlace] [-AllowSubTitlesConversion] [-AllowIntegrityMismatch]
@@ -42,7 +42,7 @@ Invoke-ReencodeMedia -ListFile <string> [-UpdateList] [-Sort <string>] [-ScanRea
 ### NoTranscodeFromPath
 
 ```
-Invoke-ReencodeMedia [[-Path] <string[]>] -NoTranscode [-Recurse] [-Sort <string>]
+Invoke-MkvRemux [[-Path] <string[]>] -NoTranscode [-Recurse] [-Sort <string>]
  [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-ClearStreamsTitle]
  [-SubTitlesToKeep <string[]>] [-RemoveAttachments] [-TempPath <string>] [-FFToolsBase <string>]
  [-FFMPEGPath <string>] [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
@@ -51,7 +51,7 @@ Invoke-ReencodeMedia [[-Path] <string[]>] -NoTranscode [-Recurse] [-Sort <string
 ### NoTranscodeFromFile
 
 ```
-Invoke-ReencodeMedia -ListFile <string> -NoTranscode [-Recurse] [-UpdateList] [-Sort <string>]
+Invoke-MkvRemux -ListFile <string> -NoTranscode [-Recurse] [-UpdateList] [-Sort <string>]
  [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-ClearStreamsTitle]
  [-SubTitlesToKeep <string[]>] [-RemoveAttachments] [-TempPath <string>] [-FFToolsBase <string>]
  [-FFMPEGPath <string>] [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
@@ -60,7 +60,7 @@ Invoke-ReencodeMedia -ListFile <string> -NoTranscode [-Recurse] [-UpdateList] [-
 ### CheckFromPath
 
 ```
-Invoke-ReencodeMedia [[-Path] <string[]>] -CheckOnly [-Recurse] [-Sort <string>]
+Invoke-MkvRemux [[-Path] <string[]>] -CheckOnly [-Recurse] [-Sort <string>]
  [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-TempPath <string>] [-FFToolsBase <string>]
  [-FFMPEGPath <string>] [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
 ```
@@ -68,7 +68,7 @@ Invoke-ReencodeMedia [[-Path] <string[]>] -CheckOnly [-Recurse] [-Sort <string>]
 ### CheckFromFile
 
 ```
-Invoke-ReencodeMedia -ListFile <string> -CheckOnly [-UpdateList] [-Sort <string>]
+Invoke-MkvRemux -ListFile <string> -CheckOnly [-UpdateList] [-Sort <string>]
  [-ScanReadOnlyDirectory] [-InputMasks <string[]>] [-TempPath <string>] [-FFToolsBase <string>]
  [-FFMPEGPath <string>] [-FFPROBEPath <string>] [-WhatIf] [-Confirm]
 ```
@@ -77,7 +77,7 @@ Invoke-ReencodeMedia -ListFile <string> -CheckOnly [-UpdateList] [-Sort <string>
 
 ## DESCRIPTION
 
-Point d'entrée unique du module. Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
+Point d'entrée unique du module. Importer `.\Tetram.Media.Mkv` (PowerShell 7.6+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
 
 Choisir exactement un mode (jeux de paramètres exclusifs) :
 
@@ -106,7 +106,7 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
 Intention : voir ce qui serait fait, sans modifier le média ni les timestamps. Une exception peut quand même créer `reencode-errors.log`. Toujours préférer cet appel avant un run réel.
 
 ```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -WhatIf
+Invoke-MkvRemux -Path 'D:\Media' -Recurse -WhatIf
 ```
 
 ### Example 2: Réencodage par défaut (HEVC, sortie .mkv)
@@ -114,7 +114,7 @@ Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -WhatIf
 Intention : normaliser un arbre vers MKV/HEVC qualité Medium. Les originaux sont remplacés in-place.
 
 ```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse
+Invoke-MkvRemux -Path 'D:\Media' -Recurse
 ```
 
 ### Example 3: Vérifier qu'ffmpeg peut décoder, sans retravailler le média
@@ -122,7 +122,7 @@ Invoke-ReencodeMedia -Path 'D:\Media' -Recurse
 Intention : diagnostiquer des fichiers illisibles sans réencoder ni remuxer. Ce n'est pas un dry-run : les dates NFO (`premiered`) peuvent être écrites. Pour ne pas toucher au média ni aux dates : `-WhatIf`. Les échecs (ffmpeg ou exception) vont dans `reencode-errors.log`, y compris sous `-WhatIf`.
 
 ```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -CheckOnly
+Invoke-MkvRemux -Path 'D:\Media' -Recurse -CheckOnly
 ```
 
 ### Example 4: Filtrer des pistes sans transcodage
@@ -130,7 +130,7 @@ Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -CheckOnly
 Intention : retirer sous-titres / vignettes et nettoyer les métadonnées en copiant les flux conservés. Conserve l'extension source. Ignoré si aucune opération n'est nécessaire.
 
 ```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode
+Invoke-MkvRemux -Path 'D:\Media' -Recurse -NoTranscode
 ```
 
 ### Example 5: File d'attente + upgrade HEVC vers AV1
@@ -138,7 +138,7 @@ Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode
 Intention : traiter une liste, retirer chaque ligne après coup, réencoder les HEVC `main*` en AV1. `-ListFile` exclut `-Path`.
 
 ```powershell
-Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -UpdateList -VideoCodec AV1 -AllowVideoCodecUpgrade
+Invoke-MkvRemux -ListFile 'D:\todo.txt' -UpdateList -VideoCodec AV1 -AllowVideoCodecUpgrade
 ```
 
 ### Example 6: Un seul sous-arbre récursif sans `-Recurse` global
@@ -146,7 +146,7 @@ Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -UpdateList -VideoCodec AV1 -AllowV
 Intention : récursion ciblée. Le `+` s'applique à cette entrée seulement.
 
 ```powershell
-Invoke-ReencodeMedia -Path '+D:\Media\Shows'
+Invoke-MkvRemux -Path '+D:\Media\Shows'
 ```
 
 ### Example 7: Accepter explicitement un mismatch d'intégrité
@@ -154,7 +154,7 @@ Invoke-ReencodeMedia -Path '+D:\Media\Shows'
 Intention : continuer un réencodage malgré un mismatch déjà détecté (écart de durée, probe de sortie impossible, ou flux mappé manquant). Ce n'est pas le comportement recommandé par défaut : le contrôle s'exécute toujours, le mismatch est signalé en warning, et la sortie remplace l'original. Sans effet en `-NoTranscode` ni `-CheckOnly`.
 
 ```powershell
-Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -AllowIntegrityMismatch
+Invoke-MkvRemux -ListFile 'D:\todo.txt' -AllowIntegrityMismatch
 ```
 
 ### Example 8: Retirer toutes les pièces jointes sans transcodage
@@ -162,7 +162,7 @@ Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -AllowIntegrityMismatch
 Intention : supprimer tous les flux ffprobe de type `attachment` (y compris les polices ASS) tout en copiant les autres flux conservés. Conserve l'extension source. Sans effet s'il n'y a aucun attachment et aucun autre travail.
 
 ```powershell
-Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode -RemoveAttachments
+Invoke-MkvRemux -Path 'D:\Media' -Recurse -NoTranscode -RemoveAttachments
 ```
 
 ## PARAMETERS

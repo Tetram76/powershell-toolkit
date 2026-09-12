@@ -5,7 +5,7 @@ Set-StrictMode -Version 3.0
 
 # -----------------------------------------------------------------------------
 # Streams.psm1 — sélection / catégorisation des pistes (V/A/S/T)
-# Sous-module privé de Tetram.Media.Reencode (chargé via NestedModules).
+# Sous-module privé de Tetram.Media.Mkv (chargé via NestedModules).
 # Pas d'Export-ModuleMember : les fonctions restent dans le scope du module.
 # -----------------------------------------------------------------------------
 

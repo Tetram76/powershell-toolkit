@@ -1,7 +1,7 @@
 @{
 # --- Identité du module ---
-    RootModule = 'Tetram.Media.Reencode.psm1'
-    ModuleVersion = '3.5.1'
+    RootModule = 'Tetram.Media.Mkv.psm1'
+    ModuleVersion = '4.0.0'
     GUID = 'd4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95'
 
     Author = 'TRL'
@@ -17,12 +17,15 @@
     RequiredAssemblies = @()
     # Les modules dépendants sont importés depuis le .psm1 (chemins $PSScriptRoot\..),
     # car NestedModules n'accepte pas de segments '..' (Test-ModuleManifest).
-    NestedModules = @('Tetram.Media.Repair.psm1')
+    NestedModules = @(
+        'Tetram.Media.Remux.psm1'
+        'Tetram.Media.Repair.psm1'
+    )
 
     # --- Export ---
     FunctionsToExport = @(
-		# Tetram.Media.Reencode.psm1
-        'Invoke-ReencodeMedia', 
+		# Tetram.Media.Remux.psm1
+        'Invoke-MkvRemux'
 		# Tetram.Media.Repair.psm1
 		'Get-MkvInterleaveRepairCommand', 'Invoke-MkvRepair'
     )
@@ -34,20 +37,20 @@
     PrivateData = @{
         PSData = @{
             Tags = @(
-                'ffmpeg',
-                'ffprobe',
-                'media',
-                'transcode',
-                'remux',
-                'video',
-                'audio',
-                'subtitles',
-                'mkvmerge',
-                'repair',
+                'ffmpeg'
+                'ffprobe'
+                'media'
+                'transcode'
+                'remux'
+                'video'
+                'audio'
+                'subtitles'
+                'mkvmerge'
+                'repair'
                 'ps7'
             )
             ReleaseNotes = @'
-- 1.0.0 : Version initiale du module, export de Invoke-ReencodeMedia (WhatIf/Confirm).
+- 1.0.0 : Version initiale du module, export de Invoke-MkvReencodeMedia (WhatIf/Confirm).
 - 2.0.0 : Ajout du paramètre VideoCodec 
 - 2.1.0 : Réecriture (découpage en modules, découpages en méthodes plus simples, ...)
 - 2.2.0 : Ajout de l'activation AMF AMD en qualité Low (avec fallback CPU), switch NoGpu et refactor des arguments encodeurs audio/vidéo.
@@ -65,6 +68,7 @@
 - 3.4.2 : Invoke-MkvRepair : fallback final si un diagnostic mkvmerge -J n'est ni JSON warnings/errors ni Warning:/Error: ; l'erreur synthétique identifie le fichier ; --ui-language en (en_US n'existe pas dans MKVToolNix).
 - 3.5.0 : Invoke-MkvRepair -ForceReplaceOnWarning : un remux mkvmerge code 1 remplace la source uniquement si le switch est présent ; comportement par défaut inchangé ; les erreurs réelles restent bloquantes pour le fichier courant et ne provoquent jamais de remplacement.
 - 3.5.1 : Diagnostics Repair : en-tête uniforme `Fichier source '<chemin>'` avant chaque bloc relatif à un média (avertissement isolé, erreur, diagnostics mkvmerge) ; règles de poursuite et de remplacement inchangées.
+- 4.0.0 : Renommage cassant — module Tetram.Media.Mkv (ex Tetram.Media.Reencode), commande publique Invoke-MkvRemux (ex Invoke-ReencodeMedia).
 '@
         }
     }

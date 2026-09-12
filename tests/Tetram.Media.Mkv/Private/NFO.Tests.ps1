@@ -2,8 +2,8 @@
 #
 # RepoRoot depuis ce dossier (trois `..`) :
 #   $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Reencode') -Force
-# InModuleScope 'Tetram.Media.Reencode' { … appels sur parsing/écriture NFO avec chemins relatifs depuis $PSScriptRoot ou $TestDrive }
+# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Mkv') -Force
+# InModuleScope 'Tetram.Media.Mkv' { … appels sur parsing/écriture NFO avec chemins relatifs depuis $PSScriptRoot ou $TestDrive }
 # Arborescences : préparer dossiers/fixtures sous $TestDrive puis résoudre avec Join-Path pour ne pas réécrire le repo.
 
 Describe 'NFO (stub)' {

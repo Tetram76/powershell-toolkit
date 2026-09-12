@@ -5,7 +5,7 @@ Set-StrictMode -Version 3.0
 
 # -----------------------------------------------------------------------------
 # Scan.psm1 — parcours du filesystem et orchestration par fichier/liste
-# Sous-module privé de Tetram.Media.Reencode (chargé via NestedModules).
+# Sous-module privé de Tetram.Media.Mkv (chargé via NestedModules).
 # Pas d'Export-ModuleMember : les fonctions restent dans le scope du module.
 # -----------------------------------------------------------------------------
 

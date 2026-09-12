@@ -1,19 +1,19 @@
-# Étendre la suite autour du SUD EncoderArgs.ps1 (pivot dot-sourcé par Tetram.Media.Reencode, pas isolable comme module seul).
+# Étendre la suite autour du SUD EncoderArgs.ps1 (pivot dot-sourcé par Tetram.Media.Mkv, pas isolable comme module seul).
 #
 # RepoRoot : depuis ce dossier, trois niveaux → racine repo
 #   $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-# Charger le manifeste utilisé par l’outil : Import-Module (Join-Path $RepoRoot 'Tetram.Media.Reencode') -Force
-# Exposer la portée où EncoderArgs existe : BeforeAll/InModuleScope 'Tetram.Media.Reencode' { … puis appelle sur les fonctions/paramètres EncoderArgs.ps1 ou Mock des deps internes }
+# Charger le manifeste utilisé par l’outil : Import-Module (Join-Path $RepoRoot 'Tetram.Media.Mkv') -Force
+# Exposer la portée où EncoderArgs existe : BeforeAll/InModuleScope 'Tetram.Media.Mkv' { … puis appelle sur les fonctions/paramètres EncoderArgs.ps1 ou Mock des deps internes }
 # Si une assertion touche ffmpeg : mocker Invoke-Executable / lignes CLI attendues au lieu du binaire système absent sur tout agent CI.
 
 BeforeAll {
     Set-StrictMode -Version Latest
     $script:RepoRootEncoderArgs = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-    Import-Module -Name (Join-Path $script:RepoRootEncoderArgs 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+    Import-Module -Name (Join-Path $script:RepoRootEncoderArgs 'Tetram.Media.Mkv') -Force -ErrorAction Stop
 }
 
 AfterAll {
-    Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+    Remove-Module -Name 'Tetram.Media.Mkv' -Force -ErrorAction SilentlyContinue
 }
 
 Describe 'Get-FFmpegArgs — color space remap' {
@@ -37,7 +37,7 @@ Describe 'Get-FFmpegArgs — color space remap' {
             __targetAudioFilter  = $null
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Video = $video; Audio = $audio } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Video = $video; Audio = $audio } {
             param($Video, $Audio)
 
             $args = Get-FFmpegArgs `
@@ -81,7 +81,7 @@ Describe 'Get-FFmpegArgs — color space remap' {
             __targetAudioFilter  = $null
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Video = $video; Audio = $audio } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Video = $video; Audio = $audio } {
             param($Video, $Audio)
 
             $args = Get-FFmpegArgs `
@@ -134,7 +134,7 @@ Describe 'Get-FFmpegArgs — color space remap' {
             __targetAudioFilter  = $null
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Videos = $videos; Audio = $audio } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Videos = $videos; Audio = $audio } {
             param($Videos, $Audio)
 
             $args = Get-FFmpegArgs `
@@ -171,7 +171,7 @@ Describe 'Get-FFmpegArgs — pièces jointes police' {
             __targetMimetype  = 'application/x-truetype-font'
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Attachment = $attachment } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Attachment = $attachment } {
             param($Attachment)
 
             $args = Get-FFmpegArgs `
@@ -209,7 +209,7 @@ Describe 'Get-FFmpegArgs — pièces jointes police' {
             codec_name = 'otf'
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Attachment = $attachment } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Attachment = $attachment } {
             param($Attachment)
 
             $args = Get-FFmpegArgs `
@@ -242,7 +242,7 @@ Describe 'Get-FFmpegArgs — pièces jointes police' {
             __copy     = $false
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Attachment = $attachment } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Attachment = $attachment } {
             param($Attachment)
 
             $args = Get-FFmpegArgs `
@@ -297,7 +297,7 @@ Describe 'Get-FFmpegArgs — __recode' {
             __recode  = $false
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Video = $video; Audio = $audio; Sub = $sub } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Video = $video; Audio = $audio; Sub = $sub } {
             param($Video, $Audio, $Sub)
 
             $args = Get-FFmpegArgs `
@@ -327,7 +327,7 @@ Describe 'Get-FFmpegArgs — __recode' {
 Describe 'Get-AudioEncoderArgs' {
 
     It 'encode eac3 sans bitrate ni options Opus' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             $args = Get-AudioEncoderArgs `
                 -StreamIndex 0 `
                 -Process $true `
@@ -346,7 +346,7 @@ Describe 'Get-AudioEncoderArgs' {
     }
 
     It 'applique le filtre de downmix 5.1 sur eac3 sans ajouter de bitrate' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             $args = Get-AudioEncoderArgs `
                 -StreamIndex 0 `
                 -Process $true `
@@ -361,7 +361,7 @@ Describe 'Get-AudioEncoderArgs' {
     }
 
     It 'conserve libopus, bitrate et options VBR pour Opus' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             $args = Get-AudioEncoderArgs `
                 -StreamIndex 0 `
                 -Process $true `
@@ -378,7 +378,7 @@ Describe 'Get-AudioEncoderArgs' {
     }
 
     It 'conserve aac avec bitrate et sans options Opus' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             $args = Get-AudioEncoderArgs `
                 -StreamIndex 1 `
                 -Process $true `
@@ -395,7 +395,7 @@ Describe 'Get-AudioEncoderArgs' {
     }
 
     It 'copie sans options d''encodage' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             $args = Get-AudioEncoderArgs `
                 -StreamIndex 0 `
                 -Process $false `
@@ -408,7 +408,7 @@ Describe 'Get-AudioEncoderArgs' {
     }
 
     It 'lève une erreur explicite pour un codec cible inconnu' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             { Get-AudioEncoderArgs -StreamIndex 0 -Process $true -TargetCodec 'ac3' -TargetBitrate '192k' -ChannelMapFilter $null } |
                 Should -Throw -ExceptionType ([System.Management.Automation.RuntimeException])
         }
@@ -437,7 +437,7 @@ Describe 'Get-FFmpegArgs — AV1 copiée + AAC vers EAC3' {
             __targetAudioFilter  = $null
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Video = $video; Audio = $audio } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Video = $video; Audio = $audio } {
             param($Video, $Audio)
 
             $args = Get-FFmpegArgs `
@@ -484,7 +484,7 @@ Describe 'Get-FFmpegArgs — AV1 copiée + AAC vers EAC3' {
             __targetAudioFilter  = $null
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Video = $video; Audio = $audio } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Video = $video; Audio = $audio } {
             param($Video, $Audio)
 
             $args = Get-FFmpegArgs `
@@ -514,13 +514,14 @@ Describe 'Get-FFmpegArgs — AV1 copiée + AAC vers EAC3' {
 
 Describe 'Get-FFmpegArgs — encoding_tool' {
 
-    It 'inclut le nom du module et la version du manifeste' {
-        $manifest = Import-PowerShellDataFile -LiteralPath (
-            Join-Path $script:RepoRootEncoderArgs 'Tetram.Media.Reencode' 'Tetram.Media.Reencode.psd1'
-        )
-        $expected = 'encoding_tool=Tetram.Media.Reencode {0}' -f $manifest.ModuleVersion
+    It 'inclut Tetram.Media.Mkv et la version du nested Remux qui exécute Get-FFmpegArgs' {
+        # EncoderArgs.ps1 est dot-sourcé dans Tetram.Media.Remux : SessionState.Module.Version
+        # est celle du nested (0.0 sans manifeste propre), pas 4.0.0 du parent Mkv.psd1.
+        $remux = @(Get-Module -Name 'Tetram.Media.Mkv').NestedModules |
+            Where-Object { $_.Name -eq 'Tetram.Media.Remux' }
+        $expected = 'encoding_tool=Tetram.Media.Mkv {0}' -f @($remux)[0].Version
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Expected = $expected } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Expected = $expected } {
             param($Expected)
 
             $args = Get-FFmpegArgs `
