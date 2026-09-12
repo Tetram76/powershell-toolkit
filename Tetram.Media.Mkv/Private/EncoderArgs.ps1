@@ -393,8 +393,33 @@ function Get-FFmpegArgs
         '-metadata:s', 'ENCODER_OPTIONS='
     )
 
-    # and then, override with custom metadata
-    $encodingTool = 'Tetram.Media.Mkv {0}' -f $ExecutionContext.SessionState.Module.Version
+    # encoding_tool identifie le package public : SessionState.Module est Remux (nested sans manifeste → 0.0).
+    $definingModule = $ExecutionContext.SessionState.Module
+    $packageModule = $null
+    foreach ($candidate in Get-Module)
+    {
+        foreach ($nested in @($candidate.NestedModules))
+        {
+            if ($null -eq $nested)
+            {
+                continue
+            }
+            if ($nested.Path -eq $definingModule.Path)
+            {
+                $packageModule = $candidate
+                break
+            }
+        }
+        if ($null -ne $packageModule)
+        {
+            break
+        }
+    }
+    if ($null -eq $packageModule)
+    {
+        $packageModule = $definingModule
+    }
+    $encodingTool = '{0} {1}' -f $packageModule.Name, $packageModule.Version
     $ffmpegArgs += @(
         '-metadata', 'creation_time=now'
         '-metadata', "encoding_tool=$encodingTool"

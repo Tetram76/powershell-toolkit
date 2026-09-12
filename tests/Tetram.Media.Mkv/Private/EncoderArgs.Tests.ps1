@@ -514,12 +514,10 @@ Describe 'Get-FFmpegArgs — AV1 copiée + AAC vers EAC3' {
 
 Describe 'Get-FFmpegArgs — encoding_tool' {
 
-    It 'inclut Tetram.Media.Mkv et la version du nested Remux qui exécute Get-FFmpegArgs' {
-        # EncoderArgs.ps1 est dot-sourcé dans Tetram.Media.Remux : SessionState.Module.Version
-        # est celle du nested (0.0 sans manifeste propre), pas 4.0.0 du parent Mkv.psd1.
-        $remux = @(Get-Module -Name 'Tetram.Media.Mkv').NestedModules |
-            Where-Object { $_.Name -eq 'Tetram.Media.Remux' }
-        $expected = 'encoding_tool=Tetram.Media.Mkv {0}' -f @($remux)[0].Version
+    It 'inclut le nom et la version du manifeste Tetram.Media.Mkv' {
+        # Get-FFmpegArgs est défini dans Remux (nested 0.0) ; encoding_tool doit identifier le package public.
+        $manifest = Import-PowerShellDataFile -LiteralPath (Join-Path $script:RepoRootEncoderArgs 'Tetram.Media.Mkv' 'Tetram.Media.Mkv.psd1')
+        $expected = 'encoding_tool=Tetram.Media.Mkv {0}' -f $manifest.ModuleVersion
 
         InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Expected = $expected } {
             param($Expected)
