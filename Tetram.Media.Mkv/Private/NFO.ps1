@@ -5,7 +5,7 @@ Set-StrictMode -Version 3.0
 
 # -----------------------------------------------------------------------------
 # NFO.psm1 — récupération des dates depuis les fichiers NFO (Kodi/TMM)
-# Sous-module privé de Tetram.Media.Reencode (chargé via NestedModules).
+# Sous-module privé de Tetram.Media.Mkv (chargé via NestedModules).
 # Pas d'Export-ModuleMember : la fonction reste dans le scope du module.
 # -----------------------------------------------------------------------------
 

@@ -1,9 +1,9 @@
 ---
 document type: cmdlet
-external help file: Tetram.Media.Reencode-Help.xml
+external help file: Tetram.Media.Mkv-Help.xml
 HelpUri: ''
 Locale: fr-FR
-Module Name: Tetram.Media.Reencode
+Module Name: Tetram.Media.Mkv
 ms.date: 09/08/2026
 PlatyPS schema version: 2024-05-01
 title: Get-MkvInterleaveRepairCommand
@@ -28,7 +28,7 @@ Get-MkvInterleaveRepairCommand [-Path] <string> [-OutputPath <string>] [-MkvMerg
 
 ## DESCRIPTION
 
-Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+). `-Path` est un fichier existant, Matroska reconnu par `mkvmerge -J`. Cette commande **n'exécute pas** le remux : elle identifie le fichier (`mkvmerge -J`) puis retourne un objet décrivant l'exécutable, les arguments, la ligne PowerShell copiable et les chemins (logiques vs outils). Pour remplacer in-place, utiliser `Invoke-MkvRepair`.
+Importer `.\Tetram.Media.Mkv` (PowerShell 7.6+). `-Path` est un fichier existant, Matroska reconnu par `mkvmerge -J`. Cette commande **n'exécute pas** le remux : elle identifie le fichier (`mkvmerge -J`) puis retourne un objet décrivant l'exécutable, les arguments, la ligne PowerShell copiable et les chemins (logiques vs outils). Pour remplacer in-place, utiliser `Invoke-MkvRepair`.
 
 Sans `-OutputPath`, la sortie est un voisin `{basename}.repaired.mkv` (le suffixe `.mkv` source, casse indifférente, est remplacé ; sinon `.repaired.mkv` est concaténé, ex. `clip.mp4.repaired.mkv`). La sortie ne peut pas être le fichier source.
 
@@ -164,4 +164,4 @@ Ne pas faire : prendre cette commande pour un remux ; pointer `-OutputPath` sur 
 ## RELATED LINKS
 
 - [Invoke-MkvRepair]()
-- [Invoke-ReencodeMedia]()
+- [Invoke-MkvRemux]()

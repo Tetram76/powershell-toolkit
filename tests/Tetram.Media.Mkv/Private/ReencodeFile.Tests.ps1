@@ -1,13 +1,13 @@
 # Étendre la suite autour de Invoke-ReencodeFile (orchestrateur privé : extension finale, skip, NoTranscode).
 #
 # RepoRoot (trois `..`) : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Reencode') ; InModuleScope 'Tetram.Media.Reencode' { … }
-# Fichiers factices sous $TestDrive ; mocker Get-FFprobeJson / Invoke-FFmpeg / Write-InfoLog — pas de binaire ffmpeg.
+# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Mkv') ; InModuleScope 'Tetram.Media.Remux' { … }
+# InModuleScope/Mocks ciblent Remux : Invoke-ReencodeFile et Private/*.ps1 y sont définis ; depuis le parent Mkv, Pester n'intercepte pas Get-FFprobeJson.
 
 BeforeAll {
     Set-StrictMode -Version Latest
     $script:RepoRootReencodeFile = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-    Import-Module -Name (Join-Path $script:RepoRootReencodeFile 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+    Import-Module -Name (Join-Path $script:RepoRootReencodeFile 'Tetram.Media.Mkv') -Force -ErrorAction Stop
 
     function script:New-ReencodeFileTestConfig {
         param(
@@ -70,7 +70,7 @@ BeforeAll {
             [Parameter(Mandatory)] [string] $TempPath
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+        InModuleScope 'Tetram.Media.Remux' -Parameters @{
             Filename = $Filename
             Config   = $Config
             TempPath = $TempPath
@@ -96,7 +96,7 @@ BeforeAll {
             [Parameter(Mandatory)] [string] $TempPath
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+        InModuleScope 'Tetram.Media.Remux' -Parameters @{
             Filename = $Filename
             Config   = $Config
             TempPath = $TempPath
@@ -119,7 +119,7 @@ BeforeAll {
 }
 
 AfterAll {
-    Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+    Remove-Module -Name 'Tetram.Media.Mkv' -Force -ErrorAction SilentlyContinue
 }
 
 Describe 'Invoke-ReencodeFile — extension finale' {
@@ -128,11 +128,11 @@ Describe 'Invoke-ReencodeFile — extension finale' {
         $script:InfoLogs = [System.Collections.Generic.List[string]]::new()
         $script:FfmpegOutputFiles = [System.Collections.Generic.List[string]]::new()
 
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {
+        Mock -ModuleName Tetram.Media.Remux Write-InfoLog {
             param([string] $Text)
             [void]$script:InfoLogs.Add($Text)
         }
-        Mock -ModuleName Tetram.Media.Reencode Invoke-FFmpeg {
+        Mock -ModuleName Tetram.Media.Remux Invoke-FFmpeg {
             param($OutputFile)
             if ($OutputFile)
             {
@@ -146,7 +146,7 @@ Describe 'Invoke-ReencodeFile — extension finale' {
         $file = Join-Path $TestDrive 'movie.mp4'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @((New-HevcStream), (New-AacStream))
@@ -163,7 +163,7 @@ Describe 'Invoke-ReencodeFile — extension finale' {
         $file = Join-Path $TestDrive 'clip.avi'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @((New-HevcStream), (New-AacStream))
@@ -180,7 +180,7 @@ Describe 'Invoke-ReencodeFile — extension finale' {
         $file = Join-Path $TestDrive 'show.mp4'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @(
@@ -204,11 +204,11 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         $script:InfoLogs = [System.Collections.Generic.List[string]]::new()
         $script:FfmpegOutputFiles = [System.Collections.Generic.List[string]]::new()
 
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {
+        Mock -ModuleName Tetram.Media.Remux Write-InfoLog {
             param([string] $Text)
             [void]$script:InfoLogs.Add($Text)
         }
-        Mock -ModuleName Tetram.Media.Reencode Invoke-FFmpeg {
+        Mock -ModuleName Tetram.Media.Remux Invoke-FFmpeg {
             param($OutputFile)
             if ($OutputFile)
             {
@@ -222,7 +222,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         $file = Join-Path $TestDrive 'ready.mkv'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @((New-HevcStream), (New-AacStream))
@@ -239,7 +239,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         $file = Join-Path $TestDrive 'ready.mkv'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @((New-HevcStream), (New-AacStream))
@@ -256,7 +256,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         $file = Join-Path $TestDrive 'extra-sub.mkv'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @(
@@ -277,7 +277,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         $file = Join-Path $TestDrive 'ass-font.mkv'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @(
@@ -298,7 +298,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         $file = Join-Path $TestDrive 'noduration.mkv'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ }
                 streams = @(
@@ -320,7 +320,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         Set-Content -LiteralPath $file -Value 'x'
         $script:CapturedDynamicArgs = @()
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @(
@@ -330,7 +330,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
                 )
             }
         }
-        Mock -ModuleName Tetram.Media.Reencode Invoke-FFmpeg {
+        Mock -ModuleName Tetram.Media.Remux Invoke-FFmpeg {
             param($OutputFile, $DynamicArgs)
             if ($OutputFile)
             {
@@ -354,7 +354,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         $file = Join-Path $TestDrive 'drop-attach-reencode.mkv'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @(
@@ -378,7 +378,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         $file = Join-Path $TestDrive 'no-attach.mkv'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @((New-HevcStream), (New-AacStream))
@@ -410,7 +410,7 @@ Describe 'Invoke-ReencodeFile — rien à faire' {
         $file = Join-Path $TestDrive 'keep-attach.mkv'
         Set-Content -LiteralPath $file -Value 'x'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @(
@@ -438,21 +438,21 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $script:WarningLogs = [System.Collections.Generic.List[string]]::new()
         $script:ErrorLogs = [System.Collections.Generic.List[string]]::new()
 
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {
+        Mock -ModuleName Tetram.Media.Remux Write-InfoLog {
             param([string] $Text)
             [void]$script:InfoLogs.Add($Text)
         }
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {
+        Mock -ModuleName Tetram.Media.Remux Write-InfoWarning {
             param([string] $Text)
             [void]$script:WarningLogs.Add($Text)
         }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLogWithFile {
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLogWithFile {
             param([string] $Text)
             [void]$script:ErrorLogs.Add($Text)
         }
-        Mock -ModuleName Tetram.Media.Reencode Write-Log {}
-        Mock -ModuleName Tetram.Media.Reencode Invoke-FFmpeg {
+        Mock -ModuleName Tetram.Media.Remux Write-Log {}
+        Mock -ModuleName Tetram.Media.Remux Invoke-FFmpeg {
             param($OutputFile)
             if ($OutputFile)
             {
@@ -460,7 +460,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
             }
             return $true
         }
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @((New-HevcStream), (New-AacStream))
@@ -472,7 +472,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $file = Join-Path $TestDrive 'mismatch-strict.mp4'
         Set-Content -LiteralPath $file -Value 'source-original'
 
-        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status   = 'mismatch'
                 Method   = 'format'
@@ -484,7 +484,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
 
         $state = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
 
-        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity -Times 1
         $state.IntegrityFailureFiles | Should -Contain $file
         $state.IntegrityWarningFiles | Should -Not -Contain $file
         $state.SessionResult.Count | Should -Be 0
@@ -500,7 +500,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $file = Join-Path $TestDrive 'mismatch-stream.mp4'
         Set-Content -LiteralPath $file -Value 'source-original'
 
-        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status               = 'mismatch'
                 Method               = 'stream'
@@ -525,7 +525,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $file = Join-Path $TestDrive 'probe-fail.mp4'
         Set-Content -LiteralPath $file -Value 'source-original'
 
-        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status   = 'mismatch'
                 Method   = 'probe'
@@ -549,7 +549,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $file = Join-Path $TestDrive 'mismatch-allow.mp4'
         Set-Content -LiteralPath $file -Value 'source-original'
 
-        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status   = 'mismatch'
                 Method   = 'format'
@@ -564,7 +564,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
             -Config (New-ReencodeFileTestConfig -AllowIntegrityMismatch $true) `
             -TempPath $TestDrive
 
-        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity -Times 1
         $state.IntegrityFailureFiles | Should -HaveCount 0
         $state.IntegrityWarningFiles | Should -Contain $file
         $state.SessionResult.Count | Should -Be 1
@@ -575,7 +575,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $script:WarningLogs[0] | Should -Match '100'
         $script:WarningLogs[0] | Should -Match '90'
         $script:WarningLogs[0] | Should -Match 'AllowIntegrityMismatch'
-        Should -Invoke -ModuleName Tetram.Media.Reencode Write-InfoWarning -Times 1 -ParameterFilter {
+        Should -Invoke -ModuleName Tetram.Media.Remux Write-InfoWarning -Times 1 -ParameterFilter {
             $Force -and $Text -match 'AllowIntegrityMismatch'
         }
         Test-Path -LiteralPath $file | Should -BeFalse
@@ -588,7 +588,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $file = Join-Path $TestDrive 'unknown-duration.mp4'
         Set-Content -LiteralPath $file -Value 'source-original'
 
-        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status   = 'unknown'
                 Method   = 'unknown'
@@ -600,7 +600,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
 
         $state = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
 
-        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 1
+        Should -Invoke -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity -Times 1
         $state.IntegrityFailureFiles | Should -HaveCount 0
         $state.IntegrityWarningFiles | Should -Contain $file
         $state.SessionResult.Count | Should -Be 1
@@ -611,7 +611,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $file = Join-Path $TestDrive 'notranscode-drop.mkv'
         Set-Content -LiteralPath $file -Value 'source-original'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @(
@@ -621,7 +621,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
                 )
             }
         }
-        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             throw 'Test-EncodedFileIntegrity ne doit pas être appelé en NoTranscode'
         }
 
@@ -630,7 +630,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
             -Config (New-ReencodeFileTestConfig -NoTranscode $true) `
             -TempPath $TestDrive
 
-        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 0
+        Should -Invoke -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity -Times 0
         $state.IntegrityFailureFiles | Should -HaveCount 0
         $state.IntegrityWarningFiles | Should -HaveCount 0
         $state.SessionResult.Count | Should -Be 1
@@ -641,7 +641,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $file = Join-Path $TestDrive 'subs-kept.mkv'
         Set-Content -LiteralPath $file -Value 'source-original'
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson {
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
                 format  = @{ duration = '10.0' }
                 streams = @(
@@ -653,7 +653,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
                 )
             }
         }
-        Mock -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity {
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status   = 'ok'
                 Method   = 'stream'
@@ -665,7 +665,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
 
         $null = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
 
-        Should -Invoke -ModuleName Tetram.Media.Reencode Test-EncodedFileIntegrity -Times 1 -ParameterFilter {
+        Should -Invoke -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity -Times 1 -ParameterFilter {
             $null -ne $KeptSourceSubtitleIndices -and
             (@($KeptSourceSubtitleIndices) -join ',') -eq '0,2'
         }

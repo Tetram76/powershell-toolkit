@@ -10,7 +10,7 @@
       <command:noun>MkvInterleaveRepairCommand</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+). `-Path` est un fichier existant, Matroska reconnu par `mkvmerge -J`. Cette commande **n'exécute pas** le remux : elle identifie le fichier (`mkvmerge -J`) puis retourne un objet décrivant l'exécutable, les arguments, la ligne PowerShell copiable et les chemins (logiques vs outils). Pour remplacer in-place, utiliser `Invoke-MkvRepair`.
+      <maml:para>Importer `.\Tetram.Media.Mkv` (PowerShell 7.6+). `-Path` est un fichier existant, Matroska reconnu par `mkvmerge -J`. Cette commande **n'exécute pas** le remux : elle identifie le fichier (`mkvmerge -J`) puis retourne un objet décrivant l'exécutable, les arguments, la ligne PowerShell copiable et les chemins (logiques vs outils). Pour remplacer in-place, utiliser `Invoke-MkvRepair`.
 
 Sans `-OutputPath`, la sortie est un voisin `{basename}.repaired.mkv` (le suffixe `.mkv` source, casse indifférente, est remplacé ; sinon `.repaired.mkv` est concaténé, ex. `clip.mp4.repaired.mkv`). La sortie ne peut pas être le fichier source.
 
@@ -136,7 +136,7 @@ Ne pas faire : prendre cette commande pour un remux ; pointer `-OutputPath` sur 
         <maml:uri />
       </maml:navigationLink>
       <maml:navigationLink>
-        <maml:linkText>Invoke-ReencodeMedia</maml:linkText>
+        <maml:linkText>Invoke-MkvRemux</maml:linkText>
         <maml:uri />
       </maml:navigationLink>
     </command:relatedLinks>
@@ -151,7 +151,7 @@ Ne pas faire : prendre cette commande pour un remux ; pointer `-OutputPath` sur 
       <command:noun>MkvRepair</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+). Remux `mkvmerge` à readers A/V séparés (même construction que `Get-MkvInterleaveRepairCommand`), puis `Move-Item` de la sortie temporaire sur le source. Ce n'est pas un réencodage : les flux conservés sont recopiés. Jeux exclusifs : `-Path` (un fichier) ou `-Folder` (scan `*.mkv`).
+      <maml:para>Importer `.\Tetram.Media.Mkv` (PowerShell 7.6+). Remux `mkvmerge` à readers A/V séparés (même construction que `Get-MkvInterleaveRepairCommand`), puis `Move-Item` de la sortie temporaire sur le source. Ce n'est pas un réencodage : les flux conservés sont recopiés. Jeux exclusifs : `-Path` (un fichier) ou `-Folder` (scan `*.mkv`).
 
 Chaque diagnostic relatif à un média (avertissement isolé, erreur, ou bloc `mkvmerge` Warning:/Error: mixte) est précédé d'un en-tête `Fichier source '&lt;chemin logique&gt;'`, émis une fois avant le contenu. Le chemin est celui déjà calculé (absolu, sans préfixe `\\?\`) ; un temporaire ou un journal peut figurer dans le détail technique, jamais à la place de cette identité. Une erreur globale sans média (dossier absent, binding) n'invente pas d'en-tête. `-WhatIf` et la barre de progression dossier placent le même libellé dans leurs champs natifs (`ShouldProcess` / `CurrentOperation`).
 
@@ -450,7 +450,7 @@ Mode `-Folder` : uniquement des fichiers `*.mkv` non lecture seule. La liste est
       <maml:alert>
         <maml:para>Prérequis : PowerShell 7.6+, `mkvmerge` (MKVToolNix).
 
-Ne pas faire : combiner `-Path` et `-Folder` ; passer `-ContinueOnError` avec `-Path` ; prendre `-Folder` pour traiter un `.mp4` ; compter sur le skip lecture seule en mode `-Path` ; prendre cette commande pour un réencodage ffmpeg (`Invoke-ReencodeMedia`) ; interpréter un warning `mkvmerge` (code `1`) comme un remplacement réussi, sauf si `-ForceReplaceOnWarning` est présent ; interpréter `-ForceReplaceOnWarning` comme une autorisation d'ignorer les erreurs réelles ; interpréter `-ContinueOnError` comme un silence des erreurs.</maml:para>
+Ne pas faire : combiner `-Path` et `-Folder` ; passer `-ContinueOnError` avec `-Path` ; prendre `-Folder` pour traiter un `.mp4` ; compter sur le skip lecture seule en mode `-Path` ; prendre cette commande pour un réencodage ffmpeg (`Invoke-MkvRemux`) ; interpréter un warning `mkvmerge` (code `1`) comme un remplacement réussi, sauf si `-ForceReplaceOnWarning` est présent ; interpréter `-ForceReplaceOnWarning` comme une autorisation d'ignorer les erreurs réelles ; interpréter `-ContinueOnError` comme un silence des erreurs.</maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -513,14 +513,14 @@ Ne pas faire : combiner `-Path` et `-Folder` ; passer `-ContinueOnError` avec `-
         <maml:uri />
       </maml:navigationLink>
       <maml:navigationLink>
-        <maml:linkText>Invoke-ReencodeMedia</maml:linkText>
+        <maml:linkText>Invoke-MkvRemux</maml:linkText>
         <maml:uri />
       </maml:navigationLink>
     </command:relatedLinks>
   </command:command>
   <command:command>
     <command:details>
-      <command:name>Invoke-ReencodeMedia</command:name>
+      <command:name>Invoke-MkvRemux</command:name>
       <maml:description>
         <maml:para>Remplace in-place des fichiers média : réencodage HEVC/AV1 vers MKV, `-NoTranscode` (filtrage sans transcodage) ou contrôle ffmpeg (`-CheckOnly`, pas un dry-run).</maml:para>
       </maml:description>
@@ -528,7 +528,7 @@ Ne pas faire : combiner `-Path` et `-Folder` ; passer `-ContinueOnError` avec `-
       <command:noun>ReencodeMedia</command:noun>
     </command:details>
     <maml:description>
-      <maml:para>Point d'entrée unique du module. Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
+      <maml:para>Point d'entrée unique du module. Importer `.\Tetram.Media.Mkv` (PowerShell 7.6+), puis appeler cette commande. Aucun objet n'est renvoyé : lire la console et, en cas d'échec, `reencode-errors.log` dans le répertoire courant.
 
 Choisir exactement un mode (jeux de paramètres exclusifs) :
 
@@ -552,7 +552,7 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
-        <maml:name>Invoke-ReencodeMedia</maml:name>
+        <maml:name>Invoke-MkvRemux</maml:name>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
           <maml:name>Path</maml:name>
           <maml:description />
@@ -736,7 +736,7 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
         </command:parameter>
       </command:syntaxItem>
       <command:syntaxItem>
-        <maml:name>Invoke-ReencodeMedia</maml:name>
+        <maml:name>Invoke-MkvRemux</maml:name>
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>ListFile</maml:name>
           <maml:description />
@@ -920,7 +920,7 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
         </command:parameter>
       </command:syntaxItem>
       <command:syntaxItem>
-        <maml:name>Invoke-ReencodeMedia</maml:name>
+        <maml:name>Invoke-MkvRemux</maml:name>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
           <maml:name>Path</maml:name>
           <maml:description />
@@ -1036,7 +1036,7 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
         </command:parameter>
       </command:syntaxItem>
       <command:syntaxItem>
-        <maml:name>Invoke-ReencodeMedia</maml:name>
+        <maml:name>Invoke-MkvRemux</maml:name>
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>ListFile</maml:name>
           <maml:description />
@@ -1159,7 +1159,7 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
         </command:parameter>
       </command:syntaxItem>
       <command:syntaxItem>
-        <maml:name>Invoke-ReencodeMedia</maml:name>
+        <maml:name>Invoke-MkvRemux</maml:name>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="false" position="0" aliases="none">
           <maml:name>Path</maml:name>
           <maml:description />
@@ -1253,7 +1253,7 @@ Pour simuler sans toucher au média ni aux dates : `-WhatIf` (pas `-CheckOnly`).
         </command:parameter>
       </command:syntaxItem>
       <command:syntaxItem>
-        <maml:name>Invoke-ReencodeMedia</maml:name>
+        <maml:name>Invoke-MkvRemux</maml:name>
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="false" position="named" aliases="none">
           <maml:name>ListFile</maml:name>
           <maml:description />
@@ -1665,7 +1665,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
       <command:example>
         <maml:title>--------- Example 1: Dry-run avant un réencodage récursif ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -WhatIf</dev:code>
+        <dev:code>Invoke-MkvRemux -Path 'D:\Media' -Recurse -WhatIf</dev:code>
         <dev:remarks>
           <maml:para>Intention : voir ce qui serait fait, sans modifier le média ni les timestamps. Une exception peut quand même créer `reencode-errors.log`. Toujours préférer cet appel avant un run réel.</maml:para>
         </dev:remarks>
@@ -1673,7 +1673,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
       <command:example>
         <maml:title>--------- Example 2: Réencodage par défaut (HEVC, sortie .mkv) ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse</dev:code>
+        <dev:code>Invoke-MkvRemux -Path 'D:\Media' -Recurse</dev:code>
         <dev:remarks>
           <maml:para>Intention : normaliser un arbre vers MKV/HEVC qualité Medium. Les originaux sont remplacés in-place.</maml:para>
         </dev:remarks>
@@ -1681,7 +1681,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
       <command:example>
         <maml:title>--------- Example 3: Vérifier qu'ffmpeg peut décoder, sans retravailler le média ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -CheckOnly</dev:code>
+        <dev:code>Invoke-MkvRemux -Path 'D:\Media' -Recurse -CheckOnly</dev:code>
         <dev:remarks>
           <maml:para>Intention : diagnostiquer des fichiers illisibles sans réencoder ni remuxer. Ce n'est pas un dry-run : les dates NFO (`premiered`) peuvent être écrites. Pour ne pas toucher au média ni aux dates : `-WhatIf`. Les échecs (ffmpeg ou exception) vont dans `reencode-errors.log`, y compris sous `-WhatIf`.</maml:para>
         </dev:remarks>
@@ -1689,7 +1689,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
       <command:example>
         <maml:title>--------- Example 4: Filtrer des pistes sans transcodage ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode</dev:code>
+        <dev:code>Invoke-MkvRemux -Path 'D:\Media' -Recurse -NoTranscode</dev:code>
         <dev:remarks>
           <maml:para>Intention : retirer sous-titres / vignettes et nettoyer les métadonnées en copiant les flux conservés. Conserve l'extension source. Ignoré si aucune opération n'est nécessaire.</maml:para>
         </dev:remarks>
@@ -1697,7 +1697,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
       <command:example>
         <maml:title>--------- Example 5: File d'attente + upgrade HEVC vers AV1 ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -UpdateList -VideoCodec AV1 -AllowVideoCodecUpgrade</dev:code>
+        <dev:code>Invoke-MkvRemux -ListFile 'D:\todo.txt' -UpdateList -VideoCodec AV1 -AllowVideoCodecUpgrade</dev:code>
         <dev:remarks>
           <maml:para>Intention : traiter une liste, retirer chaque ligne après coup, réencoder les HEVC `main*` en AV1. `-ListFile` exclut `-Path`.</maml:para>
         </dev:remarks>
@@ -1705,7 +1705,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
       <command:example>
         <maml:title>--------- Example 6: Un seul sous-arbre récursif sans `-Recurse` global ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Invoke-ReencodeMedia -Path '+D:\Media\Shows'</dev:code>
+        <dev:code>Invoke-MkvRemux -Path '+D:\Media\Shows'</dev:code>
         <dev:remarks>
           <maml:para>Intention : récursion ciblée. Le `+` s'applique à cette entrée seulement.</maml:para>
         </dev:remarks>
@@ -1713,7 +1713,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
       <command:example>
         <maml:title>--------- Example 7: Accepter explicitement un mismatch d'intégrité ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Invoke-ReencodeMedia -ListFile 'D:\todo.txt' -AllowIntegrityMismatch</dev:code>
+        <dev:code>Invoke-MkvRemux -ListFile 'D:\todo.txt' -AllowIntegrityMismatch</dev:code>
         <dev:remarks>
           <maml:para>Intention : continuer un réencodage malgré un mismatch déjà détecté (écart de durée, probe de sortie impossible, ou flux mappé manquant). Ce n'est pas le comportement recommandé par défaut : le contrôle s'exécute toujours, le mismatch est signalé en warning, et la sortie remplace l'original. Sans effet en `-NoTranscode` ni `-CheckOnly`.</maml:para>
         </dev:remarks>
@@ -1721,7 +1721,7 @@ Skip « No reencoding needed » / « No stream filtering needed » = déjà conf
       <command:example>
         <maml:title>--------- Example 8: Retirer toutes les pièces jointes sans transcodage ---------</maml:title>
         <maml:introduction></maml:introduction>
-        <dev:code>Invoke-ReencodeMedia -Path 'D:\Media' -Recurse -NoTranscode -RemoveAttachments</dev:code>
+        <dev:code>Invoke-MkvRemux -Path 'D:\Media' -Recurse -NoTranscode -RemoveAttachments</dev:code>
         <dev:remarks>
           <maml:para>Intention : supprimer tous les flux ffprobe de type `attachment` (y compris les polices ASS) tout en copiant les autres flux conservés. Conserve l'extension source. Sans effet s'il n'y a aucun attachment et aucun autre travail.</maml:para>
         </dev:remarks>

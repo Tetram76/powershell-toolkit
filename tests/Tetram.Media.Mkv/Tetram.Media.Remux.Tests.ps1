@@ -1,15 +1,15 @@
-# Étendre la suite autour du module SUD Tetram.Media.Reencode (Exports / comportement public après chargement réel du .psm1).
+# Étendre la suite autour du module SUD Tetram.Media.Mkv (Exports / comportement public après chargement réel du .psm1).
 #
 # RepoRoot depuis tests/<Module> : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
-# Manifeste : Tetram.Media.Reencode.Manifest.Tests.ps1
+# Manifeste : Tetram.Media.Mkv.Tests.ps1
 # Repair.psm1 : Tetram.Media.Repair.Tests.ps1
-# Nouvelle couverture : un Describe par commande du .psm1 Reencode, It minimaux puis mocks sur Utils/ffmpeg si nécessaires
+# Mocks : -ModuleName Tetram.Media.Remux — Invoke-MkvRemux s'exécute dans ce nested ; un mock sur le parent Mkv n'intercepte pas Get-FFmpegPath / Invoke-PathList.
 
-Describe 'Invoke-ReencodeMedia - surface publique' {
+Describe 'Invoke-MkvRemux - surface publique' {
     BeforeAll {
         Set-StrictMode -Version Latest
         $script:RepoRootReencodeApi = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
-        Import-Module -Name (Join-Path $script:RepoRootReencodeApi 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+        Import-Module -Name (Join-Path $script:RepoRootReencodeApi 'Tetram.Media.Mkv') -Force -ErrorAction Stop
 
         function script:Get-ParameterSetNames {
             param(
@@ -32,11 +32,11 @@ Describe 'Invoke-ReencodeMedia - surface publique' {
     }
 
     AfterAll {
-        Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+        Remove-Module -Name 'Tetram.Media.Mkv' -Force -ErrorAction SilentlyContinue
     }
 
     It 'expose les six ParameterSets cibles, ReencodeFromPath par défaut' {
-        $meta = Get-Command Invoke-ReencodeMedia
+        $meta = Get-Command Invoke-MkvRemux
         $meta.DefaultParameterSet | Should -Be 'ReencodeFromPath'
         @($meta.ParameterSets | Select-Object -ExpandProperty Name | Sort-Object) | Should -Be @(
             'CheckFromFile'
@@ -49,21 +49,21 @@ Describe 'Invoke-ReencodeMedia - surface publique' {
     }
 
     It 'place -NoTranscode uniquement sur les ParameterSets NoTranscode*, en obligatoire' {
-        $meta = Get-Command Invoke-ReencodeMedia
+        $meta = Get-Command Invoke-MkvRemux
         Get-ParameterSetNames $meta 'NoTranscode' | Should -Be @('NoTranscodeFromFile', 'NoTranscodeFromPath')
         $meta.Parameters['NoTranscode'].ParameterSets['NoTranscodeFromPath'].IsMandatory | Should -BeTrue
         $meta.Parameters['NoTranscode'].ParameterSets['NoTranscodeFromFile'].IsMandatory | Should -BeTrue
     }
 
     It 'place -CheckOnly uniquement sur les ParameterSets Check*, en obligatoire' {
-        $meta = Get-Command Invoke-ReencodeMedia
+        $meta = Get-Command Invoke-MkvRemux
         Get-ParameterSetNames $meta 'CheckOnly' | Should -Be @('CheckFromFile', 'CheckFromPath')
         $meta.Parameters['CheckOnly'].ParameterSets['CheckFromPath'].IsMandatory | Should -BeTrue
         $meta.Parameters['CheckOnly'].ParameterSets['CheckFromFile'].IsMandatory | Should -BeTrue
     }
 
     It 'réserve les paramètres de transformation aux ParameterSets Reencode*' {
-        $meta = Get-Command Invoke-ReencodeMedia
+        $meta = Get-Command Invoke-MkvRemux
         $reencodeSets = @('ReencodeFromFile', 'ReencodeFromPath')
         foreach ($name in @(
                 'VideoCodec'
@@ -82,7 +82,7 @@ Describe 'Invoke-ReencodeMedia - surface publique' {
     }
 
     It 'rend Path disponible sur les ParameterSets *FromPath et ListFile/UpdateList sur *FromFile' {
-        $meta = Get-Command Invoke-ReencodeMedia
+        $meta = Get-Command Invoke-MkvRemux
         Get-ParameterSetNames $meta 'Path' | Should -Be @('CheckFromPath', 'NoTranscodeFromPath', 'ReencodeFromPath')
         Get-ParameterSetNames $meta 'ListFile' | Should -Be @('CheckFromFile', 'NoTranscodeFromFile', 'ReencodeFromFile')
         Get-ParameterSetNames $meta 'UpdateList' | Should -Be @('CheckFromFile', 'NoTranscodeFromFile', 'ReencodeFromFile')
@@ -97,14 +97,14 @@ Describe 'Invoke-ReencodeMedia - surface publique' {
     }
 
     It 'rend ClearStreamsTitle et SubTitlesToKeep disponibles en réencodage et en NoTranscode' {
-        $meta = Get-Command Invoke-ReencodeMedia
+        $meta = Get-Command Invoke-MkvRemux
         $expected = @('NoTranscodeFromFile', 'NoTranscodeFromPath', 'ReencodeFromFile', 'ReencodeFromPath')
         Get-ParameterSetNames $meta 'ClearStreamsTitle' | Should -Be $expected
         Get-ParameterSetNames $meta 'SubTitlesToKeep' | Should -Be $expected
     }
 
     It 'rend les paramètres transverses de scan et d''outils disponibles sur les six ParameterSets' {
-        $meta = Get-Command Invoke-ReencodeMedia
+        $meta = Get-Command Invoke-MkvRemux
         $allSets = @(
             'CheckFromFile'
             'CheckFromPath'
@@ -128,7 +128,7 @@ Describe 'Invoke-ReencodeMedia - surface publique' {
     }
 
     It 'place -AllowIntegrityMismatch uniquement sur les ParameterSets Reencode*' {
-        $meta = Get-Command Invoke-ReencodeMedia
+        $meta = Get-Command Invoke-MkvRemux
         Get-ParameterSetNames $meta 'AllowIntegrityMismatch' | Should -Be @(
             'ReencodeFromFile'
             'ReencodeFromPath'
@@ -138,7 +138,7 @@ Describe 'Invoke-ReencodeMedia - surface publique' {
     }
 
     It 'place -RemoveAttachments sur les ParameterSets Reencode* et NoTranscode*, jamais Check*' {
-        $meta = Get-Command Invoke-ReencodeMedia
+        $meta = Get-Command Invoke-MkvRemux
         Get-ParameterSetNames $meta 'RemoveAttachments' | Should -Be @(
             'NoTranscodeFromFile'
             'NoTranscodeFromPath'
@@ -157,51 +157,51 @@ Describe 'Invoke-ReencodeMedia - surface publique' {
     }
 }
 
-Describe 'Invoke-ReencodeMedia - résolution FFmpeg au démarrage' {
+Describe 'Invoke-MkvRemux - résolution FFmpeg au démarrage' {
     BeforeAll {
         Set-StrictMode -Version Latest
         $script:RepoRootReencode = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
-        Import-Module -Name (Join-Path $script:RepoRootReencode 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+        Import-Module -Name (Join-Path $script:RepoRootReencode 'Tetram.Media.Mkv') -Force -ErrorAction Stop
     }
 
     AfterAll {
-        Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+        Remove-Module -Name 'Tetram.Media.Mkv' -Force -ErrorAction SilentlyContinue
     }
 
     BeforeEach {
-        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { throw "FFmpeg introuvable (test)" }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Get-FFmpegPath { throw "FFmpeg introuvable (test)" }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
     }
 
     It "log une erreur via Write-ErrorLog et ne lève pas d'exception quand FFmpeg est introuvable" {
-        { Invoke-ReencodeMedia -Path $TestDrive -CheckOnly } | Should -Not -Throw
-        Should -Invoke -ModuleName Tetram.Media.Reencode Write-ErrorLog -Times 1
+        { Invoke-MkvRemux -Path $TestDrive -CheckOnly } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Remux Write-ErrorLog -Times 1
     }
 }
 
-Describe 'Invoke-ReencodeMedia - configuration et récapitulatif' {
+Describe 'Invoke-MkvRemux - configuration et récapitulatif' {
     BeforeAll {
         Set-StrictMode -Version Latest
         $script:RepoRootReencodeConfig = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..')).Path
-        Import-Module -Name (Join-Path $script:RepoRootReencodeConfig 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+        Import-Module -Name (Join-Path $script:RepoRootReencodeConfig 'Tetram.Media.Mkv') -Force -ErrorAction Stop
     }
 
     AfterAll {
-        Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+        Remove-Module -Name 'Tetram.Media.Mkv' -Force -ErrorAction SilentlyContinue
     }
 
     It 'propage -AllowIntegrityMismatch dans la configuration transmise à l''orchestration' {
         $script:capturedConfig = $null
-        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
-        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
-        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+        Mock -ModuleName Tetram.Media.Remux Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Remux Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Remux Invoke-PathList {
             param($Paths, $State, $Config, $Cmdlet)
             $script:capturedConfig = $Config
         }
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoWarning {}
 
-        Invoke-ReencodeMedia -Path $TestDrive -AllowIntegrityMismatch
+        Invoke-MkvRemux -Path $TestDrive -AllowIntegrityMismatch
 
         $script:capturedConfig | Should -Not -BeNullOrEmpty
         $script:capturedConfig.AllowIntegrityMismatch | Should -BeTrue
@@ -209,32 +209,32 @@ Describe 'Invoke-ReencodeMedia - configuration et récapitulatif' {
 
     It 'propage AllowIntegrityMismatch à false par défaut' {
         $script:capturedConfig = $null
-        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
-        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
-        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+        Mock -ModuleName Tetram.Media.Remux Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Remux Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Remux Invoke-PathList {
             param($Paths, $State, $Config, $Cmdlet)
             $script:capturedConfig = $Config
         }
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoWarning {}
 
-        Invoke-ReencodeMedia -Path $TestDrive
+        Invoke-MkvRemux -Path $TestDrive
 
         $script:capturedConfig.AllowIntegrityMismatch | Should -BeFalse
     }
 
     It 'propage -RemoveAttachments dans la configuration transmise à l''orchestration' {
         $script:capturedConfig = $null
-        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
-        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
-        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+        Mock -ModuleName Tetram.Media.Remux Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Remux Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Remux Invoke-PathList {
             param($Paths, $State, $Config, $Cmdlet)
             $script:capturedConfig = $Config
         }
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoWarning {}
 
-        Invoke-ReencodeMedia -Path $TestDrive -RemoveAttachments
+        Invoke-MkvRemux -Path $TestDrive -RemoveAttachments
 
         $script:capturedConfig | Should -Not -BeNullOrEmpty
         $script:capturedConfig.RemoveAttachments | Should -BeTrue
@@ -242,40 +242,40 @@ Describe 'Invoke-ReencodeMedia - configuration et récapitulatif' {
 
     It 'propage RemoveAttachments à false par défaut' {
         $script:capturedConfig = $null
-        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
-        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
-        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+        Mock -ModuleName Tetram.Media.Remux Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Remux Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Remux Invoke-PathList {
             param($Paths, $State, $Config, $Cmdlet)
             $script:capturedConfig = $Config
         }
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoWarning {}
 
-        Invoke-ReencodeMedia -Path $TestDrive
+        Invoke-MkvRemux -Path $TestDrive
 
         $script:capturedConfig.RemoveAttachments | Should -BeFalse
     }
 
     It 'présente les warnings d''intégrité sans les limiter aux durées invérifiables' {
-        Mock -ModuleName Tetram.Media.Reencode Get-FFmpegPath { 'ffmpeg' }
-        Mock -ModuleName Tetram.Media.Reencode Get-FfprobePath { 'ffprobe' }
-        Mock -ModuleName Tetram.Media.Reencode Invoke-PathList {
+        Mock -ModuleName Tetram.Media.Remux Get-FFmpegPath { 'ffmpeg' }
+        Mock -ModuleName Tetram.Media.Remux Get-FfprobePath { 'ffprobe' }
+        Mock -ModuleName Tetram.Media.Remux Invoke-PathList {
             param($Paths, $State, $Config, $Cmdlet)
             [void]$State.IntegrityWarningFiles.Add('accepted.mkv')
         }
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoLog {}
-        Mock -ModuleName Tetram.Media.Reencode Write-InfoWarning {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoLog {}
+        Mock -ModuleName Tetram.Media.Remux Write-InfoWarning {}
 
-        Invoke-ReencodeMedia -Path $TestDrive
+        Invoke-MkvRemux -Path $TestDrive
 
-        Should -Invoke -ModuleName Tetram.Media.Reencode Write-InfoWarning -Times 1 -ParameterFilter {
+        Should -Invoke -ModuleName Tetram.Media.Remux Write-InfoWarning -Times 1 -ParameterFilter {
             $Force -and
             $Text -eq '1 file(s) accepted with integrity warning:'
         }
-        Should -Invoke -ModuleName Tetram.Media.Reencode Write-InfoWarning -Times 1 -ParameterFilter {
+        Should -Invoke -ModuleName Tetram.Media.Remux Write-InfoWarning -Times 1 -ParameterFilter {
             $Force -and $Text -eq '  - accepted.mkv'
         }
-        Should -Invoke -ModuleName Tetram.Media.Reencode Write-InfoWarning -Times 0 -ParameterFilter {
+        Should -Invoke -ModuleName Tetram.Media.Remux Write-InfoWarning -Times 0 -ParameterFilter {
             $Text -like '*unverifiable*'
         }
     }

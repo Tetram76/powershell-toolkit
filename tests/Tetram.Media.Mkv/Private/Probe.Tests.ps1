@@ -1,13 +1,13 @@
 # Étendre la suite autour du SUD Probe.ps1 (ffprobe/JSON métadonnées).
 #
 # RepoRoot (trois `..`) : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Reencode') ; InModuleScope 'Tetram.Media.Reencode' { … }
-# ffprobe/ffmpeg : éviter dépendance à l’installation hôte — mocker la fonction qui lance la commande et faire retourner du JSON représentatif (succès / erreurs / fichier absent).
+# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Mkv') ; InModuleScope 'Tetram.Media.Mkv' { … }
+# Mocks : -ModuleName Tetram.Media.Remux (Probe.ps1 est dot-sourcé dans ce nested ; un mock sur le parent Mkv n'intercepte pas Get-FFprobeJson).
 
 BeforeAll {
     Set-StrictMode -Version Latest
     $script:RepoRootProbe = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-    Import-Module -Name (Join-Path $script:RepoRootProbe 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+    Import-Module -Name (Join-Path $script:RepoRootProbe 'Tetram.Media.Mkv') -Force -ErrorAction Stop
 
     function script:New-ProbeStream {
         param(
@@ -66,7 +66,7 @@ BeforeAll {
             $bound['KeptSourceSubtitleIndices'] = $KeptSourceSubtitleIndices
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters $bound {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters $bound {
             param(
                 $SourceProbe,
                 $SourceFile,
@@ -101,9 +101,9 @@ Describe 'Test-EncodedFileIntegrity — format.duration' {
         Set-Content -LiteralPath $script:TempFile -Value 'temp'
         $script:TempProbe = @{ format = @{}; streams = @() }
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson { $script:TempProbe }
-        Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount { $null }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $script:TempProbe }
+        Mock -ModuleName Tetram.Media.Remux Get-DurationFromPacketCount { $null }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
     }
 
     It 'A1 — mismatch global format sans poursuivre vers un ok flux' {
@@ -177,9 +177,9 @@ Describe 'Test-EncodedFileIntegrity — plusieurs vidéos' {
         Set-Content -LiteralPath $script:TempFile -Value 'temp'
         $script:TempProbe = @{ format = @{}; streams = @() }
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson { $script:TempProbe }
-        Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount { $null }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $script:TempProbe }
+        Mock -ModuleName Tetram.Media.Remux Get-DurationFromPacketCount { $null }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
     }
 
     It 'B1 — toutes les vidéos conservées dans la tolérance => ok' {
@@ -244,9 +244,9 @@ Describe 'Test-EncodedFileIntegrity — plusieurs audios' {
         Set-Content -LiteralPath $script:TempFile -Value 'temp'
         $script:TempProbe = @{ format = @{}; streams = @() }
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson { $script:TempProbe }
-        Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount { $null }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $script:TempProbe }
+        Mock -ModuleName Tetram.Media.Remux Get-DurationFromPacketCount { $null }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
     }
 
     It 'C1 — tous les audios conservés dans la tolérance => ok' {
@@ -334,9 +334,9 @@ Describe 'Test-EncodedFileIntegrity — sous-titres' {
         Set-Content -LiteralPath $script:TempFile -Value 'temp'
         $script:TempProbe = @{ format = @{}; streams = @() }
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson { $script:TempProbe }
-        Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount { $null }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $script:TempProbe }
+        Mock -ModuleName Tetram.Media.Remux Get-DurationFromPacketCount { $null }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
     }
 
     It 'D1 — subtitle conservé comparable et dans la tolérance => ok' {
@@ -443,9 +443,9 @@ Describe 'Test-EncodedFileIntegrity — méthodes d''extraction' {
         Set-Content -LiteralPath $script:TempFile -Value 'temp'
         $script:TempProbe = @{ format = @{}; streams = @() }
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson { $script:TempProbe }
-        Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount { $null }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $script:TempProbe }
+        Mock -ModuleName Tetram.Media.Remux Get-DurationFromPacketCount { $null }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
     }
 
     It 'E1 — utilise stream.duration quand les deux côtés l''ont' {
@@ -491,7 +491,7 @@ Describe 'Test-EncodedFileIntegrity — méthodes d''extraction' {
 
     It 'E3 — fallback count_packets vidéo avec les indices source/output remappés' {
         $script:PacketCountCalls = [System.Collections.Generic.List[hashtable]]::new()
-        Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount {
+        Mock -ModuleName Tetram.Media.Remux Get-DurationFromPacketCount {
             param([string] $File, [int] $StreamIndex)
             [void]$script:PacketCountCalls.Add(@{ File = $File; StreamIndex = $StreamIndex })
             if ($File -eq $script:SourceFile -and $StreamIndex -eq 0) { return 100.0 }
@@ -531,9 +531,9 @@ Describe 'Test-EncodedFileIntegrity — tolérance' {
         Set-Content -LiteralPath $script:TempFile -Value 'temp'
         $script:TempProbe = @{ format = @{}; streams = @() }
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson { $script:TempProbe }
-        Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount { $null }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $script:TempProbe }
+        Mock -ModuleName Tetram.Media.Remux Get-DurationFromPacketCount { $null }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
     }
 
     It 'F1 — différence inférieure à la tolérance => ok' {
@@ -585,13 +585,13 @@ Describe 'Test-EncodedFileIntegrity — unknown vs mismatch' {
         Set-Content -LiteralPath $script:TempFile -Value 'temp'
         $script:TempProbe = @{ format = @{}; streams = @() }
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson { $script:TempProbe }
-        Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount { $null }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $script:TempProbe }
+        Mock -ModuleName Tetram.Media.Remux Get-DurationFromPacketCount { $null }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
     }
 
     It 'G1 — échec de probe du fichier réencodé => mismatch, jamais unknown' {
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson { $null }
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $null }
 
         $source = New-MediaProbe -FormatDuration 100 -Streams @(
             (New-ProbeStream -CodecType 'video' -Duration 100)
@@ -657,9 +657,9 @@ Describe 'Test-EncodedFileIntegrity — asymétrie de conteneur et fail-safe' {
         Set-Content -LiteralPath $script:TempFile -Value 'temp'
         $script:TempProbe = @{ format = @{}; streams = @() }
 
-        Mock -ModuleName Tetram.Media.Reencode Get-FFprobeJson { $script:TempProbe }
-        Mock -ModuleName Tetram.Media.Reencode Get-DurationFromPacketCount { $null }
-        Mock -ModuleName Tetram.Media.Reencode Write-ErrorLog {}
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $script:TempProbe }
+        Mock -ModuleName Tetram.Media.Remux Get-DurationFromPacketCount { $null }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
     }
 
     It 'rapproche stream.duration source et tag DURATION sortie du même flux (mp4 vs mkv)' {

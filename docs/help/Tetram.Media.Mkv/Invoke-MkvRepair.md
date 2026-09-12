@@ -1,9 +1,9 @@
 ﻿---
 document type: cmdlet
-external help file: Tetram.Media.Reencode-Help.xml
+external help file: Tetram.Media.Mkv-Help.xml
 HelpUri: ''
 Locale: fr-FR
-Module Name: Tetram.Media.Reencode
+Module Name: Tetram.Media.Mkv
 ms.date: 09/10/2026
 PlatyPS schema version: 2024-05-01
 title: Invoke-MkvRepair
@@ -37,7 +37,7 @@ Invoke-MkvRepair -Folder <string> [-Recurse] [-ContinueOnError] [-ForceReplaceOn
 
 ## DESCRIPTION
 
-Importer `.\Tetram.Media.Reencode` (PowerShell 7.6+). Remux `mkvmerge` à readers A/V séparés (même construction que `Get-MkvInterleaveRepairCommand`), puis `Move-Item` de la sortie temporaire sur le source. Ce n'est pas un réencodage : les flux conservés sont recopiés. Jeux exclusifs : `-Path` (un fichier) ou `-Folder` (scan `*.mkv`).
+Importer `.\Tetram.Media.Mkv` (PowerShell 7.6+). Remux `mkvmerge` à readers A/V séparés (même construction que `Get-MkvInterleaveRepairCommand`), puis `Move-Item` de la sortie temporaire sur le source. Ce n'est pas un réencodage : les flux conservés sont recopiés. Jeux exclusifs : `-Path` (un fichier) ou `-Folder` (scan `*.mkv`).
 
 Chaque diagnostic relatif à un média (avertissement isolé, erreur, ou bloc `mkvmerge` Warning:/Error: mixte) est précédé d'un en-tête `Fichier source '<chemin logique>'`, émis une fois avant le contenu. Le chemin est celui déjà calculé (absolu, sans préfixe `\\?\`) ; un temporaire ou un journal peut figurer dans le détail technique, jamais à la place de cette identité. Une erreur globale sans média (dossier absent, binding) n'invente pas d'en-tête. `-WhatIf` et la barre de progression dossier placent le même libellé dans leurs champs natifs (`ShouldProcess` / `CurrentOperation`).
 
@@ -379,9 +379,9 @@ Sans `-PassThru` : rien. Avec `-PassThru` : `System.IO.FileInfo` du source rempl
 
 Prérequis : PowerShell 7.6+, `mkvmerge` (MKVToolNix).
 
-Ne pas faire : combiner `-Path` et `-Folder` ; passer `-ContinueOnError` avec `-Path` ; prendre `-Folder` pour traiter un `.mp4` ; compter sur le skip lecture seule en mode `-Path` ; prendre cette commande pour un réencodage ffmpeg (`Invoke-ReencodeMedia`) ; interpréter un warning `mkvmerge` (code `1`) comme un remplacement réussi, sauf si `-ForceReplaceOnWarning` est présent ; interpréter `-ForceReplaceOnWarning` comme une autorisation d'ignorer les erreurs réelles ; interpréter `-ContinueOnError` comme un silence des erreurs.
+Ne pas faire : combiner `-Path` et `-Folder` ; passer `-ContinueOnError` avec `-Path` ; prendre `-Folder` pour traiter un `.mp4` ; compter sur le skip lecture seule en mode `-Path` ; prendre cette commande pour un réencodage ffmpeg (`Invoke-MkvRemux`) ; interpréter un warning `mkvmerge` (code `1`) comme un remplacement réussi, sauf si `-ForceReplaceOnWarning` est présent ; interpréter `-ForceReplaceOnWarning` comme une autorisation d'ignorer les erreurs réelles ; interpréter `-ContinueOnError` comme un silence des erreurs.
 
 ## RELATED LINKS
 
 - [Get-MkvInterleaveRepairCommand]()
-- [Invoke-ReencodeMedia]()
+- [Invoke-MkvRemux]()

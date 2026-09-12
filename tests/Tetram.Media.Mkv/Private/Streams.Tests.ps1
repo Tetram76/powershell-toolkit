@@ -1,14 +1,14 @@
 # Étendre la suite autour du SUD Streams.ps1 (pistes/dérivation à partir médias ffmpeg).
 #
 # RepoRoot (trois `..`) : $RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Reencode') ; InModuleScope 'Tetram.Media.Reencode' { … }
+# Import-Module (Join-Path $RepoRoot 'Tetram.Media.Mkv') ; InModuleScope 'Tetram.Media.Mkv' { … }
 # Simuler ffmpeg/ffprobe : mocker wrappers ou lignes `-print_format json`/`ffprobe …` comme pour Probe selon signatures réelles utilisées dans Streams.ps1.
 # Fixtures : médias légers dans $TestDrive ou moquer les fichiers si la logique peut s’injecter avec des chemins factices contrôlés.
 
 BeforeAll {
     Set-StrictMode -Version Latest
     $script:RepoRootStreams = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..' '..' '..')).Path
-    Import-Module -Name (Join-Path $script:RepoRootStreams 'Tetram.Media.Reencode') -Force -ErrorAction Stop
+    Import-Module -Name (Join-Path $script:RepoRootStreams 'Tetram.Media.Mkv') -Force -ErrorAction Stop
 
     function script:Invoke-SelectSubtitleStreamsUnderTest {
         param(
@@ -17,7 +17,7 @@ BeforeAll {
             [Parameter(Mandatory)] [string] $DirectoryName
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{
             FfprobeOutput   = $FfprobeOutput
             SubTitlesToKeep = $SubTitlesToKeep
             DirectoryName   = $DirectoryName
@@ -41,7 +41,7 @@ BeforeAll {
             [bool] $ForceRecodeVideo = $false
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{
             FfprobeOutput    = $FfprobeOutput
             ForceRecodeVideo = $ForceRecodeVideo
         } {
@@ -71,7 +71,7 @@ BeforeAll {
             [bool] $FinalVideoIsAV1 = $false
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{
             FfprobeOutput   = $FfprobeOutput
             FinalExtension  = $FinalExtension
             Quality         = $Quality
@@ -91,7 +91,7 @@ BeforeAll {
 }
 
 AfterAll {
-    Remove-Module -Name 'Tetram.Media.Reencode' -Force -ErrorAction SilentlyContinue
+    Remove-Module -Name 'Tetram.Media.Mkv' -Force -ErrorAction SilentlyContinue
 }
 
 Describe 'Select-AudioStreams' {
@@ -109,7 +109,7 @@ Describe 'Select-AudioStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -NoTranscodeMode $false
@@ -132,7 +132,7 @@ Describe 'Select-AudioStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AudioStreams -FfprobeOutput $FfprobeOutput -FinalExtension '.mkv' -Quality 'Low' -NoTranscodeMode $false
@@ -666,7 +666,7 @@ Describe 'Test-FinalVideoIsAV1' {
             (New-FinalVideoTrack -CodecName 'av1' -Copy $true)
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ VideoTracks = $tracks } {
             param($VideoTracks)
             Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'HEVC' | Should -BeTrue
         }
@@ -677,7 +677,7 @@ Describe 'Test-FinalVideoIsAV1' {
             (New-FinalVideoTrack -CodecName 'hevc' -Copy $true)
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ VideoTracks = $tracks } {
             param($VideoTracks)
             Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'AV1' | Should -BeFalse
         }
@@ -688,7 +688,7 @@ Describe 'Test-FinalVideoIsAV1' {
             (New-FinalVideoTrack -CodecName 'h264' -Process $true -Recode $true)
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ VideoTracks = $tracks } {
             param($VideoTracks)
             Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'AV1' | Should -BeTrue
         }
@@ -699,7 +699,7 @@ Describe 'Test-FinalVideoIsAV1' {
             (New-FinalVideoTrack -CodecName 'hevc' -Process $true -Deinterlace $true)
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ VideoTracks = $tracks } {
             param($VideoTracks)
             Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'AV1' | Should -BeTrue
         }
@@ -710,7 +710,7 @@ Describe 'Test-FinalVideoIsAV1' {
             (New-FinalVideoTrack -CodecName 'hevc' -Process $true -Upscale $true)
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ VideoTracks = $tracks } {
             param($VideoTracks)
             Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'AV1' | Should -BeTrue
         }
@@ -722,7 +722,7 @@ Describe 'Test-FinalVideoIsAV1' {
             (New-FinalVideoTrack -CodecName 'hevc' -Copy $true)
         )
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ VideoTracks = $tracks } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ VideoTracks = $tracks } {
             param($VideoTracks)
             Test-FinalVideoIsAV1 -VideoTracks $VideoTracks -VideoCodec 'HEVC' | Should -BeFalse
         }
@@ -732,7 +732,7 @@ Describe 'Test-FinalVideoIsAV1' {
 Describe 'Get-FontAttachmentTargetMimetype' {
 
     It 'fait primer l''extension .otf sur un mimetype ttf déjà mappé (codec ttf)' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             Get-FontAttachmentTargetMimetype `
                 -Mimetype 'application/x-truetype-font' `
                 -Filename 'CustomFont.otf' `
@@ -742,7 +742,7 @@ Describe 'Get-FontAttachmentTargetMimetype' {
     }
 
     It 'fait primer l''extension .ttf sur un mimetype opentype déjà mappé (codec otf)' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             Get-FontAttachmentTargetMimetype `
                 -Mimetype 'application/vnd.ms-opentype' `
                 -Filename 'CustomFont.ttf' `
@@ -752,7 +752,7 @@ Describe 'Get-FontAttachmentTargetMimetype' {
     }
 
     It 'se sert du mimetype font/otf seulement quand ffprobe n''a pas posé de codec' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             Get-FontAttachmentTargetMimetype `
                 -Mimetype 'font/otf' `
                 -Filename 'SomeFont' `
@@ -777,7 +777,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
@@ -795,7 +795,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
@@ -813,7 +813,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
@@ -828,7 +828,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
@@ -843,7 +843,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
@@ -858,7 +858,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
@@ -873,7 +873,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
@@ -891,7 +891,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
@@ -909,7 +909,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $true
@@ -926,7 +926,7 @@ Describe 'Select-AttachmentStreams' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $false
@@ -945,7 +945,7 @@ Describe 'Select-AttachmentStreams — RemoveAttachments' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams `
@@ -965,7 +965,7 @@ Describe 'Select-AttachmentStreams — RemoveAttachments' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams `
@@ -985,7 +985,7 @@ Describe 'Select-AttachmentStreams — RemoveAttachments' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams `
@@ -1007,7 +1007,7 @@ Describe 'Select-AttachmentStreams — RemoveAttachments' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = @(Select-AttachmentStreams `
@@ -1030,7 +1030,7 @@ Describe 'Select-AttachmentStreams — RemoveAttachments' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams `
@@ -1062,7 +1062,7 @@ Describe 'Select-VideoStreams — color_space' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $result = Select-VideoStreams `
@@ -1212,7 +1212,7 @@ Describe 'Select-AttachmentStreams — tags optionnels' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $false
@@ -1238,7 +1238,7 @@ Describe 'Select-VideoStreams — disposition optionnelle' {
             )
         }
 
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
 
             $result = Select-VideoStreams `
@@ -1320,7 +1320,7 @@ Describe 'Select-* — sonde ConvertFrom-Json -AsHashtable (type Get-FFprobeJson
 Describe 'Get-ProbeProperty / Test-ProbeHasProperty / Resolve-ProbeMapKey' {
 
     It 'Get-ProbeProperty retourne null sur objet null ou clé absente' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             Get-ProbeProperty $null 'language' | Should -BeNullOrEmpty
             Get-ProbeProperty @{ title = 'x' } 'language' | Should -BeNullOrEmpty
             Test-ProbeHasProperty $null 'language' | Should -BeFalse
@@ -1330,7 +1330,7 @@ Describe 'Get-ProbeProperty / Test-ProbeHasProperty / Resolve-ProbeMapKey' {
 
     It 'résout LANGUAGE en language sur OrderedHashtable et lit la valeur' {
         $map = ConvertFrom-Json -AsHashtable -InputObject '{"LANGUAGE":"fre"}'
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Map = $map } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Map = $map } {
             param($Map)
             Test-ProbeHasProperty $Map 'language' | Should -BeTrue
             Get-ProbeProperty $Map 'language' | Should -BeExactly 'fre'
@@ -1339,7 +1339,7 @@ Describe 'Get-ProbeProperty / Test-ProbeHasProperty / Resolve-ProbeMapKey' {
     }
 
     It 'Test-ProbeHasAssignedLanguage est faux pour unk (même sémantique que l''absence)' {
-        InModuleScope 'Tetram.Media.Reencode' {
+        InModuleScope 'Tetram.Media.Mkv' {
             Test-ProbeHasAssignedLanguage @{ language = 'unk' } | Should -BeFalse
             Test-ProbeHasAssignedLanguage @{ language = 'UNK' } | Should -BeFalse
             Test-ProbeHasAssignedLanguage @{ language = 'und' } | Should -BeTrue
@@ -1349,7 +1349,7 @@ Describe 'Get-ProbeProperty / Test-ProbeHasProperty / Resolve-ProbeMapKey' {
 
     It 'lit une NoteProperty PSCustomObject (hors IDictionary)' {
         $obj = [pscustomobject]@{ mimetype = 'font/ttf' }
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ Obj = $obj } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Obj = $obj } {
             param($Obj)
             Test-ProbeHasProperty $Obj 'mimetype' | Should -BeTrue
             Get-ProbeProperty $Obj 'mimetype' | Should -BeExactly 'font/ttf'
@@ -1369,7 +1369,7 @@ function script:Invoke-SelectVideoStreamsNoTranscode {
         [string] $Upscale = ''
     )
 
-    InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+    InModuleScope 'Tetram.Media.Mkv' -Parameters @{
         FfprobeOutput           = $FfprobeOutput
         NoTranscodeMode         = $NoTranscodeMode
         ForceRecodeVideo        = $ForceRecodeVideo
@@ -1404,7 +1404,7 @@ function script:Invoke-SelectAudioStreamsNoTranscode {
         [bool] $FinalVideoIsAV1 = $false
     )
 
-    InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+    InModuleScope 'Tetram.Media.Mkv' -Parameters @{
         FfprobeOutput   = $FfprobeOutput
         NoTranscodeMode = $NoTranscodeMode
         FinalExtension  = $FinalExtension
@@ -1432,7 +1432,7 @@ function script:Invoke-SelectSubtitleStreamsNoTranscode {
         [Parameter(Mandatory)] [string] $DirectoryName
     )
 
-    InModuleScope 'Tetram.Media.Reencode' -Parameters @{
+    InModuleScope 'Tetram.Media.Mkv' -Parameters @{
         FfprobeOutput              = $FfprobeOutput
         NoTranscodeMode            = $NoTranscodeMode
         FinalExtension             = $FinalExtension
@@ -1751,7 +1751,7 @@ Describe 'Filtrage commun au réencodage et à NoTranscode' {
                 @{ codec_type = 'attachment'; codec_name = 'ttf'; tags = @{ filename = 'Unused.ttf'; mimetype = 'application/x-truetype-font' } }
             )
         }
-        InModuleScope 'Tetram.Media.Reencode' -Parameters @{ FfprobeOutput = $ffprobe } {
+        InModuleScope 'Tetram.Media.Mkv' -Parameters @{ FfprobeOutput = $ffprobe } {
             param($FfprobeOutput)
             $tracks = Select-AttachmentStreams -FfprobeOutput $FfprobeOutput -HasAssSubtitles $false
             $tracks[0].__copy | Should -BeFalse
