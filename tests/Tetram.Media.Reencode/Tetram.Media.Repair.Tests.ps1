@@ -190,13 +190,20 @@ BeforeAll {
 
                 $warningMessages = $null
                 try {
-                    $State.Output = Invoke-MkvRepairFile `
+                    $result = Invoke-MkvRepairFile `
                         -Path $State.Path `
                         -MkvMerge $State.MkvMerge `
                         -PassThru:$State.PassThru `
                         -ForceReplaceOnWarning:$State.ForceReplaceOnWarning `
                         -WarningAction SilentlyContinue `
                         -WarningVariable warningMessages
+                    $State.Result = $result
+                    if ($null -ne $result -and $result.PSObject.Properties['PassThru']) {
+                        $State.Output = $result.PassThru
+                    }
+                    else {
+                        $State.Output = $result
+                    }
                 }
                 finally {
                     $State.Warnings = @($warningMessages)
@@ -265,11 +272,12 @@ BeforeAll {
         )
 
         $state = @{
-            MkvMerge  = $MkvMerge
-            Path      = $Path
-            Records   = [System.Collections.Generic.List[object]]::new()
-            Exception = $null
-            Output    = @()
+            MkvMerge     = $MkvMerge
+            Path         = $Path
+            Records      = [System.Collections.Generic.List[object]]::new()
+            Exception    = $null
+            Output       = @()
+            Diagnostics  = @()
         }
 
         InModuleScope 'Tetram.Media.Repair' -Parameters @{ State = $state } {
@@ -282,6 +290,8 @@ BeforeAll {
             catch {
                 $State.Exception = $_
                 [void]$State.Records.Add($_)
+                $data = Get-RepairExceptionData -Exception $_.Exception
+                $State.Diagnostics = @($data.Diagnostics)
             }
         }
 
@@ -294,10 +304,38 @@ BeforeAll {
         $state
     }
 
+    function script:Get-RepairDataDiagnosticSequence {
+        param(
+            $Diagnostics,
+            [string[]] $Text
+        )
+
+        $wanted = $null
+        if ($PSBoundParameters.ContainsKey('Text')) {
+            $wanted = [System.Collections.Generic.HashSet[string]]::new([string[]]@($Text))
+        }
+
+        foreach ($item in @($Diagnostics)) {
+            if ($null -eq $item) {
+                continue
+            }
+
+            $message = [string] $item.Message
+            if ($null -ne $wanted -and -not $wanted.Contains($message)) {
+                continue
+            }
+
+            [pscustomobject]@{
+                Kind = [string] $item.Severity
+                Text = $message
+            }
+        }
+    }
+
     function script:Assert-MkvMergeJFailedException {
         param(
             $Exception,
-            [Parameter(Mandatory)] [string] $Path,
+            [string] $Path,
             [int] $ExitCode = 2
         )
 
@@ -305,7 +343,7 @@ BeforeAll {
         $message = [string]$Exception.Exception.Message
         $message | Should -Match 'mkvmerge -J'
         $message | Should -Match "code $ExitCode"
-        $message | Should -Match ([regex]::Escape($Path))
+        $message | Should -Not -Match 'JSON'
     }
 
     function script:New-FakeMkvMergeWithIdentificationFailure {
@@ -358,7 +396,8 @@ BeforeAll {
             [Parameter(Mandatory)] [string] $Path,
             [string] $MkvMerge = 'mkvmerge.exe',
             [switch] $PassThru,
-            [switch] $ForceReplaceOnWarning
+            [switch] $ForceReplaceOnWarning,
+            [switch] $HideExceptionMessage
         )
 
         $state = @{
@@ -366,6 +405,7 @@ BeforeAll {
             MkvMerge              = $MkvMerge
             PassThru              = [bool] $PassThru
             ForceReplaceOnWarning = [bool] $ForceReplaceOnWarning
+            HideExceptionMessage  = [bool] $HideExceptionMessage
             Records               = [System.Collections.Generic.List[object]]::new()
             Threw                 = $false
             Exception             = $null
@@ -375,17 +415,30 @@ BeforeAll {
             param($State)
 
             try {
+                $result = $null
                 Invoke-MkvRepairFile `
                     -Path $State.Path `
                     -MkvMerge $State.MkvMerge `
                     -PassThru:$State.PassThru `
                     -ForceReplaceOnWarning:$State.ForceReplaceOnWarning `
+                    -HideExceptionMessage:$State.HideExceptionMessage `
                     -WarningAction Continue `
                     -ErrorAction Continue `
                     2>&1 3>&1 |
                     ForEach-Object {
+                        if ($_ -is [System.Management.Automation.PSCustomObject] -and
+                            $null -ne $_.PSObject.Properties['Outcome']) {
+                            $result = $_
+                        }
+
                         [void]$State.Records.Add($_)
                     }
+
+                $State.Result = $result
+                if ($null -ne $result -and $result.Outcome -eq 'Failed') {
+                    $State.Threw = $true
+                    $State.Exception = $result.ErrorRecord
+                }
             }
             catch {
                 $State.Threw = $true
@@ -398,6 +451,39 @@ BeforeAll {
         $script:LastRepairThrew = $state.Threw
         $script:LastRepairException = $state.Exception
         $state
+    }
+
+    function script:Invoke-WriteRepairDiagnosticCapturing {
+        param(
+            [string] $SourcePath,
+            [Parameter(Mandatory)] [object[]] $Diagnostics,
+            [string] $DiagnosticWarningAction = 'Continue',
+            [string] $DiagnosticErrorAction = 'Continue'
+        )
+
+        $state = @{
+            SourcePath               = $SourcePath
+            Diagnostics              = $Diagnostics
+            DiagnosticWarningAction  = $DiagnosticWarningAction
+            DiagnosticErrorAction    = $DiagnosticErrorAction
+            Records                  = [System.Collections.Generic.List[object]]::new()
+        }
+
+        InModuleScope 'Tetram.Media.Repair' -Parameters @{ State = $state } {
+            param($State)
+
+            $common = @{
+                SourcePath    = $State.SourcePath
+                Diagnostics   = $State.Diagnostics
+                WarningAction = $State.DiagnosticWarningAction
+                ErrorAction   = $State.DiagnosticErrorAction
+            }
+
+            Write-RepairDiagnostic @common 2>&1 3>&1 |
+                ForEach-Object { [void]$State.Records.Add($_) }
+        }
+
+        $state.Records
     }
 }
 
@@ -498,7 +584,7 @@ Describe 'Get-MkvMergeInfo' {
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         $captured.Exception | Should -BeNullOrEmpty
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'identification warning on success')
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text 'identification warning on success')
         $native | Should -HaveCount 0
         $captured.Output.Count | Should -Be 1
         $captured.Output[0].ok | Should -BeTrue
@@ -516,7 +602,7 @@ Describe 'Get-MkvMergeInfo' {
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'simulated identification failure')
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text 'simulated identification failure')
         $native | Should -HaveCount 1
         $native[0].Kind | Should -Be 'Error'
         @($sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -match 'mkvmerge -J a échoué' }) |
@@ -544,7 +630,7 @@ Describe 'Get-MkvMergeInfo' {
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(
-            Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
+            Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text @(
                 'first identification warning'
                 'second identification warning'
                 'final identification error'
@@ -576,7 +662,7 @@ Describe 'Get-MkvMergeInfo' {
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(
-            Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
+            Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text @(
                 'warning before failure'
                 'first identification error'
                 'second identification error'
@@ -607,7 +693,7 @@ Describe 'Get-MkvMergeInfo' {
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(
-            Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
+            Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text @(
                 'piste « Français » — durée incohérente'
                 "échec d'accès au fichier « Français ».mkv"
             )
@@ -649,7 +735,7 @@ Describe 'Get-MkvMergeInfo' {
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'failure')
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text 'failure')
         $native | Should -HaveCount 1
         $native[0].Kind | Should -Be 'Error'
     }
@@ -660,9 +746,19 @@ Describe 'Get-MkvMergeInfo' {
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text 'warning')
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text 'warning')
         $native | Should -HaveCount 1
         $native[0].Kind | Should -Be 'Warning'
+    }
+
+    It 'laisse ConvertFrom-Json lever quand mkvmerge -J rend 0 avec un JSON invalide' {
+        $tool = Join-Path $TestDrive 'mkvmerge-j-invalid-code0.ps1'
+        New-FakeToolScript -Path $tool -ExitCode 0 -IdentificationJson '{ invalid json'
+
+        { InModuleScope 'Tetram.Media.Repair' -Parameters @{ Tool = $tool } {
+                param($Tool)
+                Get-MkvMergeInfo -MkvMerge $Tool -Path 'ignored.mkv'
+            } } | Should -Throw
     }
 
     It 'ne laisse pas un JSON invalide masquer l''échec mkvmerge -J' {
@@ -672,7 +768,7 @@ Describe 'Get-MkvMergeInfo' {
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $captured.Exception.Exception.Message | Should -Not -Match 'JSON'
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text '{ invalid json')
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text '{ invalid json')
         $native | Should -HaveCount 1
         $native[0].Kind | Should -Be 'Error'
     }
@@ -696,7 +792,7 @@ Describe 'Get-MkvMergeInfo' {
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
         $native = @(
-            Get-NativeDiagnosticSequence -Records $captured.Records -Text @(
+            Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text @(
                 'fallback warning'
                 'fallback error'
             )
@@ -709,7 +805,7 @@ Describe 'Get-MkvMergeInfo' {
         )
     }
 
-    It 'expose un diagnostic brut non structuré avant l''exception synthétique avec le Path' {
+    It 'transporte un diagnostic brut non structuré dans l''exception, sans l''écrire' {
         $tool = Join-Path $TestDrive 'mkvmerge-j-unstructured.ps1'
         $path = 'V:\fake\problem.mkv'
         $rawText = 'some native mkvmerge diagnostic without Error prefix'
@@ -717,23 +813,14 @@ Describe 'Get-MkvMergeInfo' {
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool -Path $path
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path $path
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text $rawText)
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text $rawText)
         $native | Should -HaveCount 1
         $native[0].Kind | Should -Be 'Error'
-
-        $sequence = @(Get-DiagnosticSequence -Records $captured.Records)
-        $nativeIdx = -1
-        $synthIdx = -1
-        for ($i = 0; $i -lt $sequence.Count; $i++) {
-            if ($nativeIdx -lt 0 -and $sequence[$i].Text -eq $rawText) {
-                $nativeIdx = $i
-            }
-            if ($synthIdx -lt 0 -and $sequence[$i].Text -match 'mkvmerge -J a échoué') {
-                $synthIdx = $i
-            }
-        }
-        $nativeIdx | Should -BeGreaterThan -1
-        $synthIdx | Should -BeGreaterThan $nativeIdx
+        $captured.Exception.Exception.Message | Should -Match 'mkvmerge -J a échoué'
+        @(Get-DiagnosticSequence -Records $captured.Records | Where-Object { $_.Text -eq $rawText }) |
+            Should -HaveCount 0
+        @(Get-DiagnosticSequence -Records $captured.Records | Where-Object { $_.Kind -eq 'Warning' }) |
+            Should -HaveCount 0
     }
 
     It 'n''affiche pas deux fois un JSON d''identification déjà interprété' {
@@ -742,7 +829,7 @@ Describe 'Get-MkvMergeInfo' {
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text @('warning', 'error'))
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text @('warning', 'error'))
         @(
             $native | ForEach-Object { '{0} {1}' -f $_.Kind, $_.Text }
         ) | Should -BeExactly @(
@@ -761,7 +848,7 @@ Describe 'Get-MkvMergeInfo' {
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text @('warning', 'error'))
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text @('warning', 'error'))
         @(
             $native | ForEach-Object { '{0} {1}' -f $_.Kind, $_.Text }
         ) | Should -BeExactly @(
@@ -779,11 +866,9 @@ Describe 'Get-MkvMergeInfo' {
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
-        $native = @(
-            Get-DiagnosticSequence -Records $captured.Records |
-                Where-Object { $_.Kind -eq 'Error' -and $_.Text -notmatch 'mkvmerge -J a échoué' }
-        )
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text $rawText)
         $native | Should -HaveCount 1
+        $native[0].Kind | Should -Be 'Error'
         $native[0].Text | Should -BeExactly $rawText
         $native[0].Text | Should -Match '(?s)first native line.*second native line.*third native line'
     }
@@ -795,7 +880,7 @@ Describe 'Get-MkvMergeInfo' {
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text $rawText)
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text $rawText)
         $native | Should -HaveCount 1
         $native[0].Kind | Should -Be 'Error'
         $native[0].Text | Should -BeExactly $rawText
@@ -808,7 +893,7 @@ Describe 'Get-MkvMergeInfo' {
 
         $captured = Invoke-MkvMergeInfoCapturingDiagnostics -MkvMerge $tool
         Assert-MkvMergeJFailedException -Exception $captured.Exception -Path 'ignored.mkv'
-        $native = @(Get-NativeDiagnosticSequence -Records $captured.Records -Text $rawText)
+        $native = @(Get-RepairDataDiagnosticSequence -Diagnostics $captured.Diagnostics -Text $rawText)
         $native | Should -HaveCount 1
         $native[0].Kind | Should -Be 'Error'
         $native[0].Text | Should -BeExactly $rawText
@@ -849,6 +934,45 @@ Describe 'Get-MkvInterleaveRepairCommand' {
         { Get-MkvInterleaveRepairCommand -Path (Join-Path $TestDrive 'missing.mkv') } |
             Should -Throw '*Fichier introuvable*'
         Should -Invoke -ModuleName Tetram.Media.Repair Get-MkvMergeInfo -Times 0
+    }
+
+    It 'affiche l''en-tête source puis le message métier avant de terminer' {
+        $missing = Join-Path $TestDrive 'absent-facade.mkv'
+        $full = [System.IO.Path]::GetFullPath($missing)
+        $records = [System.Collections.Generic.List[object]]::new()
+        try {
+            Get-MkvInterleaveRepairCommand -Path $missing -ErrorAction Continue -WarningAction Continue 2>&1 3>&1 |
+                ForEach-Object { [void]$records.Add($_) }
+        }
+        catch {
+            [void]$records.Add($_)
+        }
+
+        $seq = @(Get-DiagnosticSequence -Records $records)
+        $seq.Count | Should -BeGreaterOrEqual 2
+        $seq[0].Kind | Should -Be 'Error'
+        $seq[0].Text | Should -BeExactly "Fichier source '$full'"
+        @($seq | Where-Object { $_.Text -match 'Fichier introuvable' }).Count |
+            Should -BeGreaterOrEqual 1
+    }
+
+    It 'n''écrit pas d''en-tête sur le pipeline succès du builder' {
+        $mkv = Join-Path $TestDrive 'builder-ok.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        $script:mkvInfo = New-MkvMergeInfo -Tracks @(
+            (New-MkvTrack -Id 0 -Type video)
+        )
+        $warnings = $null
+        $errors = $null
+        $cmd = Get-MkvInterleaveRepairCommand `
+            -Path $mkv `
+            -WarningAction Continue `
+            -ErrorAction Continue `
+            -WarningVariable warnings `
+            -ErrorVariable errors
+        $cmd.InputPath | Should -BeExactly ([System.IO.Path]::GetFullPath($mkv))
+        @($warnings).Count | Should -Be 0
+        @($errors).Count | Should -Be 0
     }
 
     It 'refuse une sortie identique à la source' {
@@ -1047,6 +1171,177 @@ Describe 'Get-MkvInterleaveRepairCommand' {
     }
 }
 
+Describe 'New-MkvInterleaveRepairCommand' {
+    It 'lève brut sans Write-Warning ni Write-Error' {
+        $missing = Join-Path $TestDrive 'absent-private.mkv'
+        $state = @{
+            Path    = $missing
+            Records = [System.Collections.Generic.List[object]]::new()
+            Threw   = $false
+            Message = $null
+        }
+
+        InModuleScope 'Tetram.Media.Repair' -Parameters @{ State = $state } {
+            param($State)
+
+            try {
+                New-MkvInterleaveRepairCommand -Path $State.Path -WarningAction Continue -ErrorAction Continue 2>&1 3>&1 |
+                    ForEach-Object { [void]$State.Records.Add($_) }
+            }
+            catch {
+                $State.Threw = $true
+                $State.Message = [string] $_.Exception.Message
+            }
+        }
+
+        $state.Threw | Should -BeTrue
+        $state.Message | Should -Match 'Fichier introuvable'
+        @(Get-DiagnosticSequence -Records $state.Records) | Should -HaveCount 0
+    }
+}
+
+Describe 'Invoke-MkvMergeRemux' {
+    It 'retourne le code 0 sans fuite stdout ni Warning/Error' {
+        $src = Join-Path $TestDrive 'remux-ok-src.mkv'
+        $out = Join-Path $TestDrive 'remux-ok-out.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-remux-ok.ps1'
+        $log = Join-Path $TestDrive 'remux-ok.log'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript `
+            -Path $tool `
+            -ExitCode 0 `
+            -OutputText 'repaired' `
+            -StdoutText 'Progress: 50%'
+
+        $state = @{
+            Executable = $tool
+            Arguments  = @('-o', $out, $src)
+            LogPath    = $log
+            Records    = [System.Collections.Generic.List[object]]::new()
+            Result     = $null
+        }
+
+        InModuleScope 'Tetram.Media.Repair' -Parameters @{ State = $state } {
+            param($State)
+
+            Invoke-MkvMergeRemux `
+                -Executable $State.Executable `
+                -Arguments $State.Arguments `
+                -LogPath $State.LogPath `
+                -WarningAction Continue `
+                -ErrorAction Continue `
+                2>&1 3>&1 |
+                ForEach-Object {
+                    if ($_ -is [System.Management.Automation.PSCustomObject] -and
+                        $null -ne $_.PSObject.Properties['ExitCode']) {
+                        $State.Result = $_
+                        return
+                    }
+
+                    [void]$State.Records.Add($_)
+                }
+        }
+
+        $state.Result | Should -Not -BeNullOrEmpty
+        $state.Result.ExitCode | Should -Be 0
+        $state.Result.WarningCount | Should -Be 0
+        $state.Result.ErrorCount | Should -Be 0
+        @(Get-DiagnosticSequence -Records $state.Records) | Should -HaveCount 0
+        @($state.Records | Where-Object { $_ -is [string] -and $_ -match 'Progress' }) |
+            Should -HaveCount 0
+        Get-Content -LiteralPath $out -Raw | Should -BeExactly 'repaired'
+    }
+
+    It 'lit le journal dans l''ordre natif pour un code 1 puis 2, sans Write-*' {
+        $src = Join-Path $TestDrive 'remux-log-src.mkv'
+        $out = Join-Path $TestDrive 'remux-log-out.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-remux-log.ps1'
+        $log = Join-Path $TestDrive 'remux-log.log'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript `
+            -Path $tool `
+            -ExitCode 2 `
+            -RedirectOutputText "Warning: first warning`nError: final error"
+
+        $state = @{
+            Executable = $tool
+            Arguments  = @('-o', $out, $src)
+            LogPath    = $log
+            Records    = [System.Collections.Generic.List[object]]::new()
+            Result     = $null
+        }
+
+        InModuleScope 'Tetram.Media.Repair' -Parameters @{ State = $state } {
+            param($State)
+
+            Invoke-MkvMergeRemux `
+                -Executable $State.Executable `
+                -Arguments $State.Arguments `
+                -LogPath $State.LogPath `
+                -WarningAction Continue `
+                -ErrorAction Continue `
+                2>&1 3>&1 |
+                ForEach-Object {
+                    if ($_ -is [System.Management.Automation.PSCustomObject] -and
+                        $null -ne $_.PSObject.Properties['ExitCode']) {
+                        $State.Result = $_
+                        return
+                    }
+
+                    [void]$State.Records.Add($_)
+                }
+        }
+
+        $state.Result.ExitCode | Should -Be 2
+        $state.Result.WarningCount | Should -Be 1
+        $state.Result.ErrorCount | Should -Be 1
+        @(
+            $state.Result.Diagnostics | ForEach-Object { '{0} {1}' -f $_.Severity, $_.Message }
+        ) | Should -BeExactly @(
+            'Warning first warning'
+            'Error final error'
+        )
+        @(Get-DiagnosticSequence -Records $state.Records) | Should -HaveCount 0
+    }
+
+    It 'lève si le lancement est impossible, sans Write-*' {
+        $log = Join-Path $TestDrive 'remux-missing.log'
+        Set-Content -LiteralPath $log -Value ''
+        $state = @{
+            Executable = Join-Path $TestDrive 'no-such-mkvmerge.exe'
+            Arguments  = @('-o', 'out.mkv', 'in.mkv')
+            LogPath    = $log
+            Records    = [System.Collections.Generic.List[object]]::new()
+            Threw      = $false
+            Message    = $null
+        }
+
+        InModuleScope 'Tetram.Media.Repair' -Parameters @{ State = $state } {
+            param($State)
+
+            try {
+                Invoke-MkvMergeRemux `
+                    -Executable $State.Executable `
+                    -Arguments $State.Arguments `
+                    -LogPath $State.LogPath `
+                    -WarningAction Continue `
+                    -ErrorAction Continue `
+                    2>&1 3>&1 |
+                    ForEach-Object { [void]$State.Records.Add($_) }
+            }
+            catch {
+                $State.Threw = $true
+                $State.Message = [string] $_.Exception.Message
+            }
+        }
+
+        $state.Threw | Should -BeTrue
+        $state.Message | Should -Match 'no-such-mkvmerge'
+        $state.Message | Should -Not -Match 'Invoke-MkvMergeRemux'
+        @(Get-DiagnosticSequence -Records $state.Records) | Should -HaveCount 0
+    }
+}
+
 Describe 'Get-MkvInterleaveRepairCommand - JSON hashtable mkvmerge -J' {
     It 'lit container et tracks depuis ConvertFrom-Json -AsHashtable' {
         $mkv = Join-Path $TestDrive 'from-json.mkv'
@@ -1087,7 +1382,9 @@ Describe 'Invoke-MkvRepair' {
     It 'délègue un fichier au réparateur interne' {
         $mkv = Join-Path $TestDrive 'one.mkv'
         Set-Content -LiteralPath $mkv -Value 'fake'
-        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {}
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {
+            [pscustomobject]@{ Outcome = 'Success'; PassThru = $null; ErrorRecord = $null }
+        }
 
         Invoke-MkvRepair -Path $mkv
         Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 1 -ParameterFilter {
@@ -1098,7 +1395,9 @@ Describe 'Invoke-MkvRepair' {
     It 'propage ForceReplaceOnWarning au réparateur interne en File et Folder' {
         $mkv = Join-Path $TestDrive 'force-one.mkv'
         Set-Content -LiteralPath $mkv -Value 'fake'
-        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {}
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {
+            [pscustomobject]@{ Outcome = 'Success'; PassThru = $null; ErrorRecord = $null }
+        }
 
         Invoke-MkvRepair -Path $mkv -ForceReplaceOnWarning
         Invoke-MkvRepair -Folder $TestDrive -ForceReplaceOnWarning
@@ -1138,7 +1437,9 @@ Describe 'Invoke-MkvRepair' {
         $nestedMkv = Join-Path $sub 'child.mkv'
         Set-Content -LiteralPath $rootMkv -Value 'fake'
         Set-Content -LiteralPath $nestedMkv -Value 'fake'
-        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {}
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {
+            [pscustomobject]@{ Outcome = 'Success'; PassThru = $null; ErrorRecord = $null }
+        }
 
         Invoke-MkvRepair -Folder $TestDrive
         Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 1 -ParameterFilter {
@@ -1150,6 +1451,33 @@ Describe 'Invoke-MkvRepair' {
         Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 1 -ParameterFilter {
             $Path -eq (Get-Item -LiteralPath $nestedMkv).FullName
         }
+    }
+
+    It 'en -Folder passe le chemin logique au réparateur, même sous le seuil étendu' {
+        $folder = Join-Path $TestDrive 'logical-folder'
+        New-Item -ItemType Directory -Path $folder | Out-Null
+        $mkv = Join-Path $folder 'film.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        $logical = [System.IO.Path]::GetFullPath($mkv)
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile {
+            [pscustomobject]@{ Outcome = 'Success'; PassThru = $null; ErrorRecord = $null }
+        }
+
+        Invoke-MkvRepair -Folder $folder -ExtendedPathThreshold 1
+        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 1 -ParameterFilter {
+            $Path -eq $logical -and $Path -notmatch '^[\\][\\][?][\\]'
+        }
+    }
+
+    It 'en -Folder -WhatIf n''appelle pas le réparateur' {
+        $folder = Join-Path $TestDrive 'whatif-extended'
+        New-Item -ItemType Directory -Path $folder | Out-Null
+        $mkv = Join-Path $folder 'film.mkv'
+        Set-Content -LiteralPath $mkv -Value 'fake'
+        Mock -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile { throw 'ne doit pas tourner' }
+
+        { Invoke-MkvRepair -Folder $folder -ExtendedPathThreshold 1 -WhatIf } | Should -Not -Throw
+        Should -Invoke -ModuleName Tetram.Media.Repair Invoke-MkvRepairFile -Times 0
     }
 
     It 'en -Folder conserve un voisin .repaired.mkv et termine le lot' {
@@ -1526,7 +1854,13 @@ Describe 'Invoke-MkvRepair' {
             $sequence | Where-Object { $_.Kind -eq 'Error' -and $_.Text -match 'mkvmerge -J a échoué' }
         )
         $synthetic | Should -HaveCount 1
-        $synthetic[0].Text | Should -Match ([regex]::Escape($failSrc))
+        $header = @(
+            $sequence | Where-Object { $_.Text -like 'Fichier source *' }
+        )
+        $header | Should -HaveCount 1
+        $header[0].Text | Should -BeExactly (
+            "Fichier source '$([System.IO.Path]::GetFullPath($failSrc))'"
+        )
         Get-Content -LiteralPath $failSrc -Raw | Should -BeExactly 'original-fail'
         Get-Content -LiteralPath $okSrc -Raw | Should -BeExactly 'repaired-ok'
         @(Get-ChildItem -LiteralPath $folder -Filter '*.mkv').Name |
@@ -1581,9 +1915,146 @@ Describe 'Invoke-MkvRepair' {
         Get-Content -LiteralPath $ghostSrc -Raw | Should -BeExactly 'original-ghost'
         Get-Content -LiteralPath $okSrc -Raw | Should -BeExactly 'repaired-ok'
     }
+
+    It 'en -Recurse identifie deux homonymes par le chemin complet dans l''en-tête' {
+        $root = Join-Path $TestDrive 'homonyms'
+        $dirA = Join-Path $root 'homonym-a'
+        $dirB = Join-Path $root 'homonym-b'
+        New-Item -ItemType Directory -Path $dirA -Force | Out-Null
+        New-Item -ItemType Directory -Path $dirB -Force | Out-Null
+        $srcA = Join-Path $dirA 'film.mkv'
+        $srcB = Join-Path $dirB 'film.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-homonym.ps1'
+        Set-Content -LiteralPath $srcA -Value 'original-a' -NoNewline
+        Set-Content -LiteralPath $srcB -Value 'original-b' -NoNewline
+        New-FakeToolScript `
+            -Path $tool `
+            -ExitCode 1 `
+            -RedirectOutputText 'Warning: No default track for audio'
+        $script:mkvInfo = New-MkvMergeInfo -Tracks @(
+            (New-MkvTrack -Id 0 -Type video)
+        )
+        Mock -ModuleName Tetram.Media.Repair Get-MkvMergeInfo {
+            $script:mkvInfo
+        }
+
+        $warnings = $null
+        Invoke-MkvRepair -Folder $root -Recurse -MkvMerge $tool -WarningVariable warnings -WarningAction Continue
+        $warningText = @($warnings) -join [Environment]::NewLine
+        $warningText | Should -Match ([regex]::Escape("Fichier source '$([System.IO.Path]::GetFullPath($srcA))'"))
+        $warningText | Should -Match ([regex]::Escape("Fichier source '$([System.IO.Path]::GetFullPath($srcB))'"))
+    }
+
+    It 'en -Path fichier absent affiche l''en-tête puis Fichier introuvable, pas CreationTime' {
+        $missing = Join-Path $TestDrive 'absent-path.mkv'
+        $full = [System.IO.Path]::GetFullPath($missing)
+        $records = [System.Collections.Generic.List[object]]::new()
+        try {
+            Invoke-MkvRepair -Path $missing -ErrorAction Continue -WarningAction Continue 2>&1 3>&1 |
+                ForEach-Object { [void]$records.Add($_) }
+        }
+        catch {
+            [void]$records.Add($_)
+        }
+
+        $seq = @(Get-DiagnosticSequence -Records $records)
+        ($seq | Out-String) | Should -Not -Match 'CreationTime'
+        $seq[0].Text | Should -BeExactly "Fichier source '$full'"
+        @($seq | Where-Object { $_.Text -match 'Fichier introuvable' }) | Should -HaveCount 1
+    }
+
+    It 'en -Path -ErrorAction Stop émet le bloc natif complet puis termine' {
+        $src = Join-Path $TestDrive 'error-action-stop.mkv'
+        $out = Join-Path $TestDrive 'error-action-stop.repaired.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-error-action-stop.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript `
+            -Path $tool `
+            -ExitCode 2 `
+            -RedirectOutputText 'Error: simulated failure'
+        $script:mkvInfo = New-MkvMergeInfo -Tracks @(
+            (New-MkvTrack -Id 0 -Type video)
+        )
+        Mock -ModuleName Tetram.Media.Repair Get-MkvMergeInfo {
+            $script:mkvInfo
+        }
+
+        $records = [System.Collections.Generic.List[object]]::new()
+        try {
+            Invoke-MkvRepair -Path $src -MkvMerge $tool -ErrorAction Stop -WarningAction Continue 2>&1 3>&1 |
+                ForEach-Object { [void]$records.Add($_) }
+        }
+        catch {
+            [void]$records.Add($_)
+        }
+
+        $seq = @(Get-DiagnosticSequence -Records $records)
+        $full = [System.IO.Path]::GetFullPath($src)
+        @($seq | Where-Object { $_.Text -eq "Fichier source '$full'" }) | Should -HaveCount 1
+        @($seq | Where-Object { $_.Text -match 'simulated failure' }) | Should -HaveCount 1
+        $seq[-1].Text | Should -Match 'mkvmerge a échoué'
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+        Test-Path -LiteralPath $out | Should -BeFalse
+    }
+
+    It 'sous -WarningAction Stop n''émet pas un second en-tête et conserve un code 1' {
+        $src = Join-Path $TestDrive 'warning-action-stop.mkv'
+        $tool = Join-Path $TestDrive 'mkvmerge-warning-action-stop.ps1'
+        Set-Content -LiteralPath $src -Value 'original' -NoNewline
+        New-FakeToolScript `
+            -Path $tool `
+            -ExitCode 1 `
+            -RedirectOutputText 'Warning: No default track for audio'
+        $script:mkvInfo = New-MkvMergeInfo -Tracks @(
+            (New-MkvTrack -Id 0 -Type video)
+        )
+        Mock -ModuleName Tetram.Media.Repair Get-MkvMergeInfo {
+            $script:mkvInfo
+        }
+
+        $records = [System.Collections.Generic.List[object]]::new()
+        $stopped = $false
+        try {
+            Invoke-MkvRepair -Path $src -MkvMerge $tool -WarningAction Stop -ErrorAction Continue 2>&1 3>&1 |
+                ForEach-Object { [void]$records.Add($_) }
+        }
+        catch {
+            $stopped = $true
+            [void]$records.Add($_)
+            $_.Exception | Should -BeOfType [System.Management.Automation.ActionPreferenceStopException]
+        }
+
+        $stopped | Should -BeTrue
+        $seq = @(Get-DiagnosticSequence -Records $records)
+        @($seq | Where-Object { $_.Text -like "Fichier source '*warning-action-stop.mkv'" }) |
+            Should -HaveCount 1
+        @($seq | Where-Object { $_.Kind -eq 'Error' -and $_.Text -like "Fichier source '*" }) |
+            Should -HaveCount 0
+        Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
+    }
 }
 
 Describe 'Invoke-MkvRepairFile' {
+    It 'écrit le message d''exception dans le bloc sans HideExceptionMessage' {
+        $missing = Join-Path $TestDrive 'absent-show.mkv'
+        $full = [System.IO.Path]::GetFullPath($missing)
+        $captured = Invoke-RepairFileCapturingDiagnostics -Path $missing
+        $seq = @(Get-DiagnosticSequence -Records $captured.Records)
+        $seq[0].Text | Should -BeExactly "Fichier source '$full'"
+        @($seq | Where-Object { $_.Text -match 'Fichier introuvable' }) | Should -HaveCount 1
+        $captured.Exception.Exception.Message | Should -Match 'Fichier introuvable'
+    }
+
+    It 'avec HideExceptionMessage omet le dernier Error identique à l''exception et garde l''en-tête' {
+        $missing = Join-Path $TestDrive 'absent-hide.mkv'
+        $full = [System.IO.Path]::GetFullPath($missing)
+        $captured = Invoke-RepairFileCapturingDiagnostics -Path $missing -HideExceptionMessage
+        $seq = @(Get-DiagnosticSequence -Records $captured.Records)
+        $seq[0].Text | Should -BeExactly "Fichier source '$full'"
+        @($seq | Where-Object { $_.Text -match 'Fichier introuvable' }) | Should -HaveCount 0
+        $captured.Exception.Exception.Message | Should -Match 'Fichier introuvable'
+    }
+
     It 'remplace le source par la sortie quand mkvmerge rend 0' {
         $src = Join-Path $TestDrive 'replace.mkv'
         $out = Join-Path $TestDrive 'replace.repaired.mkv'
@@ -1597,7 +2068,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1624,7 +2095,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1648,7 +2119,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1673,7 +2144,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1701,7 +2172,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1729,7 +2200,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1738,7 +2209,7 @@ Describe 'Invoke-MkvRepairFile' {
         $warningText | Should -Match 'The track timestamp scale is invalid'
         $warningText | Should -Match "'Default' flag is not set on any track"
         $warningText | Should -Not -Match 'Progress: 42%'
-        $script:LastRepairWarnings.Count | Should -Be 3
+        $script:LastRepairWarnings.Count | Should -Be 4
         @($script:LastRepairWarnings | Where-Object { $_ -match 'multi-warn\.mkv' }).Count |
             Should -Be 1
         Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
@@ -1762,7 +2233,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1792,7 +2263,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1828,7 +2299,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1873,7 +2344,7 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1901,11 +2372,13 @@ Describe 'Invoke-MkvRepairFile' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
-        { Invoke-RepairFileUnderTest -Path $src } | Should -Throw "*n'existe pas*"
+        $captured = Invoke-RepairFileCapturingDiagnostics -Path $src
+        $captured.Threw | Should -BeTrue
+        $captured.Exception.Exception.Message | Should -Match "n'existe pas"
         Get-Content -LiteralPath $src -Raw | Should -BeExactly 'original'
     }
 
@@ -1948,7 +2421,7 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -1980,7 +2453,7 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -2010,14 +2483,15 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
         Invoke-RepairFileUnderTest -Path $src -ForceReplaceOnWarning
-        $script:LastRepairWarnings.Count | Should -Be 2
-        $script:LastRepairWarnings[0] | Should -Match 'The track timestamp scale is invalid'
-        $script:LastRepairWarnings[1] | Should -Match "'Default' flag is not set on any track"
+        $script:LastRepairWarnings.Count | Should -Be 3
+        $script:LastRepairWarnings[0] | Should -Match '^Fichier source '
+        $script:LastRepairWarnings[1] | Should -Match 'The track timestamp scale is invalid'
+        $script:LastRepairWarnings[2] | Should -Match "'Default' flag is not set on any track"
         Get-Content -LiteralPath $src -Raw | Should -BeExactly 'repaired-multi'
     }
 
@@ -2034,7 +2508,7 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -2065,7 +2539,7 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -2098,7 +2572,7 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -2124,7 +2598,7 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -2160,7 +2634,7 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -2193,7 +2667,7 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
             ToolInputPath  = $src
             OutputPath     = $out
         }
-        Mock -ModuleName Tetram.Media.Repair Get-MkvInterleaveRepairCommand {
+        Mock -ModuleName Tetram.Media.Repair New-MkvInterleaveRepairCommand {
             $script:repairCommand
         }
 
@@ -2349,5 +2823,201 @@ Describe 'Invoke-MkvRepair -ForceReplaceOnWarning' {
         Get-Content -LiteralPath $warnSrc -Raw | Should -BeExactly 'repaired-warn'
         Get-Content -LiteralPath $failSrc -Raw | Should -BeExactly 'original-fail'
         Get-Content -LiteralPath $okSrc -Raw | Should -BeExactly 'repaired-ok'
+    }
+}
+
+Describe 'Format-RepairSourceHeader' {
+    It 'retourne le libellé exact avec le chemin fourni' {
+        InModuleScope 'Tetram.Media.Repair' {
+            Format-RepairSourceHeader -SourcePath 'V:\Séries\Une série\episode.mkv' |
+                Should -BeExactly "Fichier source 'V:\Séries\Une série\episode.mkv'"
+        }
+    }
+
+    It 'préserve UNC, apostrophe, espaces et crochets sans accéder au disque' {
+        InModuleScope 'Tetram.Media.Repair' {
+            $path = "\\server\share\It's a [film].mkv"
+            Format-RepairSourceHeader -SourcePath $path |
+                Should -BeExactly "Fichier source '$path'"
+        }
+    }
+
+    It 'ne produit pas de header sans média' {
+        InModuleScope 'Tetram.Media.Repair' {
+            Format-RepairSourceHeader -SourcePath $null | Should -BeNullOrEmpty
+            Format-RepairSourceHeader -SourcePath '' | Should -BeNullOrEmpty
+            Format-RepairSourceHeader -SourcePath '   ' | Should -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'Write-RepairDiagnostic' {
+    It 'émet le header Warning puis la ligne pour un avertissement isolé' {
+        $path = 'V:\Séries\Une série\episode.mkv'
+        $records = Invoke-WriteRepairDiagnosticCapturing `
+            -SourcePath $path `
+            -Diagnostics @(
+                [pscustomobject]@{ Severity = 'Warning'; Message = 'Avertissement relatif au média.' }
+            )
+        $seq = @(Get-DiagnosticSequence -Records $records)
+        $seq | Should -HaveCount 2
+        $seq[0].Kind | Should -Be 'Warning'
+        $seq[0].Text | Should -BeExactly "Fichier source '$path'"
+        $seq[1].Kind | Should -Be 'Warning'
+        $seq[1].Text | Should -BeExactly 'Avertissement relatif au média.'
+    }
+
+    It 'émet le header puis une ligne par ligne d''un message multiligne, sans assembler source et corps' {
+        $path = 'D:\Media\film.mkv'
+        $records = Invoke-WriteRepairDiagnosticCapturing `
+            -SourcePath $path `
+            -Diagnostics @(
+                [pscustomobject]@{
+                    Severity = 'Warning'
+                    Message  = "Première ligne du message.`nDeuxième ligne du même message."
+                }
+            )
+        $seq = @(Get-DiagnosticSequence -Records $records)
+        $seq | Should -HaveCount 3
+        $seq[0].Text | Should -BeExactly "Fichier source '$path'"
+        $seq[1].Text | Should -BeExactly 'Première ligne du message.'
+        $seq[2].Text | Should -BeExactly 'Deuxième ligne du même message.'
+        $seq.Kind | Should -Be @('Warning', 'Warning', 'Warning')
+    }
+
+    It 'ignore les lignes vides issues du split, y compris au milieu du message' {
+        $path = 'D:\Media\film.mkv'
+        $records = Invoke-WriteRepairDiagnosticCapturing `
+            -SourcePath $path `
+            -Diagnostics @(
+                [pscustomobject]@{
+                    Severity = 'Warning'
+                    Message  = "Première ligne.`n`nTroisième ligne."
+                }
+            )
+        $seq = @(Get-DiagnosticSequence -Records $records)
+        $seq | Should -HaveCount 3
+        $seq[0].Text | Should -BeExactly "Fichier source '$path'"
+        $seq[1].Text | Should -BeExactly 'Première ligne.'
+        $seq[2].Text | Should -BeExactly 'Troisième ligne.'
+        @($seq | Where-Object { [string]$_.Text -eq '' }) | Should -HaveCount 0
+    }
+
+    It 'émet un header Error puis Warning/Error/Warning dans l''ordre, sans réordonner' {
+        $path = 'D:\Media\film.mkv'
+        $records = Invoke-WriteRepairDiagnosticCapturing `
+            -SourcePath $path `
+            -Diagnostics @(
+                [pscustomobject]@{ Severity = 'Warning'; Message = 'Premier avertissement.' }
+                [pscustomobject]@{ Severity = 'Error'; Message = 'Erreur de traitement.' }
+                [pscustomobject]@{ Severity = 'Warning'; Message = 'Second avertissement.' }
+            )
+        $seq = @(Get-DiagnosticSequence -Records $records)
+        $seq | Should -HaveCount 4
+        $seq[0].Kind | Should -Be 'Error'
+        $seq[0].Text | Should -BeExactly "Fichier source '$path'"
+        $seq[1].Kind | Should -Be 'Warning'
+        $seq[1].Text | Should -BeExactly 'Premier avertissement.'
+        $seq[2].Kind | Should -Be 'Error'
+        $seq[2].Text | Should -BeExactly 'Erreur de traitement.'
+        $seq[3].Kind | Should -Be 'Warning'
+        $seq[3].Text | Should -BeExactly 'Second avertissement.'
+    }
+
+    It 'omet le header sans média et n''invente pas de chemin fictif' {
+        $records = Invoke-WriteRepairDiagnosticCapturing `
+            -SourcePath '' `
+            -Diagnostics @(
+                [pscustomobject]@{ Severity = 'Error'; Message = 'Dossier introuvable.' }
+            )
+        $seq = @(Get-DiagnosticSequence -Records $records)
+        $seq | Should -HaveCount 1
+        $seq[0].Kind | Should -Be 'Error'
+        $seq[0].Text | Should -BeExactly 'Dossier introuvable.'
+        $seq[0].Text | Should -Not -Match 'Fichier source'
+    }
+
+    It 'ne mute pas l''ErrorRecord métier original' {
+        $original = [System.Management.Automation.ErrorRecord]::new(
+            [System.InvalidOperationException]::new('Erreur de traitement.'),
+            'Tetram.Media.Repair.Test',
+            [System.Management.Automation.ErrorCategory]::InvalidOperation,
+            'target'
+        )
+        $original.CategoryInfo.TargetName | Should -Be 'target'
+
+        $null = Invoke-WriteRepairDiagnosticCapturing `
+            -SourcePath 'D:\Media\film.mkv' `
+            -Diagnostics @(
+                [pscustomobject]@{
+                    Severity    = 'Error'
+                    Message     = 'Erreur de traitement.'
+                    ErrorRecord = $original
+                }
+            )
+
+        $original.Exception.Message | Should -BeExactly 'Erreur de traitement.'
+        $original.FullyQualifiedErrorId | Should -Be 'Tetram.Media.Repair.Test'
+        $original.CategoryInfo.TargetName | Should -Be 'target'
+        $original.Exception.Data.Count | Should -Be 0
+    }
+
+    It 'masque ensemble header et corps warning quand WarningAction est SilentlyContinue' {
+        $path = 'D:\Media\film.mkv'
+        $records = Invoke-WriteRepairDiagnosticCapturing `
+            -SourcePath $path `
+            -Diagnostics @(
+                [pscustomobject]@{ Severity = 'Warning'; Message = 'Avertissement masqué.' }
+            ) `
+            -DiagnosticWarningAction SilentlyContinue
+        @(Get-DiagnosticSequence -Records $records) | Should -HaveCount 0
+    }
+}
+
+Describe 'Add-RepairExceptionData / Get-RepairExceptionData' {
+    It 'ajoute les données sans changer le message ni produire de sortie' {
+        $ex = [System.InvalidOperationException]::new('Aucune piste trouvée dans le fichier.')
+        $ex.Data['foreign'] = 42
+        $diagnostics = @(
+            [pscustomobject]@{ Severity = 'Error'; Message = 'native' }
+        )
+
+        $output = InModuleScope 'Tetram.Media.Repair' -Parameters @{ Exception = $ex; Diagnostics = $diagnostics } {
+            param($Exception, $Diagnostics)
+            Add-RepairExceptionData -Exception $Exception -Diagnostics $Diagnostics -TempPath 'C:\tmp\out.mkv' -Severity Warning -OperationBlocked
+        }
+
+        $ex.Message | Should -BeExactly 'Aucune piste trouvée dans le fichier.'
+        $ex.Data['foreign'] | Should -Be 42
+        $null -eq $output | Should -BeTrue
+
+        $data = InModuleScope 'Tetram.Media.Repair' -Parameters @{ Exception = $ex } {
+            param($Exception)
+            Get-RepairExceptionData -Exception $Exception
+        }
+        $data.Diagnostics | Should -HaveCount 1
+        $data.Diagnostics[0].Message | Should -BeExactly 'native'
+        $data.TempPath | Should -BeExactly 'C:\tmp\out.mkv'
+        $data.Severity | Should -BeExactly 'Warning'
+        $data.OperationBlocked | Should -BeTrue
+        $ex.Data.Contains('Tetram.Media.Repair.SourcePath') | Should -BeFalse
+    }
+
+    It 'n''écrase pas une clé déjà présente et retrouve le contexte dans InnerException' {
+        $inner = [System.IO.IOException]::new('timeout')
+        InModuleScope 'Tetram.Media.Repair' -Parameters @{ Exception = $inner } {
+            param($Exception)
+            Add-RepairExceptionData -Exception $Exception -TempPath 'first.mkv'
+            Add-RepairExceptionData -Exception $Exception -TempPath 'second.mkv'
+        }
+
+        $outer = [System.Management.Automation.RuntimeException]::new('wrapper', $inner)
+        $data = InModuleScope 'Tetram.Media.Repair' -Parameters @{ Exception = $outer } {
+            param($Exception)
+            Get-RepairExceptionData -Exception $Exception
+        }
+
+        $data.TempPath | Should -BeExactly 'first.mkv'
+        $inner.Data['Tetram.Media.Repair.TempPath'] | Should -BeExactly 'first.mkv'
     }
 }

@@ -1,7 +1,7 @@
 @{
 # --- Identité du module ---
     RootModule = 'Tetram.Media.Reencode.psm1'
-    ModuleVersion = '3.5.0'
+    ModuleVersion = '3.5.1'
     GUID = 'd4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95'
 
     Author = 'TRL'
@@ -64,6 +64,7 @@
 - 3.4.1 : Invoke-MkvRepair : correction des diagnostics mkvmerge -J (tableaux JSON warnings/errors restitués via Write-Warning / Write-Error) ; les tests d'identification suivent le format réel de l'outil.
 - 3.4.2 : Invoke-MkvRepair : fallback final si un diagnostic mkvmerge -J n'est ni JSON warnings/errors ni Warning:/Error: ; l'erreur synthétique identifie le fichier ; --ui-language en (en_US n'existe pas dans MKVToolNix).
 - 3.5.0 : Invoke-MkvRepair -ForceReplaceOnWarning : un remux mkvmerge code 1 remplace la source uniquement si le switch est présent ; comportement par défaut inchangé ; les erreurs réelles restent bloquantes pour le fichier courant et ne provoquent jamais de remplacement.
+- 3.5.1 : Diagnostics Repair : en-tête uniforme `Fichier source '<chemin>'` avant chaque bloc relatif à un média (avertissement isolé, erreur, diagnostics mkvmerge) ; règles de poursuite et de remplacement inchangées.
 '@
         }
     }
