@@ -268,6 +268,7 @@ function New-FFprobePacketSpanScratch
                 PtsMetricAvailable              = $false
                 ExactExtentSeconds              = $null
                 PtsExtentSeconds                = $null
+                StartSeconds                    = $null
                 Measurable                      = $hasValidTimeBase
                 Reason                          = $(if (-not $hasValidTimeBase) { 'time_base-invalid' } else { $null })
             }
@@ -400,7 +401,7 @@ function ConvertTo-FFprobeTimelineSeconds
     return $Ticks * [decimal]$Numerator / [decimal]$Denominator
 }
 
-function Get-PacketSpanAnchorSeconds
+function Get-PacketSpanReliableStartSeconds
 {
     param($Span)
     if ($null -eq $Span)
@@ -408,7 +409,6 @@ function Get-PacketSpanAnchorSeconds
         return $null
     }
     $props = $Span.PSObject.Properties
-    # HasUnavailablePts invalide la comparaison du flux, pas son min(pts) déjà observé.
     if (-not $props['HasValidTimeBase'] -or -not $Span.HasValidTimeBase)
     {
         return $null
@@ -417,6 +417,15 @@ function Get-PacketSpanAnchorSeconds
     {
         return $null
     }
+    # Un PTS N/A rend min(pts) observé inutilisable comme ancre de décalage.
+    if ($props['HasUnavailablePts'] -and $Span.HasUnavailablePts)
+    {
+        return $null
+    }
+    if ($props['StartSeconds'] -and $null -ne $Span.StartSeconds)
+    {
+        return $Span.StartSeconds
+    }
     if (-not $props['MinPts'] -or -not $props['TimeBaseNumerator'] -or -not $props['TimeBaseDenominator'])
     {
         return $null
@@ -424,43 +433,9 @@ function Get-PacketSpanAnchorSeconds
     return (ConvertTo-FFprobeTimelineSeconds -Ticks $Span.MinPts -Numerator $Span.TimeBaseNumerator -Denominator $Span.TimeBaseDenominator)
 }
 
-function Get-PacketSpanFileOriginSeconds
+function Set-FFprobePacketSpanExtents
 {
-    param(
-        $Spans,
-        $Indices
-    )
-    if ($null -eq $Spans)
-    {
-        return $null
-    }
-    $keys = if ($null -ne $Indices) { @($Indices) } else { @($Spans.Keys) }
-    $fileOrigin = $null
-    foreach ($index in $keys)
-    {
-        if (-not $Spans.ContainsKey([int]$index))
-        {
-            continue
-        }
-        $startSeconds = Get-PacketSpanAnchorSeconds -Span $Spans[[int]$index]
-        if ($null -eq $startSeconds)
-        {
-            continue
-        }
-        if ($null -eq $fileOrigin -or $startSeconds -lt $fileOrigin)
-        {
-            $fileOrigin = $startSeconds
-        }
-    }
-    return $fileOrigin
-}
-
-function Set-FFprobePacketSpanExtentsFromOrigin
-{
-    param(
-        $Spans,
-        $FileOrigin
-    )
+    param($Spans)
     if ($null -eq $Spans)
     {
         return
@@ -473,6 +448,7 @@ function Set-FFprobePacketSpanExtentsFromOrigin
         $entry.PtsMetricAvailable = $false
         $entry.ExactExtentSeconds = $null
         $entry.PtsExtentSeconds = $null
+        $entry.StartSeconds = $null
         $entry.Measurable = $false
 
         if (-not $entry.HasValidTimeBase)
@@ -483,14 +459,17 @@ function Set-FFprobePacketSpanExtentsFromOrigin
         {
             $entry.Reason = 'pts-unavailable'
         }
-        elseif (-not $entry.HasPtsSample -or $null -eq $FileOrigin)
+        elseif (-not $entry.HasPtsSample)
         {
             $entry.Reason = 'no-packets'
         }
         else
         {
+            # Durée propre au flux : un autre flux ne doit pas déplacer min(pts) ni la fin mesurée.
+            $startSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MinPts -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
+            $entry.StartSeconds = $startSeconds
             $maxPtsSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MaxPts -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
-            $entry.PtsExtentSeconds = $maxPtsSeconds - $FileOrigin
+            $entry.PtsExtentSeconds = $maxPtsSeconds - $startSeconds
             $entry.PtsMetricAvailable = $true
 
             if ($entry.EndFromPtsOnly)
@@ -505,11 +484,10 @@ function Set-FFprobePacketSpanExtentsFromOrigin
                 }
                 else
                 {
-                    # Origine = min(pts) des flux du même ensemble, pas le min du flux : un délai initial reste visible.
                     # HasUnknownDurationAtMaxPts faux au maxPTS implique un packet à duration connue
                     # à ce PTS, donc HasKnownEndSample est déjà vrai.
                     $endSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MaxKnownEnd -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
-                    $entry.ExactExtentSeconds = $endSeconds - $FileOrigin
+                    $entry.ExactExtentSeconds = $endSeconds - $startSeconds
                     $entry.ExactMetricAvailable = $true
                     $entry.Reason = $null
                 }
@@ -528,7 +506,7 @@ function Set-FFprobePacketSpanExtentsFromOrigin
             else
             {
                 $endSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MaxKnownEnd -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
-                $entry.ExactExtentSeconds = $endSeconds - $FileOrigin
+                $entry.ExactExtentSeconds = $endSeconds - $startSeconds
                 $entry.ExactMetricAvailable = $true
                 $entry.Reason = $null
             }
@@ -554,7 +532,7 @@ function Complete-FFprobePacketSpanScratch
         $spans[[int]$index] = $Scratch[$index]
     }
 
-    Set-FFprobePacketSpanExtentsFromOrigin -Spans $spans -FileOrigin (Get-PacketSpanFileOriginSeconds -Spans $spans)
+    Set-FFprobePacketSpanExtents -Spans $spans
     return $spans
 }
 
@@ -700,18 +678,24 @@ function New-IntegrityCheckResult
         [string] $StreamType = $null,
         $SourceRelativeIndex = $null,
         $OutputRelativeIndex = $null,
+        [string] $OtherStreamType = $null,
+        $OtherSourceRelativeIndex = $null,
+        $OtherOutputRelativeIndex = $null,
         [string] $Reason = $null
     )
     [pscustomobject]@{
-        Status               = $Status
-        Method               = $Method
-        Expected             = $Expected
-        Actual               = $Actual
-        Diff                 = $Diff
-        StreamType           = $StreamType
-        SourceRelativeIndex  = $SourceRelativeIndex
-        OutputRelativeIndex  = $OutputRelativeIndex
-        Reason               = $Reason
+        Status                      = $Status
+        Method                      = $Method
+        Expected                    = $Expected
+        Actual                      = $Actual
+        Diff                        = $Diff
+        StreamType                  = $StreamType
+        SourceRelativeIndex         = $SourceRelativeIndex
+        OutputRelativeIndex         = $OutputRelativeIndex
+        OtherStreamType             = $OtherStreamType
+        OtherSourceRelativeIndex    = $OtherSourceRelativeIndex
+        OtherOutputRelativeIndex    = $OtherOutputRelativeIndex
+        Reason                      = $Reason
     }
 }
 
@@ -904,46 +888,71 @@ function Get-PacketSpanEntry
     return $Spans[$key]
 }
 
-function Sync-PacketSpanMappedFileOrigins
+function Get-OffsetComparison
+{
+    param(
+        $Expected,
+        $Actual,
+        $ToleranceSeconds
+    )
+    $expectedDec = [decimal]$Expected
+    $actualDec = [decimal]$Actual
+    $diff = [Math]::Abs($actualDec - $expectedDec)
+    [pscustomobject]@{
+        Diff       = $diff
+        IsMismatch = ($diff -gt [decimal]$ToleranceSeconds)
+    }
+}
+
+function Find-KeptStreamOffsetMismatch
 {
     param(
         $Pairs,
         $SourceSpans,
-        $OutputSpans
+        $OutputSpans,
+        $OffsetToleranceSeconds,
+        [ref] $HadUnknownStream
     )
-    if ($null -eq $Pairs -or $null -eq $SourceSpans -or $null -eq $OutputSpans)
-    {
-        return
-    }
 
-    # Origines calculées sur des sous-ensembles différents : grandeurs non homogènes, faux mismatch.
-    $sourceIndices = [System.Collections.Generic.List[int]]::new()
-    $outputIndices = [System.Collections.Generic.List[int]]::new()
-    foreach ($pair in @($Pairs))
+    $list = @($Pairs)
+    for ($i = 0; $i -lt $list.Count; $i++)
     {
-        $sourceSpan = Get-PacketSpanEntry -Spans $SourceSpans -Index $pair.SourceAbsoluteIndex
-        $outputSpan = Get-PacketSpanEntry -Spans $OutputSpans -Index $pair.OutputAbsoluteIndex
-        if ($null -eq (Get-PacketSpanAnchorSeconds -Span $sourceSpan) -or $null -eq (Get-PacketSpanAnchorSeconds -Span $outputSpan))
+        for ($j = $i + 1; $j -lt $list.Count; $j++)
         {
-            continue
+            $a = $list[$i]
+            $b = $list[$j]
+            $sourceStartA = Get-PacketSpanReliableStartSeconds -Span (Get-PacketSpanEntry -Spans $SourceSpans -Index $a.SourceAbsoluteIndex)
+            $sourceStartB = Get-PacketSpanReliableStartSeconds -Span (Get-PacketSpanEntry -Spans $SourceSpans -Index $b.SourceAbsoluteIndex)
+            $outputStartA = Get-PacketSpanReliableStartSeconds -Span (Get-PacketSpanEntry -Spans $OutputSpans -Index $a.OutputAbsoluteIndex)
+            $outputStartB = Get-PacketSpanReliableStartSeconds -Span (Get-PacketSpanEntry -Spans $OutputSpans -Index $b.OutputAbsoluteIndex)
+
+            if ($null -eq $sourceStartA -or $null -eq $sourceStartB)
+            {
+                $HadUnknownStream.Value = $true
+                continue
+            }
+            if ($null -eq $outputStartA -or $null -eq $outputStartB)
+            {
+                return (New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-offset' `
+                    -StreamType $a.CodecType -SourceRelativeIndex $a.SourceRelativeIndex -OutputRelativeIndex $a.OutputRelativeIndex `
+                    -OtherStreamType $b.CodecType -OtherSourceRelativeIndex $b.SourceRelativeIndex -OtherOutputRelativeIndex $b.OutputRelativeIndex `
+                    -Reason 'packet-timeline-unavailable')
+            }
+
+            $sourceOffset = $sourceStartB - $sourceStartA
+            $outputOffset = $outputStartB - $outputStartA
+            $cmp = Get-OffsetComparison -Expected $sourceOffset -Actual $outputOffset -ToleranceSeconds $OffsetToleranceSeconds
+            if ($cmp.IsMismatch)
+            {
+                return (New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-offset' `
+                    -Expected $sourceOffset -Actual $outputOffset -Diff $cmp.Diff `
+                    -StreamType $a.CodecType -SourceRelativeIndex $a.SourceRelativeIndex -OutputRelativeIndex $a.OutputRelativeIndex `
+                    -OtherStreamType $b.CodecType -OtherSourceRelativeIndex $b.SourceRelativeIndex -OtherOutputRelativeIndex $b.OutputRelativeIndex)
+            }
         }
-        $sourceIndices.Add([int]$pair.SourceAbsoluteIndex)
-        $outputIndices.Add([int]$pair.OutputAbsoluteIndex)
-    }
-    if ($sourceIndices.Count -eq 0)
-    {
-        return
     }
 
-    $sourceOrigin = Get-PacketSpanFileOriginSeconds -Spans $SourceSpans -Indices $sourceIndices
-    $outputOrigin = Get-PacketSpanFileOriginSeconds -Spans $OutputSpans -Indices $outputIndices
-    if ($null -eq $sourceOrigin -or $null -eq $outputOrigin)
-    {
-        return
-    }
-
-    Set-FFprobePacketSpanExtentsFromOrigin -Spans $SourceSpans -FileOrigin $sourceOrigin
-    Set-FFprobePacketSpanExtentsFromOrigin -Spans $OutputSpans -FileOrigin $outputOrigin
+    return $null
 }
 
 function Find-KeptStreamDurationMismatch
@@ -1020,6 +1029,8 @@ function Test-EncodedFileIntegrity
         [Parameter(Mandatory)] [string] $TempFile,
         [double] $TolerancePercent = 0.5,
         [double] $ToleranceSecondsMin = 1.0,
+        [ValidateScript({ [double]::IsFinite($_) -and $_ -ge 0 })]
+        [double] $OffsetToleranceSeconds = 0.1,
         [int[]] $KeptSourceVideoIndices = $null,
         [int[]] $KeptSourceAudioIndices = $null,
         [int[]] $KeptSourceSubtitleIndices = $null
@@ -1076,8 +1087,6 @@ function Test-EncodedFileIntegrity
         return New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-probe' -Reason 'ffprobe-failed'
     }
 
-    Sync-PacketSpanMappedFileOrigins -Pairs $pairs -SourceSpans $sourceMap.Spans -OutputSpans $outputMap.Spans
-
     $hadUnknownStream = $false
     $lastOk = $null
     $mismatch = Find-KeptStreamDurationMismatch `
@@ -1091,6 +1100,17 @@ function Test-EncodedFileIntegrity
     if ($null -ne $mismatch)
     {
         return $mismatch
+    }
+
+    $offsetMismatch = Find-KeptStreamOffsetMismatch `
+        -Pairs $pairs `
+        -SourceSpans $sourceMap.Spans `
+        -OutputSpans $outputMap.Spans `
+        -OffsetToleranceSeconds $OffsetToleranceSeconds `
+        -HadUnknownStream ([ref]$hadUnknownStream)
+    if ($null -ne $offsetMismatch)
+    {
+        return $offsetMismatch
     }
 
     if ($hadUnknownStream)

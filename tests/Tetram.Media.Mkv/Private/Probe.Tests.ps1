@@ -67,7 +67,8 @@ BeforeAll {
             [switch] $ExactUnavailable,
             [switch] $PtsUnavailable,
             [decimal] $ExactExtentSeconds,
-            [decimal] $PtsExtentSeconds
+            [decimal] $PtsExtentSeconds,
+            [decimal] $StartSeconds = 0
         )
 
         $entry = [pscustomobject]@{
@@ -77,6 +78,10 @@ BeforeAll {
             PtsMetricAvailable   = $false
             ExactExtentSeconds   = $null
             PtsExtentSeconds     = $null
+            StartSeconds         = $null
+            HasValidTimeBase     = $false
+            HasPtsSample         = $false
+            HasUnavailablePts    = $false
             Measurable           = $false
             DurationSeconds      = $null
             MinPts               = $null
@@ -87,6 +92,9 @@ BeforeAll {
         }
 
         if ($Unmeasurable) {
+            if ($Reason -eq 'pts-unavailable') {
+                $entry.HasUnavailablePts = $true
+            }
             return $entry
         }
 
@@ -121,6 +129,10 @@ BeforeAll {
         elseif ($entry.PtsMetricAvailable) {
             $entry.DurationSeconds = $entry.PtsExtentSeconds
         }
+        $entry.HasValidTimeBase = $true
+        $entry.HasPtsSample = $true
+        $entry.HasUnavailablePts = $false
+        $entry.StartSeconds = $StartSeconds
         $entry.PacketCount = 1
         $entry.Reason = $(if ($PSBoundParameters.ContainsKey('Reason')) { $Reason } else { $null })
         $entry
@@ -174,7 +186,8 @@ BeforeAll {
             [Parameter(Mandatory)] [hashtable] $TempProbe,
             [int[]] $KeptSourceVideoIndices = @(),
             [int[]] $KeptSourceAudioIndices = @(),
-            [int[]] $KeptSourceSubtitleIndices
+            [int[]] $KeptSourceSubtitleIndices,
+            [double] $OffsetToleranceSeconds
         )
 
         $script:TempProbe = $TempProbe
@@ -189,6 +202,9 @@ BeforeAll {
         if ($PSBoundParameters.ContainsKey('KeptSourceSubtitleIndices')) {
             $bound['KeptSourceSubtitleIndices'] = $KeptSourceSubtitleIndices
         }
+        if ($PSBoundParameters.ContainsKey('OffsetToleranceSeconds')) {
+            $bound['OffsetToleranceSeconds'] = $OffsetToleranceSeconds
+        }
 
         InModuleScope 'Tetram.Media.Mkv' -Parameters $bound {
             param(
@@ -197,7 +213,8 @@ BeforeAll {
                 $TempFile,
                 $KeptSourceVideoIndices,
                 $KeptSourceAudioIndices,
-                $KeptSourceSubtitleIndices
+                $KeptSourceSubtitleIndices,
+                $OffsetToleranceSeconds
             )
 
             $integrityParams = @{
@@ -210,6 +227,9 @@ BeforeAll {
             }
             if ($PSBoundParameters.ContainsKey('KeptSourceSubtitleIndices')) {
                 $integrityParams['KeptSourceSubtitleIndices'] = $KeptSourceSubtitleIndices
+            }
+            if ($PSBoundParameters.ContainsKey('OffsetToleranceSeconds')) {
+                $integrityParams['OffsetToleranceSeconds'] = $OffsetToleranceSeconds
             }
 
             Test-EncodedFileIntegrity @integrityParams
@@ -420,12 +440,12 @@ Describe 'Read-FFprobePacketSpanMap — agrégation multi-flux' {
         $map.Spans[0].ExactExtentSeconds | Should -Be 3
         $map.Spans[1].MinPts | Should -Be 5000
         $map.Spans[1].MaxKnownEnd | Should -Be 9000
-        $map.Spans[1].ExactExtentSeconds | Should -Be 9
+        $map.Spans[1].ExactExtentSeconds | Should -Be 4
     }
 }
 
-Describe 'Read-FFprobePacketSpanMap — origine fichier' {
-    It 'ancre chaque flux à min(pts) global, pas au min du flux : un sub qui commence à 6.5s garde ce délai' {
+Describe 'Read-FFprobePacketSpanMap — durée propre' {
+    It 'mesure la durée du sub depuis son propre min(pts), pas depuis le début fichier' {
         $probe = New-MediaProbe -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
             (New-ProbeStream -CodecType 'subtitle' -Index 1 -TimeBase '1/1000')
@@ -440,11 +460,12 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
         $map.Spans[0].ExactExtentSeconds | Should -Be 1420
         $map.Spans[1].MinPts | Should -Be 6500
         $map.Spans[1].MaxKnownEnd | Should -Be 1421200
-        $map.Spans[1].ExactExtentSeconds | Should -Be ([decimal]'1421.2')
-        $map.Spans[1].ExactExtentSeconds | Should -Not -Be ([decimal]'1414.7')
+        $map.Spans[1].StartSeconds | Should -Be ([decimal]'6.5')
+        $map.Spans[1].ExactExtentSeconds | Should -Be ([decimal]'1414.7')
+        $map.Spans[1].ExactExtentSeconds | Should -Not -Be ([decimal]'1421.2')
     }
 
-    It 'neutralise un décalage global identique via fileOrigin' {
+    It 'conserve les durées propres après une translation globale des timestamps' {
         $probe = New-MediaProbe -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
             (New-ProbeStream -CodecType 'subtitle' -Index 1 -TimeBase '1/1000')
@@ -463,10 +484,14 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
         $a.Spans[0].ExactExtentSeconds | Should -Be $b.Spans[0].ExactExtentSeconds
         $a.Spans[1].ExactExtentSeconds | Should -Be $b.Spans[1].ExactExtentSeconds
         $a.Spans[0].ExactExtentSeconds | Should -Be 10
-        $a.Spans[1].ExactExtentSeconds | Should -Be 3
+        $a.Spans[1].ExactExtentSeconds | Should -Be 1
+        $a.Spans[0].StartSeconds | Should -Be 0
+        $b.Spans[0].StartSeconds | Should -Be 1
+        $a.Spans[1].StartSeconds | Should -Be 2
+        $b.Spans[1].StartSeconds | Should -Be 3
     }
 
-    It 'détecte un décalage propre à une piste' {
+    It 'ne change pas la durée propre quand seule la piste est décalée' {
         $probe = New-MediaProbe -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
             (New-ProbeStream -CodecType 'subtitle' -Index 1 -TimeBase '1/1000')
@@ -483,11 +508,13 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
         $a = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $source
         $b = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $shiftedSub
         $a.Spans[0].ExactExtentSeconds | Should -Be $b.Spans[0].ExactExtentSeconds
-        $b.Spans[1].ExactExtentSeconds | Should -Be 4
-        $a.Spans[1].ExactExtentSeconds | Should -Be 3
+        $a.Spans[1].ExactExtentSeconds | Should -Be 1
+        $b.Spans[1].ExactExtentSeconds | Should -Be 1
+        $a.Spans[1].StartSeconds | Should -Be 2
+        $b.Spans[1].StartSeconds | Should -Be 3
     }
 
-    It 'mesure un PGS par max(pts)-fileOrigin quand une vidéo ancre l''origine à 0' {
+    It 'mesure un PGS par max(pts)-min(pts) du flux même si une vidéo commence à 0' {
         $probe = New-MediaProbe -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
             (New-ProbeStream -CodecType 'subtitle' -Index 1 -TimeBase '1/1000' -CodecName 'hdmv_pgs_subtitle')
@@ -500,11 +527,12 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $text
         $map.Spans[1].PtsMetricAvailable | Should -BeTrue
-        $map.Spans[1].PtsExtentSeconds | Should -Be ([decimal]'1418.2')
+        $map.Spans[1].StartSeconds | Should -Be ([decimal]'6.5')
+        $map.Spans[1].PtsExtentSeconds | Should -Be ([decimal]'1411.7')
         $map.Spans[1].ExactMetricAvailable | Should -BeFalse
     }
 
-    It 'convertit les pts vers une origine commune malgré des time_base distinctes' {
+    It 'convertit chaque flux avec sa time_base sans soustraire des ticks d''une autre piste' {
         $probe = New-MediaProbe -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/90000')
             (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
@@ -516,12 +544,13 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $text
         $map.Spans[0].ExactExtentSeconds | Should -Be 100
-        $map.Spans[1].ExactExtentSeconds | Should -Be 6
+        $map.Spans[1].StartSeconds | Should -Be 5
+        $map.Spans[1].ExactExtentSeconds | Should -Be 1
     }
 }
 
 Describe 'Read-FFprobePacketSpanMap — métriques exacte et PTS' {
-    It 'source Matroska, durations connues : métrique exacte = max(pts+duration)-fileOrigin' {
+    It 'source Matroska, durations connues : métrique exacte = max(pts+duration)-min(pts) du flux' {
         $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
         )
@@ -736,6 +765,41 @@ Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
         $map.Spans[0].PtsMetricAvailable | Should -BeFalse
         $map.Spans[0].Measurable | Should -BeFalse
         $map.Spans[0].Reason | Should -Be 'time_base-invalid'
+    }
+}
+
+Describe 'Get-PacketSpanReliableStartSeconds' {
+    It 'refuse un flux HasUnavailablePts même si MinPts est déjà observé' {
+        $span = [pscustomobject]@{
+            HasValidTimeBase      = $true
+            HasPtsSample          = $true
+            HasUnavailablePts     = $true
+            StartSeconds          = [decimal]3
+            MinPts                = 3000
+            TimeBaseNumerator     = 1
+            TimeBaseDenominator   = 1000
+        }
+        $bound = @{ Span = $span }
+        InModuleScope 'Tetram.Media.Mkv' -Parameters $bound {
+            param($Span)
+            Get-PacketSpanReliableStartSeconds -Span $Span | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'accepte un flux dont tous les PTS sont exploitables, même sans Exact' {
+        $span = [pscustomobject]@{
+            HasValidTimeBase     = $true
+            HasPtsSample         = $true
+            HasUnavailablePts    = $false
+            ExactMetricAvailable = $false
+            PtsMetricAvailable   = $true
+            StartSeconds         = [decimal]5
+        }
+        $bound = @{ Span = $span }
+        InModuleScope 'Tetram.Media.Mkv' -Parameters $bound {
+            param($Span)
+            Get-PacketSpanReliableStartSeconds -Span $Span | Should -Be ([decimal]5)
+        }
     }
 }
 
@@ -1266,21 +1330,19 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
         $result.Actual | Should -BeNullOrEmpty
     }
 
-    It 'aligne fileOrigin sur les flux mappés ancrables des deux côtés : un pts=N/A audio source ne rejette pas une vidéo inchangée' {
+    It 'un PTS N/A audio source ne rejette pas une vidéo inchangée : unknown local, durée vidéo 10 s' {
         $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
             (New-ProbeStream -CodecType 'audio' -Index 0 -TimeBase '1/1000')
             (New-ProbeStream -CodecType 'video' -Index 1 -TimeBase '1/1000')
         )
-        # Audio source empoisonné : exclu de l'origine locale, vidéo ancrée à 5 s → faux mismatch si la sortie garde l'audio à 0.
         $sourceText = @(
-            'stream_index=0|pts=0|duration=1000'
             'stream_index=0|pts=N/A|duration=1000'
-            'stream_index=0|pts=1000|duration=1000'
+            'stream_index=0|pts=3000|duration=1000'
             'stream_index=1|pts=5000|duration=10000'
         ) -join [Environment]::NewLine
         $outputText = @(
             'stream_index=0|pts=0|duration=1000'
-            'stream_index=0|pts=1000|duration=1000'
+            'stream_index=0|pts=3000|duration=1000'
             'stream_index=1|pts=5000|duration=10000'
         ) -join [Environment]::NewLine
 
@@ -1294,12 +1356,12 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
             -KeptSourceAudioIndices @(0)
 
         $script:SourceSpanScan.Spans[1].ExactExtentSeconds | Should -Be $script:TempSpanScan.Spans[1].ExactExtentSeconds
-        $script:SourceSpanScan.Spans[1].ExactExtentSeconds | Should -Be 15
+        $script:SourceSpanScan.Spans[1].ExactExtentSeconds | Should -Be 10
         $result.Status | Should -Not -Be 'mismatch'
         $result.Status | Should -Be 'unknown'
     }
 
-    It 'aligne fileOrigin sur l''intersection : un audio source sans aucun PTS n''impose pas l''origine audio de la sortie' {
+    It 'un audio source sans aucun PTS n''impose pas l''origine audio de la sortie' {
         $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
             (New-ProbeStream -CodecType 'audio' -Index 0 -TimeBase '1/1000')
             (New-ProbeStream -CodecType 'video' -Index 1 -TimeBase '1/1000')
@@ -1511,6 +1573,466 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
         $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp
 
         $result.Status | Should -Be 'unknown'
+    }
+}
+
+Describe 'Test-EncodedFileIntegrity — durées propres et décalages' {
+    BeforeEach {
+        $script:SourceFile = Join-Path $TestDrive 'source.mkv'
+        $script:TempFile = Join-Path $TestDrive 'temp.mkv'
+        Set-Content -LiteralPath $script:SourceFile -Value 'source'
+        Set-Content -LiteralPath $script:TempFile -Value 'temp'
+        $script:TempProbe = @{ format = @{}; streams = @() }
+        $script:SourceSpanScan = New-SpanScan
+        $script:TempSpanScan = New-SpanScan
+
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson { $script:TempProbe }
+        Mock -ModuleName Tetram.Media.Remux Get-FFprobePacketSpanMap {
+            if ($File -eq $script:SourceFile) {
+                return $script:SourceSpanScan
+            }
+            return $script:TempSpanScan
+        }
+        Mock -ModuleName Tetram.Media.Remux Write-ErrorLog {}
+    }
+
+    It 'coupe de début audio : mismatch de durée (10 s vs 7 s)' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=0|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=3000|duration=7000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-end-span'
+        $result.StreamType | Should -Be 'audio'
+        $result.Expected | Should -Be 10
+        $result.Actual | Should -Be 7
+    }
+
+    It 'coupe de début sans perte de durée : mismatch de décalage 0 → 3 s' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=0|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=3000|duration=10000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck `
+            -SourceProbe $probe `
+            -TempProbe $probe `
+            -KeptSourceVideoIndices @(0) `
+            -KeptSourceAudioIndices @(0) `
+            -OffsetToleranceSeconds 1
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-offset'
+        $result.Expected | Should -Be 0
+        $result.Actual | Should -Be 3
+        $result.Diff | Should -Be 3
+        $result.StreamType | Should -Be 'video'
+        $result.OtherStreamType | Should -Be 'audio'
+    }
+
+    It 'coupe de fin : mismatch de durée' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=0|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=0|duration=7000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-end-span'
+        $result.StreamType | Should -Be 'audio'
+        $result.Expected | Should -Be 10
+        $result.Actual | Should -Be 7
+    }
+
+    It 'déplace une piste de +5 s sur 2 h sans changer les durées : mismatch d''offset, pas la tolérance 36 s' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=7200000'
+            'stream_index=1|pts=0|duration=7200000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=7200000'
+            'stream_index=1|pts=5000|duration=7200000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $script:SourceSpanScan.Spans[1].ExactExtentSeconds | Should -Be 7200
+        $script:TempSpanScan.Spans[1].ExactExtentSeconds | Should -Be 7200
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-offset'
+        $result.Diff | Should -Be 5
+    }
+
+    It 'accepte une translation globale qui conserve durées et décalage' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=10000|duration=10000'
+            'stream_index=1|pts=13000|duration=7000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=3000|duration=7000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $result.Status | Should -Be 'ok'
+    }
+
+    It 'calcule la tolérance de durée d''une piste tardive sur sa durée propre' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'subtitle' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=1420000'
+            'stream_index=1|pts=1000000|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=1420000'
+            'stream_index=1|pts=1000000|duration=8500'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceSubtitleIndices @(0)
+
+        $script:SourceSpanScan.Spans[1].StartSeconds | Should -Be 1000
+        $script:SourceSpanScan.Spans[1].ExactExtentSeconds | Should -Be 10
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-end-span'
+        $result.StreamType | Should -Be 'subtitle'
+        $result.Expected | Should -Be 10
+        $result.Actual | Should -Be ([decimal]'8.5')
+    }
+
+    It 'un seul flux translaté reste ok sans exiger un second flux' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+        )
+        $sourceText = 'stream_index=0|pts=10000|duration=10000'
+        $outputText = 'stream_index=0|pts=0|duration=10000'
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0)
+
+        $result.Status | Should -Be 'ok'
+    }
+
+    It 'compare en secondes des débuts négatifs et des time_base distinctes' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/90000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=-90000|duration=900000'
+            'stream_index=1|pts=2000|duration=8000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=900000'
+            'stream_index=1|pts=3000|duration=8000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $script:SourceSpanScan.Spans[0].StartSeconds | Should -Be ([decimal]-1)
+        $script:TempSpanScan.Spans[1].StartSeconds | Should -Be 3
+        $result.Status | Should -Be 'ok'
+    }
+
+    It 'audio source fiable devenu PTS manquant en sortie : mismatch audio, pas un écart vidéo artificiel' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=0|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=N/A|duration=10000'
+            'stream_index=1|pts=0|duration=10000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.StreamType | Should -Be 'audio'
+        $result.StreamType | Should -Not -Be 'video'
+    }
+
+    It 'unknown audio ne masque pas un décalage entre deux pistes fiables' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'audio' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'video' -Index 1 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'subtitle' -Index 2 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=N/A|duration=1000'
+            'stream_index=0|pts=3000|duration=1000'
+            'stream_index=1|pts=0|duration=10000'
+            'stream_index=2|pts=2000|duration=1000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=1|pts=0|duration=10000'
+            'stream_index=2|pts=5000|duration=1000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1, 2) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1, 2) -Text $outputText
+
+        $result = Invoke-IntegrityCheck `
+            -SourceProbe $probe `
+            -TempProbe $probe `
+            -KeptSourceVideoIndices @(0) `
+            -KeptSourceAudioIndices @(0) `
+            -KeptSourceSubtitleIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-offset'
+    }
+
+    It 'unknown audio ne masque pas une durée incorrecte sur une autre piste' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'audio' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'video' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=N/A|duration=1000'
+            'stream_index=1|pts=0|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=1|pts=0|duration=7000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-end-span'
+        $result.StreamType | Should -Be 'video'
+        $result.Expected | Should -Be 10
+        $result.Actual | Should -Be 7
+    }
+
+    It 'un flux sans borne exacte reste utilisable pour comparer les décalages' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=0|pts=10000|duration=N/A'
+            'stream_index=1|pts=0|duration=1000'
+            'stream_index=1|pts=10000|duration=N/A'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=0|pts=10000|duration=N/A'
+            'stream_index=1|pts=3000|duration=1000'
+            'stream_index=1|pts=13000|duration=N/A'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $script:SourceSpanScan.Spans[0].ExactMetricAvailable | Should -BeFalse
+        $script:SourceSpanScan.Spans[0].PtsMetricAvailable | Should -BeTrue
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-offset'
+        $result.Diff | Should -Be 3
+    }
+
+    It 'applique 0,1 s par défaut : 100 ms accepté, 101 ms rejeté' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=0|duration=10000'
+        ) -join [Environment]::NewLine
+        $okText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=100|duration=10000'
+        ) -join [Environment]::NewLine
+        $badText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=101|duration=10000'
+        ) -join [Environment]::NewLine
+
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $okText
+        $ok = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $badText
+        $bad = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $ok.Status | Should -Be 'ok'
+        $bad.Status | Should -Be 'mismatch'
+        $bad.Method | Should -Be 'packet-offset'
+        $bad.Diff | Should -Be ([decimal]'0.101')
+    }
+
+    It 'applique une tolérance d''offset explicite et conserve le signe des décalages' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=-200|duration=10000'
+        ) -join [Environment]::NewLine
+        $keptSign = @(
+            'stream_index=0|pts=1000|duration=10000'
+            'stream_index=1|pts=800|duration=10000'
+        ) -join [Environment]::NewLine
+        $flipped = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=200|duration=10000'
+        ) -join [Environment]::NewLine
+        $tight = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=75|duration=10000'
+        ) -join [Environment]::NewLine
+
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $keptSign
+        $sameSign = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $flipped
+        $flippedResult = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $zeroOffsetSource = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=0|duration=10000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $zeroOffsetSource
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $tight
+        $tightResult = Invoke-IntegrityCheck `
+            -SourceProbe $probe `
+            -TempProbe $probe `
+            -KeptSourceVideoIndices @(0) `
+            -KeptSourceAudioIndices @(0) `
+            -OffsetToleranceSeconds 0.05
+
+        $sameSign.Status | Should -Be 'ok'
+        $flippedResult.Status | Should -Be 'mismatch'
+        $flippedResult.Method | Should -Be 'packet-offset'
+        $flippedResult.Diff | Should -Be ([decimal]'0.4')
+        $tightResult.Status | Should -Be 'mismatch'
+        $tightResult.Method | Should -Be 'packet-offset'
+    }
+
+    It 'trois pistes : le couple éloigné de 0,15 s mismatch même si chacune reste à 0,075 s de la première' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'subtitle' -Index 2 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=0|duration=10000'
+            'stream_index=2|pts=0|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=10000'
+            'stream_index=1|pts=75|duration=10000'
+            'stream_index=2|pts=-75|duration=10000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1, 2) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1, 2) -Text $outputText
+
+        $result = Invoke-IntegrityCheck `
+            -SourceProbe $probe `
+            -TempProbe $probe `
+            -KeptSourceVideoIndices @(0) `
+            -KeptSourceAudioIndices @(0) `
+            -KeptSourceSubtitleIndices @(0) `
+            -OffsetToleranceSeconds 0.1
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-offset'
+        $result.Diff | Should -Be ([decimal]'0.15')
+        $result.StreamType | Should -Be 'audio'
+        $result.OtherStreamType | Should -Be 'subtitle'
+    }
+
+    It 'la tolérance d''offset ne grandit pas avec la durée ni avec un décalage initial important' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'audio' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=7200000'
+            'stream_index=1|pts=3600000|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=7200000'
+            'stream_index=1|pts=3600200|duration=10000'
+        ) -join [Environment]::NewLine
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck -SourceProbe $probe -TempProbe $probe -KeptSourceVideoIndices @(0) -KeptSourceAudioIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-offset'
+        $result.Diff | Should -Be ([decimal]'0.2')
     }
 }
 

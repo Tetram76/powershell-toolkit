@@ -496,6 +496,74 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $script:ErrorLogs[0] | Should -Not -Match 'expected s,'
     }
 
+    It 'rejette un mismatch de décalage et conserve l''original' {
+        $file = Join-Path $TestDrive 'offset-mismatch.mp4'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
+            [pscustomobject]@{
+                Status                     = 'mismatch'
+                Method                     = 'packet-offset'
+                Expected                   = 0.0
+                Actual                     = 5.0
+                Diff                       = 5.0
+                StreamType                 = 'video'
+                SourceRelativeIndex        = 0
+                OutputRelativeIndex        = 0
+                OtherStreamType            = 'audio'
+                OtherSourceRelativeIndex   = 0
+                OtherOutputRelativeIndex   = 0
+            }
+        }
+
+        $state = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
+
+        $state.IntegrityFailureFiles | Should -Contain $file
+        $state.IntegrityWarningFiles | Should -Not -Contain $file
+        $state.SessionResult.Count | Should -Be 0
+        Get-Content -LiteralPath $file -Raw | Should -Match 'source-original'
+        Test-Path -LiteralPath (Join-Path $TestDrive 'offset-mismatch.mkv') | Should -BeFalse
+        $script:ErrorLogs[0] | Should -Match 'offset mismatch'
+        $script:ErrorLogs[0] | Should -Match '0:v:0'
+        $script:ErrorLogs[0] | Should -Match '0:a:0'
+        $script:ErrorLogs[0] | Should -Match 'expected offset 0'
+        $script:ErrorLogs[0] | Should -Not -Match 'duration mismatch'
+    }
+
+    It 'accepte un mismatch de décalage en warning lorsque AllowIntegrityMismatch est vrai' {
+        $file = Join-Path $TestDrive 'offset-allow.mp4'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
+            [pscustomobject]@{
+                Status                     = 'mismatch'
+                Method                     = 'packet-offset'
+                Expected                   = 0.0
+                Actual                     = 5.0
+                Diff                       = 5.0
+                StreamType                 = 'video'
+                SourceRelativeIndex        = 0
+                OutputRelativeIndex        = 0
+                OtherStreamType            = 'audio'
+                OtherSourceRelativeIndex   = 0
+                OtherOutputRelativeIndex   = 0
+            }
+        }
+
+        $state = Invoke-ReencodeFileForIntegrity `
+            -Filename $file `
+            -Config (New-ReencodeFileTestConfig -AllowIntegrityMismatch $true) `
+            -TempPath $TestDrive
+
+        $state.IntegrityFailureFiles | Should -HaveCount 0
+        $state.IntegrityWarningFiles | Should -Contain $file
+        $state.SessionResult.Count | Should -Be 1
+        $script:WarningLogs[0] | Should -Match 'offset mismatch'
+        $script:WarningLogs[0] | Should -Match 'AllowIntegrityMismatch'
+        Test-Path -LiteralPath $file | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $TestDrive 'offset-allow.mkv') -PathType Leaf | Should -BeTrue
+    }
+
     It 'identifie le flux fautif dans le message de mismatch' {
         $file = Join-Path $TestDrive 'mismatch-stream.mp4'
         Set-Content -LiteralPath $file -Value 'source-original'

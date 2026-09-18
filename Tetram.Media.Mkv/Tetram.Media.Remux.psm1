@@ -529,6 +529,25 @@ function Invoke-ReencodeFile
                         -StreamType $streamType `
                         -SourceRelativeIndex $sourceRelativeIndex `
                         -OutputRelativeIndex $outputRelativeIndex
+                    $otherStreamType = $null
+                    $otherSourceRelativeIndex = $null
+                    $otherOutputRelativeIndex = $null
+                    if ($integrity.PSObject.Properties['OtherStreamType'])
+                    {
+                        $otherStreamType = $integrity.OtherStreamType
+                    }
+                    if ($integrity.PSObject.Properties['OtherSourceRelativeIndex'])
+                    {
+                        $otherSourceRelativeIndex = $integrity.OtherSourceRelativeIndex
+                    }
+                    if ($integrity.PSObject.Properties['OtherOutputRelativeIndex'])
+                    {
+                        $otherOutputRelativeIndex = $integrity.OtherOutputRelativeIndex
+                    }
+                    $otherLabel = Get-IntegrityStreamMapLabel `
+                        -StreamType $otherStreamType `
+                        -SourceRelativeIndex $otherSourceRelativeIndex `
+                        -OutputRelativeIndex $otherOutputRelativeIndex
                     $reason = $null
                     if ($integrity.PSObject.Properties['Reason'] -and -not [string]::IsNullOrWhiteSpace([string]$integrity.Reason))
                     {
@@ -541,6 +560,19 @@ function Invoke-ReencodeFile
                     elseif ($integrity.Method -eq 'packet-probe')
                     {
                         "Integrity check failed for '{0}' [via packet-probe] - encoded file packet timeline could not be probed" -f $Filename
+                    }
+                    elseif ($integrity.Method -eq 'packet-offset')
+                    {
+                        if ($streamLabel -and $otherLabel)
+                        {
+                            "Integrity offset mismatch for '{0}' [{1} vs {2}] - expected offset {3:0.000}s, got {4:0.000}s (diff {5:0.000}s)" -f `
+                                $Filename, $streamLabel, $otherLabel, $integrity.Expected, $integrity.Actual, $integrity.Diff
+                        }
+                        else
+                        {
+                            "Integrity offset mismatch for '{0}' [via packet-offset] - expected offset {1:0.000}s, got {2:0.000}s (diff {3:0.000}s)" -f `
+                                $Filename, $integrity.Expected, $integrity.Actual, $integrity.Diff
+                        }
                     }
                     elseif ($null -eq $integrity.Expected -or $null -eq $integrity.Actual)
                     {
