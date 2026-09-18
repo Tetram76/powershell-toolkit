@@ -39,18 +39,21 @@ BeforeAll {
     function script:New-MediaProbe {
         param(
             [double] $FormatDuration,
+            [string] $FormatName,
             [object[]] $Streams = @()
         )
 
         $probe = @{
             streams = @($Streams)
         }
+        $format = @{}
         if ($PSBoundParameters.ContainsKey('FormatDuration')) {
-            $probe['format'] = @{ duration = [string]$FormatDuration }
+            $format['duration'] = [string]$FormatDuration
         }
-        else {
-            $probe['format'] = @{}
+        if ($PSBoundParameters.ContainsKey('FormatName')) {
+            $format['format_name'] = $FormatName
         }
+        $probe['format'] = $format
         $probe
     }
 
@@ -59,30 +62,68 @@ BeforeAll {
             [Parameter(Mandatory)] [int] $StreamIndex,
             [decimal] $DurationSeconds,
             [switch] $Unmeasurable,
-            [string] $Reason = 'no-packets'
+            [string] $Reason = 'no-packets',
+            [switch] $EndFromPtsOnly,
+            [switch] $ExactUnavailable,
+            [switch] $PtsUnavailable,
+            [decimal] $ExactExtentSeconds,
+            [decimal] $PtsExtentSeconds
         )
 
-        if ($Unmeasurable) {
-            return [pscustomobject]@{
-                StreamIndex      = $StreamIndex
-                Measurable       = $false
-                DurationSeconds  = $null
-                MinPts           = $null
-                MaxEnd           = $null
-                PacketCount      = 0
-                Reason           = $Reason
-            }
+        $entry = [pscustomobject]@{
+            StreamIndex          = $StreamIndex
+            EndFromPtsOnly       = [bool]$EndFromPtsOnly
+            ExactMetricAvailable = $false
+            PtsMetricAvailable   = $false
+            ExactExtentSeconds   = $null
+            PtsExtentSeconds     = $null
+            Measurable           = $false
+            DurationSeconds      = $null
+            MinPts               = $null
+            MaxPts               = $null
+            MaxKnownEnd          = $null
+            PacketCount          = 0
+            Reason               = $Reason
         }
 
-        [pscustomobject]@{
-            StreamIndex      = $StreamIndex
-            Measurable       = $true
-            DurationSeconds  = $DurationSeconds
-            MinPts           = $null
-            MaxEnd           = $null
-            PacketCount      = 1
-            Reason           = $null
+        if ($Unmeasurable) {
+            return $entry
         }
+
+        $exactValue = $null
+        if ($PSBoundParameters.ContainsKey('ExactExtentSeconds')) {
+            $exactValue = $ExactExtentSeconds
+        }
+        elseif ($PSBoundParameters.ContainsKey('DurationSeconds')) {
+            $exactValue = $DurationSeconds
+        }
+
+        $ptsValue = $null
+        if ($PSBoundParameters.ContainsKey('PtsExtentSeconds')) {
+            $ptsValue = $PtsExtentSeconds
+        }
+        elseif ($PSBoundParameters.ContainsKey('DurationSeconds')) {
+            $ptsValue = $DurationSeconds
+        }
+
+        if (-not $ExactUnavailable -and $null -ne $exactValue) {
+            $entry.ExactMetricAvailable = $true
+            $entry.ExactExtentSeconds = $exactValue
+        }
+        if (-not $PtsUnavailable -and $null -ne $ptsValue) {
+            $entry.PtsMetricAvailable = $true
+            $entry.PtsExtentSeconds = $ptsValue
+        }
+        $entry.Measurable = $entry.ExactMetricAvailable -or $entry.PtsMetricAvailable
+        if ($entry.ExactMetricAvailable) {
+            $entry.DurationSeconds = $entry.ExactExtentSeconds
+        }
+        elseif ($entry.PtsMetricAvailable) {
+            $entry.DurationSeconds = $entry.PtsExtentSeconds
+        }
+        $entry.PacketCount = 1
+        $entry.Reason = $null
+        $entry
     }
 
     function script:New-SpanScan {
@@ -176,6 +217,30 @@ BeforeAll {
     }
 }
 
+Describe 'Test-FFprobeMatroskaFormat' {
+    It 'reconnaît le démuxer FFmpeg matroska,webm' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @()
+        $bound = @{ Probe = $probe }
+        InModuleScope 'Tetram.Media.Mkv' -Parameters $bound {
+            param($Probe)
+            Test-FFprobeMatroskaFormat -Probe $Probe | Should -BeTrue
+        }
+    }
+
+    It 'refuse un format_name inconnu, absent, ou une extension .mkv' {
+        $unknown = New-MediaProbe -FormatName 'mpegts' -Streams @()
+        $absent = New-MediaProbe -Streams @()
+        $nullProbe = $null
+        $bound = @{ Unknown = $unknown; Absent = $absent; NullProbe = $nullProbe }
+        InModuleScope 'Tetram.Media.Mkv' -Parameters $bound {
+            param($Unknown, $Absent, $NullProbe)
+            Test-FFprobeMatroskaFormat -Probe $Unknown | Should -BeFalse
+            Test-FFprobeMatroskaFormat -Probe $Absent | Should -BeFalse
+            Test-FFprobeMatroskaFormat -Probe $NullProbe | Should -BeFalse
+        }
+    }
+}
+
 Describe 'ConvertFrom-FFprobeCompactPacketLine' {
     It 'parse les champs indépendamment de leur ordre' {
         $bound = @{
@@ -211,11 +276,12 @@ Describe 'Read-FFprobePacketSpanMap — formule' {
 
         $map = Invoke-ReadPacketSpanMap -Probe $script:SpanProbe -StreamIndices @(0) -Text $text
         $span = $map.Spans[0]
-        $span.Measurable | Should -BeTrue
+        $span.ExactMetricAvailable | Should -BeTrue
         $span.MinPts | Should -Be 10000
-        $span.MaxEnd | Should -Be 33000
-        $span.DurationSeconds | Should -Be 23
-        $span.DurationSeconds | Should -Not -Be 5
+        $span.MaxKnownEnd | Should -Be 33000
+        $span.ExactExtentSeconds | Should -Be 23
+        $span.PtsExtentSeconds | Should -Be 20
+        $span.ExactExtentSeconds | Should -Not -Be 5
     }
 
     It 'utilise min/max même si l''ordre PTS n''est pas monotone' {
@@ -228,8 +294,8 @@ Describe 'Read-FFprobePacketSpanMap — formule' {
         $map = Invoke-ReadPacketSpanMap -Probe $script:SpanProbe -StreamIndices @(0) -Text $text
         $span = $map.Spans[0]
         $span.MinPts | Should -Be 100
-        $span.MaxEnd | Should -Be 340
-        $span.DurationSeconds | Should -Be ([decimal]'0.24')
+        $span.MaxKnownEnd | Should -Be 340
+        $span.ExactExtentSeconds | Should -Be ([decimal]'0.24')
     }
 
     It 'convertit 9000000 ticks en 100s avec time_base 1/90000' {
@@ -239,8 +305,8 @@ Describe 'Read-FFprobePacketSpanMap — formule' {
         $text = 'stream_index=0|pts=0|duration=9000000'
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
-        $map.Spans[0].Measurable | Should -BeTrue
-        $map.Spans[0].DurationSeconds | Should -Be 100
+        $map.Spans[0].ExactMetricAvailable | Should -BeTrue
+        $map.Spans[0].ExactExtentSeconds | Should -Be 100
     }
 
     It 'donne 100s pour 1/1000 (100000 ticks) et pour 1/90000 (9000000 ticks)' {
@@ -254,9 +320,9 @@ Describe 'Read-FFprobePacketSpanMap — formule' {
         $sourceMap = Invoke-ReadPacketSpanMap -Probe $sourceProbe -StreamIndices @(0) -Text 'stream_index=0|pts=0|duration=100000'
         $outputMap = Invoke-ReadPacketSpanMap -Probe $outputProbe -StreamIndices @(0) -Text 'stream_index=0|pts=0|duration=9000000'
 
-        $sourceMap.Spans[0].DurationSeconds | Should -Be 100
-        $outputMap.Spans[0].DurationSeconds | Should -Be 100
-        $sourceMap.Spans[0].DurationSeconds | Should -Be $outputMap.Spans[0].DurationSeconds
+        $sourceMap.Spans[0].ExactExtentSeconds | Should -Be 100
+        $outputMap.Spans[0].ExactExtentSeconds | Should -Be 100
+        $sourceMap.Spans[0].ExactExtentSeconds | Should -Be $outputMap.Spans[0].ExactExtentSeconds
     }
 
     It 'calcule le span d''un sous-titre commençant après zéro (1421200 - 6500 ms)' {
@@ -270,8 +336,8 @@ Describe 'Read-FFprobePacketSpanMap — formule' {
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
         $map.Spans[0].MinPts | Should -Be 6500
-        $map.Spans[0].MaxEnd | Should -Be 1421200
-        $map.Spans[0].DurationSeconds | Should -Be ([decimal]'1414.7')
+        $map.Spans[0].MaxKnownEnd | Should -Be 1421200
+        $map.Spans[0].ExactExtentSeconds | Should -Be ([decimal]'1414.7')
     }
 
     It 'prend la fin de timeline au max(pts+duration), pas au max(pts)' {
@@ -286,10 +352,11 @@ Describe 'Read-FFprobePacketSpanMap — formule' {
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
         $span = $map.Spans[0]
-        $span.Measurable | Should -BeTrue
+        $span.ExactMetricAvailable | Should -BeTrue
         $span.MinPts | Should -Be 0
-        $span.MaxEnd | Should -Be 5000
-        $span.DurationSeconds | Should -Be 5
+        $span.MaxKnownEnd | Should -Be 5000
+        $span.ExactExtentSeconds | Should -Be 5
+        $span.PtsExtentSeconds | Should -Be 2
     }
 
     It 'mesure un PGS par max(pts) alors que duration est toujours N/A' {
@@ -304,10 +371,11 @@ Describe 'Read-FFprobePacketSpanMap — formule' {
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
         $span = $map.Spans[0]
-        $span.Measurable | Should -BeTrue
+        $span.ExactMetricAvailable | Should -BeFalse
+        $span.PtsMetricAvailable | Should -BeTrue
         $span.MinPts | Should -Be 6500
-        $span.MaxEnd | Should -Be 1418200
-        $span.DurationSeconds | Should -Be ([decimal]'1411.7')
+        $span.MaxPts | Should -Be 1418200
+        $span.PtsExtentSeconds | Should -Be ([decimal]'1411.7')
     }
 }
 
@@ -331,11 +399,11 @@ Describe 'Read-FFprobePacketSpanMap — agrégation multi-flux' {
         $map.Spans.ContainsKey(1) | Should -BeTrue
         $map.Spans.ContainsKey(2) | Should -BeFalse
         $map.Spans[0].MinPts | Should -Be 0
-        $map.Spans[0].MaxEnd | Should -Be 3000
-        $map.Spans[0].DurationSeconds | Should -Be 3
+        $map.Spans[0].MaxKnownEnd | Should -Be 3000
+        $map.Spans[0].ExactExtentSeconds | Should -Be 3
         $map.Spans[1].MinPts | Should -Be 5000
-        $map.Spans[1].MaxEnd | Should -Be 9000
-        $map.Spans[1].DurationSeconds | Should -Be 9
+        $map.Spans[1].MaxKnownEnd | Should -Be 9000
+        $map.Spans[1].ExactExtentSeconds | Should -Be 9
     }
 }
 
@@ -352,11 +420,11 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
         ) -join [Environment]::NewLine
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $text
-        $map.Spans[0].DurationSeconds | Should -Be 1420
+        $map.Spans[0].ExactExtentSeconds | Should -Be 1420
         $map.Spans[1].MinPts | Should -Be 6500
-        $map.Spans[1].MaxEnd | Should -Be 1421200
-        $map.Spans[1].DurationSeconds | Should -Be ([decimal]'1421.2')
-        $map.Spans[1].DurationSeconds | Should -Not -Be ([decimal]'1414.7')
+        $map.Spans[1].MaxKnownEnd | Should -Be 1421200
+        $map.Spans[1].ExactExtentSeconds | Should -Be ([decimal]'1421.2')
+        $map.Spans[1].ExactExtentSeconds | Should -Not -Be ([decimal]'1414.7')
     }
 
     It 'neutralise un décalage global identique via fileOrigin' {
@@ -375,10 +443,10 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
 
         $a = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $base
         $b = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $shifted
-        $a.Spans[0].DurationSeconds | Should -Be $b.Spans[0].DurationSeconds
-        $a.Spans[1].DurationSeconds | Should -Be $b.Spans[1].DurationSeconds
-        $a.Spans[0].DurationSeconds | Should -Be 10
-        $a.Spans[1].DurationSeconds | Should -Be 3
+        $a.Spans[0].ExactExtentSeconds | Should -Be $b.Spans[0].ExactExtentSeconds
+        $a.Spans[1].ExactExtentSeconds | Should -Be $b.Spans[1].ExactExtentSeconds
+        $a.Spans[0].ExactExtentSeconds | Should -Be 10
+        $a.Spans[1].ExactExtentSeconds | Should -Be 3
     }
 
     It 'détecte un décalage propre à une piste' {
@@ -397,9 +465,9 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
 
         $a = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $source
         $b = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $shiftedSub
-        $a.Spans[0].DurationSeconds | Should -Be $b.Spans[0].DurationSeconds
-        $b.Spans[1].DurationSeconds | Should -Be 4
-        $a.Spans[1].DurationSeconds | Should -Be 3
+        $a.Spans[0].ExactExtentSeconds | Should -Be $b.Spans[0].ExactExtentSeconds
+        $b.Spans[1].ExactExtentSeconds | Should -Be 4
+        $a.Spans[1].ExactExtentSeconds | Should -Be 3
     }
 
     It 'mesure un PGS par max(pts)-fileOrigin quand une vidéo ancre l''origine à 0' {
@@ -414,8 +482,9 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
         ) -join [Environment]::NewLine
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $text
-        $map.Spans[1].Measurable | Should -BeTrue
-        $map.Spans[1].DurationSeconds | Should -Be ([decimal]'1418.2')
+        $map.Spans[1].PtsMetricAvailable | Should -BeTrue
+        $map.Spans[1].PtsExtentSeconds | Should -Be ([decimal]'1418.2')
+        $map.Spans[1].ExactMetricAvailable | Should -BeFalse
     }
 
     It 'convertit les pts vers une origine commune malgré des time_base distinctes' {
@@ -429,14 +498,31 @@ Describe 'Read-FFprobePacketSpanMap — origine fichier' {
         ) -join [Environment]::NewLine
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $text
-        $map.Spans[0].DurationSeconds | Should -Be 100
-        $map.Spans[1].DurationSeconds | Should -Be 6
+        $map.Spans[0].ExactExtentSeconds | Should -Be 100
+        $map.Spans[1].ExactExtentSeconds | Should -Be 6
     }
 }
 
-Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
-    It 'infère end=pts[suivant] si duration inconnue et qu''un Block suit en ordre d''affichage' {
-        $probe = New-MediaProbe -Streams @(
+Describe 'Read-FFprobePacketSpanMap — métriques exacte et PTS' {
+    It 'source Matroska, durations connues : métrique exacte = max(pts+duration)-fileOrigin' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+        )
+        $text = @(
+            'stream_index=0|pts=10000|duration=2000'
+            'stream_index=0|pts=30000|duration=3000'
+        ) -join [Environment]::NewLine
+
+        $span = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text).Spans[0]
+        $span.ExactMetricAvailable | Should -BeTrue
+        $span.PtsMetricAvailable | Should -BeTrue
+        $span.ExactExtentSeconds | Should -Be 23
+        $span.PtsExtentSeconds | Should -Be 20
+        $span.ExactExtentSeconds | Should -Not -Be 5
+    }
+
+    It 'source Matroska : duration=0 intermédiaire conserve la métrique exacte (RFC 9559, pas next_pts hors Matroska)' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
             (New-ProbeStream -CodecType 'subtitle' -Index 0 -TimeBase '1/1000')
         )
         $text = @(
@@ -446,16 +532,17 @@ Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
             'stream_index=0|pts=2000|duration=1000'
         ) -join [Environment]::NewLine
 
-        $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
-        $span = $map.Spans[0]
-        $span.Measurable | Should -BeTrue
+        $span = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text).Spans[0]
+        $span.ExactMetricAvailable | Should -BeTrue
+        $span.PtsMetricAvailable | Should -BeTrue
         $span.MinPts | Should -Be 0
-        $span.MaxEnd | Should -Be 3000
-        $span.DurationSeconds | Should -Be 3
+        $span.MaxKnownEnd | Should -Be 3000
+        $span.ExactExtentSeconds | Should -Be 3
+        $span.PtsExtentSeconds | Should -Be 2
     }
 
-    It 'rend le flux non mesurable seulement si le dernier packet en ordre d''affichage a duration inconnue' {
-        $probe = New-MediaProbe -Streams @(
+    It 'source Matroska : dernier Block sans durée → exact indisponible, PTS disponible' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
         )
         $text = @(
@@ -463,13 +550,15 @@ Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
             'stream_index=0|pts=1000|duration=0'
         ) -join [Environment]::NewLine
 
-        $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
-        $map.Spans[0].Measurable | Should -BeFalse
-        $map.Spans[0].Reason | Should -Be 'duration-unknown'
+        $span = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text).Spans[0]
+        $span.ExactMetricAvailable | Should -BeFalse
+        $span.PtsMetricAvailable | Should -BeTrue
+        $span.PtsExtentSeconds | Should -Be 1
+        $span.Reason | Should -Be 'duration-unknown'
     }
 
-    It 'rend le flux non mesurable si duration inconnue est sur le dernier pts, même hors dernier packet muxé' {
-        $probe = New-MediaProbe -Streams @(
+    It 'source Matroska : duration inconnue sur le max PTS, même hors dernier packet muxé → exact indisponible' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
         )
         $text = @(
@@ -478,13 +567,15 @@ Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
             'stream_index=0|pts=1000|duration=1000'
         ) -join [Environment]::NewLine
 
-        $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
-        $map.Spans[0].Measurable | Should -BeFalse
-        $map.Spans[0].Reason | Should -Be 'duration-unknown'
+        $span = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text).Spans[0]
+        $span.ExactMetricAvailable | Should -BeFalse
+        $span.PtsMetricAvailable | Should -BeTrue
+        $span.PtsExtentSeconds | Should -Be 3
+        $span.Reason | Should -Be 'duration-unknown'
     }
 
-    It 'au même pts, seul le dernier Block en ordre d''arrivée exige une duration' {
-        $probe = New-MediaProbe -Streams @(
+    It 'source Matroska : au même pts, seul le dernier Block en ordre d''arrivée exige une duration' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
             (New-ProbeStream -CodecType 'subtitle' -Index 0 -TimeBase '1/1000')
         )
         $okLast = @(
@@ -496,15 +587,88 @@ Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
             'stream_index=0|pts=1000|duration=0'
         ) -join [Environment]::NewLine
 
-        $ok = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $okLast
-        $ok.Spans[0].Measurable | Should -BeTrue
-        $ok.Spans[0].MaxEnd | Should -Be 1500
-        $ok.Spans[0].DurationSeconds | Should -Be ([decimal]'0.5')
+        $ok = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $okLast).Spans[0]
+        $ok.ExactMetricAvailable | Should -BeTrue
+        $ok.MaxKnownEnd | Should -Be 1500
+        $ok.ExactExtentSeconds | Should -Be ([decimal]'0.5')
 
-        $bad = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $badLast
-        $bad.Spans[0].Measurable | Should -BeFalse
-        $bad.Spans[0].Reason | Should -Be 'duration-unknown'
+        $bad = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $badLast).Spans[0]
+        $bad.ExactMetricAvailable | Should -BeFalse
+        $bad.PtsMetricAvailable | Should -BeTrue
+        $bad.Reason | Should -Be 'duration-unknown'
     }
+
+    It 'source non-Matroska, durations connues : métrique exacte disponible' {
+        $probe = New-MediaProbe -FormatName 'mpegts' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+        )
+        $text = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=0|pts=2000|duration=1000'
+        ) -join [Environment]::NewLine
+
+        $span = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text).Spans[0]
+        $span.ExactMetricAvailable | Should -BeTrue
+        $span.PtsMetricAvailable | Should -BeTrue
+        $span.ExactExtentSeconds | Should -Be 3
+        $span.PtsExtentSeconds | Should -Be 2
+    }
+
+    It 'source non-Matroska : duration=0 intermédiaire n''applique pas la sémantique Matroska' {
+        $probe = New-MediaProbe -FormatName 'mpegts' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+        )
+        $text = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=0|pts=500|duration=0'
+            'stream_index=0|pts=2000|duration=1000'
+        ) -join [Environment]::NewLine
+
+        $span = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text).Spans[0]
+        $span.ExactMetricAvailable | Should -BeFalse
+        $span.PtsMetricAvailable | Should -BeTrue
+        $span.PtsExtentSeconds | Should -Be 2
+        $span.Reason | Should -Be 'duration-unknown'
+    }
+
+    It 'source non-Matroska : dernier duration=0 → fallback PTS uniquement' {
+        $probe = New-MediaProbe -FormatName 'mp4' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+        )
+        $text = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=0|pts=1000|duration=0'
+        ) -join [Environment]::NewLine
+
+        $span = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text).Spans[0]
+        $span.ExactMetricAvailable | Should -BeFalse
+        $span.PtsMetricAvailable | Should -BeTrue
+        $span.PtsExtentSeconds | Should -Be 1
+    }
+
+    It 'format_name absent ou inconnu : comportement conservateur non-Matroska' {
+        $text = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=0|pts=500|duration=0'
+            'stream_index=0|pts=2000|duration=1000'
+        ) -join [Environment]::NewLine
+        $streams = @(
+            (New-ProbeStream -CodecType 'video' -Index 0 -TimeBase '1/1000')
+        )
+
+        foreach ($probe in @(
+                (New-MediaProbe -Streams $streams),
+                (New-MediaProbe -FormatName 'avi' -Streams $streams)
+            )) {
+            $span = (Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text).Spans[0]
+            $span.ExactMetricAvailable | Should -BeFalse
+            $span.PtsMetricAvailable | Should -BeTrue
+            $span.PtsExtentSeconds | Should -Be 2
+        }
+    }
+}
+
+Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
 
     It 'rend le flux non mesurable si pts est N/A' {
         $probe = New-MediaProbe -Streams @(
@@ -513,6 +677,8 @@ Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
         $text = 'stream_index=0|pts=N/A|duration=1000'
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
+        $map.Spans[0].ExactMetricAvailable | Should -BeFalse
+        $map.Spans[0].PtsMetricAvailable | Should -BeFalse
         $map.Spans[0].Measurable | Should -BeFalse
     }
 
@@ -523,6 +689,8 @@ Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
         $text = 'stream_index=0|pts=0|duration=1000'
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
+        $map.Spans[0].ExactMetricAvailable | Should -BeFalse
+        $map.Spans[0].PtsMetricAvailable | Should -BeFalse
         $map.Spans[0].Measurable | Should -BeFalse
     }
 
@@ -533,6 +701,8 @@ Describe 'Read-FFprobePacketSpanMap — packets non exploitables' {
         $text = 'stream_index=0|pts=0|duration=1000'
 
         $map = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0) -Text $text
+        $map.Spans[0].ExactMetricAvailable | Should -BeFalse
+        $map.Spans[0].PtsMetricAvailable | Should -BeFalse
         $map.Spans[0].Measurable | Should -BeFalse
         $map.Spans[0].Reason | Should -Be 'time_base-invalid'
     }
@@ -575,7 +745,7 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
         $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceVideoIndices @(0)
 
         $result.Status | Should -Be 'ok'
-        $result.Method | Should -Be 'packet-span'
+        $result.Method | Should -Be 'packet-end-span'
         $result.Expected | Should -Be 100
         $result.Actual | Should -Be 100
     }
@@ -606,7 +776,7 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
             -KeptSourceSubtitleIndices @(0)
 
         $result.Status | Should -Be 'ok'
-        $result.Method | Should -Be 'packet-span'
+        $result.Method | Should -Be 'packet-end-span'
     }
 
     It 'compare via time_base distinctes une fois converties en secondes' {
@@ -645,7 +815,7 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
         $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceVideoIndices @(0)
 
         $result.Status | Should -Be 'mismatch'
-        $result.Method | Should -Be 'packet-span'
+        $result.Method | Should -Be 'packet-end-span'
         $result.Expected | Should -Be 100
         $result.Actual | Should -Be ([decimal]'98.9')
     }
@@ -721,7 +891,7 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
             -KeptSourceSubtitleIndices @(0)
 
         $result.Status | Should -Be 'ok'
-        $result.Method | Should -Be 'packet-span'
+        $result.Method | Should -Be 'packet-end-span'
     }
 
     It 'mappe source a:2 -> output a:1 après suppression d''une piste' {
@@ -754,7 +924,7 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
             -KeptSourceAudioIndices @(0, 2)
 
         $result.Status | Should -Be 'mismatch'
-        $result.Method | Should -Be 'packet-span'
+        $result.Method | Should -Be 'packet-end-span'
         $result.StreamType | Should -Be 'audio'
         $result.SourceRelativeIndex | Should -Be 2
         $result.OutputRelativeIndex | Should -Be 1
@@ -970,6 +1140,201 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
         $result.Method | Should -Be 'probe'
     }
 
+    It 'sortie MKV dernier Block sans durée : fallback PTS↔PTS, pas rejet automatique' {
+        $source = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $temp = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $script:SourceSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactExtentSeconds 3 -PtsExtentSeconds 2)
+        )
+        $script:TempSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactUnavailable -PtsExtentSeconds 2)
+        )
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceVideoIndices @(0)
+
+        $result.Status | Should -Be 'ok'
+        $result.Method | Should -Be 'packet-pts-span'
+        $result.Expected | Should -Be 2
+        $result.Actual | Should -Be 2
+    }
+
+    It 'source exact indisponible / sortie exact disponible / PTS des deux côtés : PTS↔PTS' {
+        $source = New-MediaProbe -FormatName 'mpegts' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $temp = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $script:SourceSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactUnavailable -PtsExtentSeconds 2)
+        )
+        $script:TempSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactExtentSeconds 10 -PtsExtentSeconds 2)
+        )
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceVideoIndices @(0)
+
+        $result.Status | Should -Be 'ok'
+        $result.Method | Should -Be 'packet-pts-span'
+        $result.Expected | Should -Be 2
+        $result.Actual | Should -Be 2
+    }
+
+    It 'source exact disponible / sortie exact indisponible / PTS des deux côtés : PTS↔PTS' {
+        $source = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $temp = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $script:SourceSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactExtentSeconds 10 -PtsExtentSeconds 2)
+        )
+        $script:TempSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactUnavailable -PtsExtentSeconds 2)
+        )
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceVideoIndices @(0)
+
+        $result.Status | Should -Be 'ok'
+        $result.Method | Should -Be 'packet-pts-span'
+        $result.Expected | Should -Be 2
+        $result.Actual | Should -Be 2
+    }
+
+    It 'fallback PTS avec sortie tronquée : mismatch' {
+        $source = New-MediaProbe -FormatName 'mpegts' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $temp = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $script:SourceSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactUnavailable -PtsExtentSeconds 100)
+        )
+        $script:TempSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactUnavailable -PtsExtentSeconds 90)
+        )
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceVideoIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-pts-span'
+        $result.Expected | Should -Be 100
+        $result.Actual | Should -Be 90
+    }
+
+    It 'fallback PTS avec sortie allongée hors tolérance : mismatch' {
+        $source = New-MediaProbe -FormatName 'mpegts' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $temp = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $script:SourceSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactUnavailable -PtsExtentSeconds 100)
+        )
+        $script:TempSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -ExactUnavailable -PtsExtentSeconds ([decimal]'101.1'))
+        )
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceVideoIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-pts-span'
+        $result.Expected | Should -Be 100
+        $result.Actual | Should -Be ([decimal]'101.1')
+    }
+
+    It 'PGS : compare maxPTS-fileOrigin sans dépendre de duration' {
+        $source = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'subtitle' -Index 0 -CodecName 'hdmv_pgs_subtitle')
+        )
+        $temp = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'subtitle' -Index 0 -CodecName 'hdmv_pgs_subtitle')
+        )
+        $script:SourceSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -EndFromPtsOnly -ExactUnavailable -PtsExtentSeconds ([decimal]'1411.7'))
+        )
+        $script:TempSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -EndFromPtsOnly -ExactUnavailable -PtsExtentSeconds ([decimal]'1411.7'))
+        )
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceSubtitleIndices @(0)
+
+        $result.Status | Should -Be 'ok'
+        $result.Method | Should -Be 'packet-pts-span'
+        $result.Expected | Should -Be ([decimal]'1411.7')
+        $result.Actual | Should -Be ([decimal]'1411.7')
+    }
+
+    It 'PGS tronqué : recul de maxPTS détecté' {
+        $source = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'subtitle' -Index 0 -CodecName 'hdmv_pgs_subtitle')
+        )
+        $temp = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'subtitle' -Index 0 -CodecName 'hdmv_pgs_subtitle')
+        )
+        $script:SourceSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -EndFromPtsOnly -ExactUnavailable -PtsExtentSeconds 100)
+        )
+        $script:TempSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -EndFromPtsOnly -ExactUnavailable -PtsExtentSeconds 90)
+        )
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceSubtitleIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'packet-pts-span'
+        $result.Expected | Should -Be 100
+        $result.Actual | Should -Be 90
+    }
+
+    It 'PTS N/A sur un packet source : unknown' {
+        $source = New-MediaProbe -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $temp = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $script:SourceSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -Unmeasurable -Reason 'pts-unavailable')
+        )
+        $script:TempSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -DurationSeconds 100)
+        )
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceVideoIndices @(0)
+
+        $result.Status | Should -Be 'unknown'
+    }
+
+    It 'PTS N/A sur la sortie alors que la source est mesurable : mismatch' {
+        $source = New-MediaProbe -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $temp = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'video' -Index 0)
+        )
+        $script:SourceSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -DurationSeconds 100)
+        )
+        $script:TempSpanScan = New-SpanScan -Entries @(
+            (New-SpanEntry -StreamIndex 0 -Unmeasurable -Reason 'pts-unavailable')
+        )
+
+        $result = Invoke-IntegrityCheck -SourceProbe $source -TempProbe $temp -KeptSourceVideoIndices @(0)
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Expected | Should -Be 100
+        $result.Actual | Should -BeNullOrEmpty
+        $result.Reason | Should -Be 'pts-unavailable'
+    }
+
     It 'ne conclut pas ok s''il n''y a aucun flux temporel conservé' {
         $source = New-MediaProbe -FormatDuration 100 -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0 -Duration '100')
@@ -1028,7 +1393,7 @@ Describe 'Get-FFprobePacketSpanMap — contrat scanner' {
             param($Map)
             $kept = Select-FFprobePacketSpanScanResult -Map $Map -ExitCode 0 -StdErr ''
             $kept.ScanFailed | Should -BeFalse
-            $kept.Spans[0].DurationSeconds | Should -Be 1
+            $kept.Spans[0].ExactExtentSeconds | Should -Be 1
         }
     }
 

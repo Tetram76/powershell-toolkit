@@ -107,6 +107,22 @@ function Get-ProbeStreamByAbsoluteIndex
     return $null
 }
 
+function Test-FFprobeMatroskaFormat
+{
+    param([hashtable] $Probe)
+    if ($null -eq $Probe)
+    {
+        return $false
+    }
+    $format = $Probe['format']
+    if ($null -eq $format -or -not ($format -is [hashtable]))
+    {
+        return $false
+    }
+    # Détecter le démuxer FFmpeg, pas l'extension : seul matroska,webm autorise l'inférence BlockDuration.
+    return ([string]$format['format_name'] -eq 'matroska,webm')
+}
+
 function ConvertFrom-FFprobeTimeBase
 {
     param($Value)
@@ -210,49 +226,56 @@ function New-FFprobePacketSpanScratch
         return $scratch
     }
 
-    $seen = [System.Collections.Generic.HashSet[int]]::new()
-    foreach ($rawIndex in @($StreamIndices))
-    {
-        $index = [int]$rawIndex
-        if (-not $seen.Add($index))
+        $isMatroska = Test-FFprobeMatroskaFormat -Probe $Probe
+        $seen = [System.Collections.Generic.HashSet[int]]::new()
+        foreach ($rawIndex in @($StreamIndices))
         {
-            continue
+            $index = [int]$rawIndex
+            if (-not $seen.Add($index))
+            {
+                continue
+            }
+
+            $timeBase = $null
+            $endFromPtsOnly = $false
+            $stream = Get-ProbeStreamByAbsoluteIndex -Probe $Probe -StreamIndex $index
+            if ($null -ne $stream)
+            {
+                $timeBase = ConvertFrom-FFprobeTimeBase -Value $stream['time_base']
+                # PGS : ffprobe ne renseigne jamais packet.duration ; la métrique de référence est max(pts).
+                $endFromPtsOnly = ([string]$stream['codec_name'] -ieq 'hdmv_pgs_subtitle')
+            }
+
+            $hasValidTimeBase = ($null -ne $timeBase)
+            $entry = [pscustomobject]@{
+                StreamIndex                     = $index
+                TimeBaseNumerator               = $(if ($hasValidTimeBase) { $timeBase.Numerator } else { [int64]0 })
+                TimeBaseDenominator             = $(if ($hasValidTimeBase) { $timeBase.Denominator } else { [int64]0 })
+                HasValidTimeBase                = $hasValidTimeBase
+                EndFromPtsOnly                  = $endFromPtsOnly
+                AllowMissingIntermediateDuration = ($isMatroska -and -not $endFromPtsOnly)
+                HasPtsSample                    = $false
+                HasMaxPts                       = $false
+                HasKnownEndSample               = $false
+                HasUnavailablePts               = $false
+                HasUnavailableDuration          = $false
+                LastDisplayHasDuration          = $false
+                MinPts                          = [decimal]0
+                MaxPts                          = [decimal]0
+                MaxKnownEnd                     = [decimal]0
+                PacketCount                     = 0
+                ExactMetricAvailable            = $false
+                PtsMetricAvailable              = $false
+                ExactExtentSeconds              = $null
+                PtsExtentSeconds                = $null
+                Measurable                      = $hasValidTimeBase
+                Reason                          = $(if (-not $hasValidTimeBase) { 'time_base-invalid' } else { $null })
+            }
+            $scratch[$index] = $entry
         }
 
-        $timeBase = $null
-        $endFromPtsOnly = $false
-        $stream = Get-ProbeStreamByAbsoluteIndex -Probe $Probe -StreamIndex $index
-        if ($null -ne $stream)
-        {
-            $timeBase = ConvertFrom-FFprobeTimeBase -Value $stream['time_base']
-            # PGS : ffprobe ne renseigne jamais packet.duration ; la fin de flux est max(pts).
-            $endFromPtsOnly = ([string]$stream['codec_name'] -ieq 'hdmv_pgs_subtitle')
-        }
-
-        $hasValidTimeBase = ($null -ne $timeBase)
-        $entry = [pscustomobject]@{
-            StreamIndex          = $index
-            TimeBaseNumerator    = $(if ($hasValidTimeBase) { $timeBase.Numerator } else { [int64]0 })
-            TimeBaseDenominator  = $(if ($hasValidTimeBase) { $timeBase.Denominator } else { [int64]0 })
-            HasValidTimeBase     = $hasValidTimeBase
-            EndFromPtsOnly       = $endFromPtsOnly
-            Measurable           = $hasValidTimeBase
-            Reason               = $(if (-not $hasValidTimeBase) { 'time_base-invalid' } else { $null })
-            HasPtsSample         = $false
-            HasSample            = $false
-            HasMaxPts            = $false
-            LastDisplayHasDuration = $false
-            MinPts               = [decimal]0
-            MaxPts               = [decimal]0
-            MaxEnd               = [decimal]0
-            PacketCount          = 0
-            DurationSeconds      = $null
-        }
-        $scratch[$index] = $entry
+        return $scratch
     }
-
-    return $scratch
-}
 
 function Add-FFprobePacketSpanObservation
 {
@@ -286,7 +309,7 @@ function Add-FFprobePacketSpanObservation
     $duration = [int64]0
     if (-not (ConvertTo-Int64Invariant -Value $Fields['pts'] -Result ([ref]$pts)))
     {
-        $entry.Measurable = $false
+        $entry.HasUnavailablePts = $true
         $entry.Reason = 'pts-unavailable'
         return
     }
@@ -304,30 +327,39 @@ function Add-FFprobePacketSpanObservation
 
     if ($entry.EndFromPtsOnly)
     {
-        if (-not $entry.HasSample)
+        if (-not $entry.HasMaxPts -or $start -gt $entry.MaxPts)
         {
-            $entry.MaxEnd = $start
-            $entry.HasSample = $true
-        }
-        elseif ($start -gt $entry.MaxEnd)
-        {
-            $entry.MaxEnd = $start
+            $entry.MaxPts = $start
+            $entry.HasMaxPts = $true
         }
         $entry.PacketCount++
         return
     }
 
     $durationKnown = (ConvertTo-Int64Invariant -Value $Fields['duration'] -Result ([ref]$duration)) -and $duration -gt 0
-    # MKV : duration absente → fin = pts du Block suivant en affichage ; seul le dernier Block exige une duration.
-    if (-not $entry.HasMaxPts -or $start -gt $entry.MaxPts)
+    if (-not $durationKnown)
+    {
+        $entry.HasUnavailableDuration = $true
+    }
+
+    if ($entry.AllowMissingIntermediateDuration)
+    {
+        # RFC 9559 : BlockDuration absent → durée = delta vers le Block suivant en display order ; seul le dernier Block exige une duration.
+        if (-not $entry.HasMaxPts -or $start -gt $entry.MaxPts)
+        {
+            $entry.MaxPts = $start
+            $entry.HasMaxPts = $true
+            $entry.LastDisplayHasDuration = $durationKnown
+        }
+        elseif ($start -eq $entry.MaxPts)
+        {
+            $entry.LastDisplayHasDuration = $durationKnown
+        }
+    }
+    elseif (-not $entry.HasMaxPts -or $start -gt $entry.MaxPts)
     {
         $entry.MaxPts = $start
         $entry.HasMaxPts = $true
-        $entry.LastDisplayHasDuration = $durationKnown
-    }
-    elseif ($start -eq $entry.MaxPts)
-    {
-        $entry.LastDisplayHasDuration = $durationKnown
     }
 
     if (-not $durationKnown)
@@ -337,14 +369,14 @@ function Add-FFprobePacketSpanObservation
     }
 
     $end = $start + [decimal]$duration
-    if (-not $entry.HasSample)
+    if (-not $entry.HasKnownEndSample)
     {
-        $entry.MaxEnd = $end
-        $entry.HasSample = $true
+        $entry.MaxKnownEnd = $end
+        $entry.HasKnownEndSample = $true
     }
-    elseif ($end -gt $entry.MaxEnd)
+    elseif ($end -gt $entry.MaxKnownEnd)
     {
-        $entry.MaxEnd = $end
+        $entry.MaxKnownEnd = $end
     }
     $entry.PacketCount++
 }
@@ -377,7 +409,7 @@ function Complete-FFprobePacketSpanScratch
     foreach ($index in @($Scratch.Keys))
     {
         $entry = $Scratch[$index]
-        if (-not $entry.HasValidTimeBase -or -not $entry.HasPtsSample)
+        if (-not $entry.HasValidTimeBase -or -not $entry.HasPtsSample -or $entry.HasUnavailablePts)
         {
             continue
         }
@@ -395,39 +427,76 @@ function Complete-FFprobePacketSpanScratch
     foreach ($index in @($Scratch.Keys))
     {
         $entry = $Scratch[$index]
+        $entry.ExactMetricAvailable = $false
+        $entry.PtsMetricAvailable = $false
+        $entry.ExactExtentSeconds = $null
+        $entry.PtsExtentSeconds = $null
+        $entry.Measurable = $false
+
         if (-not $entry.HasValidTimeBase)
         {
-            $entry.Measurable = $false
             $entry.Reason = 'time_base-invalid'
         }
-        elseif ($entry.Reason -eq 'pts-unavailable')
+        elseif ($entry.HasUnavailablePts -or $entry.Reason -eq 'pts-unavailable')
         {
-            $entry.Measurable = $false
+            $entry.Reason = 'pts-unavailable'
         }
-        elseif (-not $entry.EndFromPtsOnly -and $entry.HasPtsSample -and -not $entry.LastDisplayHasDuration)
+        elseif (-not $entry.HasPtsSample -or $null -eq $fileOrigin)
         {
-            $entry.Measurable = $false
-            $entry.Reason = 'duration-unknown'
-        }
-        elseif (-not $entry.HasPtsSample -or -not $entry.HasSample -or $null -eq $fileOrigin)
-        {
-            $entry.Measurable = $false
             $entry.Reason = 'no-packets'
         }
         else
         {
-            $entry.Measurable = $true
-            $entry.Reason = $null
-            # Origine = min(pts) de tous les flux contrôlés, pas le min du flux : un délai initial reste visible.
-            $endSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MaxEnd -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
-            $entry.DurationSeconds = $endSeconds - $fileOrigin
+            $maxPtsSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MaxPts -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
+            $entry.PtsExtentSeconds = $maxPtsSeconds - $fileOrigin
+            $entry.PtsMetricAvailable = $true
+
+            if ($entry.EndFromPtsOnly)
+            {
+                $entry.Reason = $null
+            }
+            elseif ($entry.AllowMissingIntermediateDuration)
+            {
+                if (-not $entry.LastDisplayHasDuration)
+                {
+                    $entry.Reason = 'duration-unknown'
+                }
+                elseif (-not $entry.HasKnownEndSample)
+                {
+                    $entry.PtsMetricAvailable = $false
+                    $entry.PtsExtentSeconds = $null
+                    $entry.Reason = 'no-packets'
+                }
+                else
+                {
+                    # Origine = min(pts) de tous les flux contrôlés, pas le min du flux : un délai initial reste visible.
+                    $endSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MaxKnownEnd -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
+                    $entry.ExactExtentSeconds = $endSeconds - $fileOrigin
+                    $entry.ExactMetricAvailable = $true
+                    $entry.Reason = $null
+                }
+            }
+            elseif ($entry.HasUnavailableDuration)
+            {
+                # Hors Matroska, un duration 0/N/A n'est pas inférable par le PTS suivant : max(pts+duration connue) n'est pas certifié.
+                $entry.Reason = 'duration-unknown'
+            }
+            elseif (-not $entry.HasKnownEndSample)
+            {
+                $entry.PtsMetricAvailable = $false
+                $entry.PtsExtentSeconds = $null
+                $entry.Reason = 'no-packets'
+            }
+            else
+            {
+                $endSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MaxKnownEnd -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
+                $entry.ExactExtentSeconds = $endSeconds - $fileOrigin
+                $entry.ExactMetricAvailable = $true
+                $entry.Reason = $null
+            }
         }
-        if (-not $entry.Measurable)
-        {
-            $entry.DurationSeconds = $null
-            $entry.MinPts = $null
-            $entry.MaxEnd = $null
-        }
+
+        $entry.Measurable = $entry.ExactMetricAvailable -or $entry.PtsMetricAvailable
         $spans[[int]$index] = $entry
     }
 
@@ -697,6 +766,64 @@ function Get-KeptIntegrityStreamPairs
     }
 }
 
+function Get-PacketSpanMetricSeconds
+{
+    param(
+        $Span,
+        [string] $Method
+    )
+    if ($null -eq $Span)
+    {
+        return $null
+    }
+    switch ($Method)
+    {
+        'packet-end-span' { return $Span.ExactExtentSeconds }
+        'packet-pts-span' { return $Span.PtsExtentSeconds }
+        default { return $null }
+    }
+}
+
+function Get-PacketSpanComparisonMetric
+{
+    param(
+        $SourceSpan,
+        $OutputSpan
+    )
+
+    $outputExact = ($null -ne $OutputSpan -and $OutputSpan.ExactMetricAvailable)
+    $outputPts = ($null -ne $OutputSpan -and $OutputSpan.PtsMetricAvailable)
+    $sourcePgs = [bool]$SourceSpan.EndFromPtsOnly
+
+    # Une grandeur n'est comparable que si les deux côtés l'ont calculée avec la même formule.
+    if ($sourcePgs)
+    {
+        if ($SourceSpan.PtsMetricAvailable -and $outputPts)
+        {
+            return 'packet-pts-span'
+        }
+        if (-not $SourceSpan.PtsMetricAvailable)
+        {
+            return 'unknown'
+        }
+        return 'mismatch'
+    }
+
+    if ($SourceSpan.ExactMetricAvailable -and $outputExact)
+    {
+        return 'packet-end-span'
+    }
+    if ($SourceSpan.PtsMetricAvailable -and $outputPts)
+    {
+        return 'packet-pts-span'
+    }
+    if (-not $SourceSpan.ExactMetricAvailable -and -not $SourceSpan.PtsMetricAvailable)
+    {
+        return 'unknown'
+    }
+    return 'mismatch'
+}
+
 function Get-PacketSpanEntry
 {
     param(
@@ -730,38 +857,50 @@ function Find-KeptStreamDurationMismatch
     foreach ($pair in @($Pairs))
     {
         $sourceSpan = Get-PacketSpanEntry -Spans $SourceSpans -Index $pair.SourceAbsoluteIndex
-        if ($null -eq $sourceSpan -or -not $sourceSpan.Measurable)
+        if ($null -eq $sourceSpan)
+        {
+            $HadUnknownStream.Value = $true
+            continue
+        }
+
+        $metric = Get-PacketSpanComparisonMetric -SourceSpan $sourceSpan -OutputSpan (Get-PacketSpanEntry -Spans $OutputSpans -Index $pair.OutputAbsoluteIndex)
+        if ($metric -eq 'unknown')
         {
             $HadUnknownStream.Value = $true
             continue
         }
 
         $outputSpan = Get-PacketSpanEntry -Spans $OutputSpans -Index $pair.OutputAbsoluteIndex
-        if ($null -eq $outputSpan -or -not $outputSpan.Measurable)
+        if ($metric -eq 'mismatch')
         {
             $reason = 'packet-timeline-unavailable'
+            $expected = Get-PacketSpanMetricSeconds -Span $sourceSpan -Method $(
+                if ($sourceSpan.ExactMetricAvailable) { 'packet-end-span' } else { 'packet-pts-span' }
+            )
             if ($null -ne $outputSpan -and -not [string]::IsNullOrWhiteSpace([string]$outputSpan.Reason))
             {
                 $reason = [string]$outputSpan.Reason
             }
-            return New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-span' -Expected $sourceSpan.DurationSeconds -Actual $null `
+            return New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-span' -Expected $expected -Actual $null `
                 -StreamType $pair.CodecType -SourceRelativeIndex $pair.SourceRelativeIndex -OutputRelativeIndex $pair.OutputRelativeIndex `
                 -Reason $reason
         }
 
+        $expected = Get-PacketSpanMetricSeconds -Span $sourceSpan -Method $metric
+        $actual = Get-PacketSpanMetricSeconds -Span $outputSpan -Method $metric
         $streamCmp = Get-DurationComparison `
-            -Expected $sourceSpan.DurationSeconds `
-            -Actual $outputSpan.DurationSeconds `
+            -Expected $expected `
+            -Actual $actual `
             -TolerancePercent $TolerancePercent `
             -ToleranceSecondsMin $ToleranceSecondsMin
         if ($streamCmp.IsMismatch)
         {
-            return New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-span' `
-                -Expected $sourceSpan.DurationSeconds -Actual $outputSpan.DurationSeconds -Diff $streamCmp.Diff `
+            return New-IntegrityCheckResult -Status 'mismatch' -Method $metric `
+                -Expected $expected -Actual $actual -Diff $streamCmp.Diff `
                 -StreamType $pair.CodecType -SourceRelativeIndex $pair.SourceRelativeIndex -OutputRelativeIndex $pair.OutputRelativeIndex
         }
-        $LastOk.Value = New-IntegrityCheckResult -Status 'ok' -Method 'packet-span' `
-            -Expected $sourceSpan.DurationSeconds -Actual $outputSpan.DurationSeconds -Diff $streamCmp.Diff `
+        $LastOk.Value = New-IntegrityCheckResult -Status 'ok' -Method $metric `
+            -Expected $expected -Actual $actual -Diff $streamCmp.Diff `
             -StreamType $pair.CodecType -SourceRelativeIndex $pair.SourceRelativeIndex -OutputRelativeIndex $pair.OutputRelativeIndex
     }
 

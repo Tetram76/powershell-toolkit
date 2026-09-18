@@ -69,7 +69,7 @@
 - 3.5.0 : Invoke-MkvRepair -ForceReplaceOnWarning : un remux mkvmerge code 1 remplace la source uniquement si le switch est présent ; comportement par défaut inchangé ; les erreurs réelles restent bloquantes pour le fichier courant et ne provoquent jamais de remplacement.
 - 3.5.1 : Diagnostics Repair : en-tête uniforme `Fichier source '<chemin>'` avant chaque bloc relatif à un média (avertissement isolé, erreur, diagnostics mkvmerge) ; règles de poursuite et de remplacement inchangées.
 - 4.0.0 : Renommage cassant — module Tetram.Media.Mkv (ex Tetram.Media.Reencode), commande publique Invoke-MkvRemux (ex Invoke-ReencodeMedia).
-- 4.0.1 : Contrôle d'intégrité : la durée de chaque flux conservé est le span des packets ffprobe (max(pts+duration)−min(pts)), et non plus les métadonnées de durée du conteneur.
+- 4.0.1 : Contrôle d'intégrité : span des packets ffprobe relatif à une origine fichier commune (min(pts) des flux contrôlés). Borne exacte max(pts+duration)−origine si certifiable des deux côtés ; sinon fallback symétrique max(pts)−origine. Inférence BlockDuration limitée à Matroska/WebM. PGS en PTS. Plus de métadonnées de durée (`stream.duration`, tag `DURATION`, `format.duration`).
 '@
         }
     }
