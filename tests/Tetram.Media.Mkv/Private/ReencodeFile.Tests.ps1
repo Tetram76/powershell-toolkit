@@ -474,11 +474,16 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
 
         Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
-                Status   = 'mismatch'
-                Method   = 'format'
-                Expected = 100.0
-                Actual   = 90.0
-                Diff     = 10.0
+                Status               = 'mismatch'
+                Method               = 'timestamp-span'
+                Reason               = 'span-mismatch'
+                StreamType           = 'audio'
+                SourceRelativeIndex  = 2
+                OutputRelativeIndex  = 1
+                Expected             = 100.0
+                Actual               = 90.0
+                Diff                 = 10.0
+                Tolerance            = 0.128
             }
         }
 
@@ -492,7 +497,9 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $script:WarningLogs | Should -BeNullOrEmpty
         Get-Content -LiteralPath $file -Raw | Should -Match 'source-original'
         Get-ChildItem -LiteralPath $TestDrive -Filter '*.mkv' | Should -HaveCount 0
-        $script:ErrorLogs[0] | Should -Match 'expected 100'
+        $script:ErrorLogs[0] | Should -Match 'timestamp-span'
+        $script:ErrorLogs[0] | Should -Match 'span source 100.000s'
+        $script:ErrorLogs[0] | Should -Match 'output 90.000s'
         $script:ErrorLogs[0] | Should -Not -Match 'expected s,'
     }
 
@@ -503,10 +510,12 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status               = 'mismatch'
-                Method               = 'stream'
+                Method               = 'timestamp-span'
+                Reason               = 'span-mismatch'
                 Expected             = 100.0
                 Actual               = 90.0
                 Diff                 = 10.0
+                Tolerance            = 0.128
                 StreamType           = 'audio'
                 SourceRelativeIndex  = 2
                 OutputRelativeIndex  = 1
@@ -518,7 +527,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $state.IntegrityFailureFiles | Should -Contain $file
         $script:ErrorLogs[0] | Should -Match '0:a:2'
         $script:ErrorLogs[0] | Should -Match '0:a:1'
-        $script:ErrorLogs[0] | Should -Match 'expected 100'
+        $script:ErrorLogs[0] | Should -Match 'span source 100.000s'
     }
 
     It 'signale un échec de probe sans message de durée vide' {
@@ -551,11 +560,16 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
 
         Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
-                Status   = 'mismatch'
-                Method   = 'format'
-                Expected = 100.0
-                Actual   = 90.0
-                Diff     = 10.0
+                Status              = 'mismatch'
+                Method              = 'timestamp-span'
+                Reason              = 'span-mismatch'
+                StreamType          = 'audio'
+                SourceRelativeIndex = 2
+                OutputRelativeIndex = 1
+                Expected            = 100.0
+                Actual              = 90.0
+                Diff                = 10.0
+                Tolerance           = 0.128
             }
         }
 
@@ -571,7 +585,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $script:ErrorLogs | Should -BeNullOrEmpty
         $script:WarningLogs | Should -Not -BeNullOrEmpty
         $script:WarningLogs[0] | Should -Match 'mismatch-allow'
-        $script:WarningLogs[0] | Should -Match 'format'
+        $script:WarningLogs[0] | Should -Match 'timestamp-span'
         $script:WarningLogs[0] | Should -Match '100'
         $script:WarningLogs[0] | Should -Match '90'
         $script:WarningLogs[0] | Should -Match 'AllowIntegrityMismatch'
@@ -590,11 +604,15 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
 
         Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
-                Status   = 'unknown'
-                Method   = 'unknown'
-                Expected = $null
-                Actual   = $null
-                Diff     = $null
+                Status              = 'unknown'
+                Method              = 'timestamp-span'
+                Reason              = 'no-end-pts'
+                StreamType          = 'audio'
+                SourceRelativeIndex = 0
+                OutputRelativeIndex = 1
+                Expected            = $null
+                Actual              = $null
+                Diff                = $null
             }
         }
 
@@ -605,9 +623,12 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $state.IntegrityWarningFiles | Should -Contain $file
         $state.SessionResult.Count | Should -Be 1
         Test-Path -LiteralPath (Join-Path $TestDrive 'unknown-duration.mkv') -PathType Leaf | Should -BeTrue
+        $script:ErrorLogs[0] | Should -Match 'inconclusive'
+        $script:ErrorLogs[0] | Should -Match 'timestamp-span'
+        $script:ErrorLogs[0] | Should -Not -Match 'comparable duration'
     }
 
-    It 'n''exécute pas le contrôle de durée en NoTranscode' {
+    It 'n''exécute pas le contrôle d''intégrité en NoTranscode' {
         $file = Join-Path $TestDrive 'notranscode-drop.mkv'
         Set-Content -LiteralPath $file -Value 'source-original'
 
@@ -637,9 +658,51 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Get-Content -LiteralPath $file -Raw | Should -Match 'encoded-temp'
     }
 
-    It 'transmet les indices source des subtitles réellement conservés' {
-        $file = Join-Path $TestDrive 'subs-kept.mkv'
+    It 'transmet les mappings A/V dans l''ordre des -map ffmpeg, sans subtitles' {
+        $file = Join-Path $TestDrive 'maps-kept.mkv'
         Set-Content -LiteralPath $file -Value 'source-original'
+
+        $audioKept0 = [pscustomobject]@{
+            _index               = 0
+            __copy               = $true
+            __process            = $false
+            __recode             = $false
+            codec_name           = 'aac'
+            channels             = 2
+            channel_layout       = 'stereo'
+            bit_rate             = '192000'
+            __targetAudioCodec   = $null
+            __targetAudioBitrate = $null
+            __targetAudioFilter  = $null
+        }
+        $audioDropped1 = [pscustomobject]@{
+            _index               = 1
+            __copy               = $false
+            __process            = $false
+            __recode             = $false
+            codec_name           = 'aac'
+            channels             = 2
+            channel_layout       = 'stereo'
+            bit_rate             = '192000'
+            __targetAudioCodec   = $null
+            __targetAudioBitrate = $null
+            __targetAudioFilter  = $null
+        }
+        $audioKept2 = [pscustomobject]@{
+            _index               = 2
+            __copy               = $true
+            __process            = $false
+            __recode             = $false
+            codec_name           = 'aac'
+            channels             = 2
+            channel_layout       = 'stereo'
+            bit_rate             = '192000'
+            __targetAudioCodec   = $null
+            __targetAudioBitrate = $null
+            __targetAudioFilter  = $null
+        }
+        $script:AudioTracksForMaps = @($audioKept0, $audioDropped1, $audioKept2)
+        $script:CapturedFfmpegArgs = $null
 
         Mock -ModuleName Tetram.Media.Remux Get-FFprobeJson {
             @{
@@ -647,27 +710,48 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
                 streams = @(
                     (New-HevcStream)
                     (New-AacStream)
+                    (New-AacStream)
+                    (New-AacStream)
                     @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'fr' } }
                     @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'jpn' } }
                     @{ codec_type = 'subtitle'; codec_name = 'subrip'; tags = @{ language = 'en' } }
                 )
             }
         }
+        Mock -ModuleName Tetram.Media.Remux Select-AudioStreams { $script:AudioTracksForMaps }
+        Mock -ModuleName Tetram.Media.Remux Invoke-FFmpeg {
+            param($OutputFile, $DynamicArgs)
+            $script:CapturedFfmpegArgs = @($DynamicArgs)
+            if ($OutputFile)
+            {
+                Set-Content -LiteralPath $OutputFile -Value 'encoded-temp'
+            }
+            return $true
+        }
         Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
-                Status   = 'ok'
-                Method   = 'stream'
-                Expected = 10.0
-                Actual   = 10.0
-                Diff     = 0.0
+                Status = 'ok'
+                Method = 'complete'
             }
         }
 
         $null = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
 
         Should -Invoke -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity -Times 1 -ParameterFilter {
-            $null -ne $KeptSourceSubtitleIndices -and
-            (@($KeptSourceSubtitleIndices) -join ',') -eq '0,2'
+            $maps = @($StreamMaps)
+            $maps.Count -eq 3 -and
+            $maps[0].StreamType -eq 'video' -and $maps[0].SourceRelativeIndex -eq 0 -and $maps[0].OutputRelativeIndex -eq 0 -and
+            $maps[1].StreamType -eq 'audio' -and $maps[1].SourceRelativeIndex -eq 0 -and $maps[1].OutputRelativeIndex -eq 0 -and
+            $maps[2].StreamType -eq 'audio' -and $maps[2].SourceRelativeIndex -eq 2 -and $maps[2].OutputRelativeIndex -eq 1 -and
+            @($maps | Where-Object { $_.StreamType -eq 'subtitle' }).Count -eq 0
         }
+
+        $mapArgs = for ($i = 0; $i -lt $script:CapturedFfmpegArgs.Count; $i++) {
+            if ($script:CapturedFfmpegArgs[$i] -eq '-map') {
+                $script:CapturedFfmpegArgs[$i + 1]
+            }
+        }
+        $avMaps = @($mapArgs | Where-Object { $_ -match '^0:[va]:' })
+        $avMaps | Should -Be @('0:v:0', '0:a:0', '0:a:2')
     }
 }

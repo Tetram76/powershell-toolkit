@@ -91,7 +91,7 @@ Effet disque :
 
 - `-WhatIf` : pas de réécriture média, pas de timestamps NFO. N'est pas un silence disque total : une exception fichier (catch de `Invoke-ReencodeFile`) append `reencode-errors.log` dans le répertoire courant, sans `ShouldProcess`.
 - `-CheckOnly` (sans `-WhatIf`) : pas de temporaire ffmpeg, pas de `Move-Item` / `Rename-Item` sur le média. Les timestamps NFO (`premiered`) sont malgré tout appliqués. Un échec ffmpeg est journalisé dans `reencode-errors.log`.
-- réencodage / `-NoTranscode` : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin (réencodage vers `.mkv`). Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). En réencodage, un écart de durée au-delà de max(1 s, 0,5 %), un fichier de sortie que ffprobe ne peut pas sonder, ou un flux mappé absent de la sortie, rejettent la sortie et conservent l'original par défaut ; avec `-AllowIntegrityMismatch`, le même mismatch reste détecté et signalé, mais devient un avertissement non bloquant et la sortie est acceptée. `-NoTranscode` n'exécute pas ce contrôle.
+- réencodage / `-NoTranscode` : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin (réencodage vers `.mkv`). Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). En réencodage, un contrôle borné des packets ffprobe (`pts_time` / `pos`) vérifie l'étendue temporelle des flux audio/vidéo conservés, leurs offsets relatifs, et l'entrelacement physique du MKV produit. Une troncature ou un décalage A/V significatif, un fichier de sortie que ffprobe ne peut pas sonder, un flux A/V mappé absent, ou un écart physique d'entrelacement trop large rejettent la sortie et conservent l'original par défaut. Les sous-titres sont exclus des contrôles temporels. Avec `-AllowIntegrityMismatch`, le même mismatch reste détecté et signalé, mais devient un avertissement non bloquant et la sortie est acceptée. Un résultat `unknown` (données insuffisantes dans le budget borné) est accepté avec avertissement, sans exiger le commutateur. `-NoTranscode` n'exécute pas ce contrôle.
 
 Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-NoTranscode`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion` en réencodage normal. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
 
@@ -151,7 +151,7 @@ Invoke-MkvRemux -Path '+D:\Media\Shows'
 
 ### Example 7: Accepter explicitement un mismatch d'intégrité
 
-Intention : continuer un réencodage malgré un mismatch déjà détecté (écart de durée, probe de sortie impossible, ou flux mappé manquant). Ce n'est pas le comportement recommandé par défaut : le contrôle s'exécute toujours, le mismatch est signalé en warning, et la sortie remplace l'original. Sans effet en `-NoTranscode` ni `-CheckOnly`.
+Intention : continuer un réencodage malgré un mismatch déjà détecté (étendue PTS, offset A/V, entrelacement physique, probe de sortie impossible, ou flux A/V mappé manquant). Ce n'est pas le comportement recommandé par défaut : le contrôle s'exécute toujours, le mismatch est signalé en warning, et la sortie remplace l'original. Sans effet en `-NoTranscode` ni `-CheckOnly`.
 
 ```powershell
 Invoke-MkvRemux -ListFile 'D:\todo.txt' -AllowIntegrityMismatch
@@ -170,12 +170,22 @@ Invoke-MkvRemux -Path 'D:\Media' -Recurse -NoTranscode -RemoveAttachments
 ### -AllowIntegrityMismatch
 
 En réencodage réel uniquement. Par défaut, un mismatch d'intégrité rejette la
-sortie et conserve l'original : écart de durée supérieur à la tolérance
-(max 1 s ou 0,5 %), fichier de sortie que ffprobe ne peut pas sonder, ou flux
-mappé manquant en sortie. Avec ce commutateur, le même mismatch reste détecté
-et affiché, mais devient un avertissement non bloquant : le fichier de sortie
-est accepté. Le commutateur ne désactive pas le contrôle. Il n'existe pas en
-`-NoTranscode` ni en `-CheckOnly`. Le cas « durée incomparable » (`unknown`)
+sortie et conserve l'original : étendue temporelle audio/vidéo hors tolérance
+de cadence, offset relatif A/V significativement modifié, entrelacement
+physique trop large dans le MKV produit, fichier de sortie que ffprobe ne
+peut pas sonder, ou flux A/V mappé manquant en sortie. Le contrôle utilise
+les PTS packets (`pts_time`) et les positions (`pos`) de la sortie ; il ne
+revalide pas les paramètres d'encodage et n'inclut pas les sous-titres.
+La limite d'entrelacement (deux budgets Cluster FFmpeg seekable de 5 MiB,
+plus le plus gros packet candidat) est une politique de compatibilité de ce
+projet, dérivée de la recommandation Matroska ~5 s / 5 MB et des défauts
+`cluster_time_limit=5000` / `cluster_size_limit=5*1024*1024` du muxer
+FFmpeg. Ce n'est pas une règle normative Matroska et ce n'est pas une
+garantie universelle de compatibilité lecteur.
+Avec ce commutateur, le même mismatch reste détecté et affiché, mais
+devient un avertissement non bloquant : le fichier de sortie est accepté.
+Le commutateur ne désactive pas le contrôle. Il n'existe pas en
+`-NoTranscode` ni en `-CheckOnly`. Le cas « données insuffisantes » (`unknown`)
 était déjà accepté et n'est pas la raison d'être de ce paramètre.
 
 ```yaml

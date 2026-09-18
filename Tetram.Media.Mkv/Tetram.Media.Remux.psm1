@@ -482,80 +482,48 @@ function Invoke-ReencodeFile
 
         if (-not $Config.NoTranscode -and -not $WhatIfPreference -and (Test-Path -LiteralPath $TempFilename -PathType Leaf))
         {
-            $keptSourceVideoIndices = @(
+            $integrityStreamMaps = [List[object]]::new()
+            $outputRelativeIndex = 0
+            foreach ($stream in @(
                 $videoResult.VideoTracks |
-                    Where-Object { $_.__copy -or $_.__process } |
-                    ForEach-Object { [int]$_._index }
-            )
-            $keptSourceAudioIndices = @(
+                    Where-Object { $_.__copy -or $_.__process }
+            ))
+            {
+                $integrityStreamMaps.Add([pscustomobject]@{
+                    StreamType          = 'video'
+                    StreamSpecifierType = 'v'
+                    SourceRelativeIndex = [int]$stream._index
+                    OutputRelativeIndex = $outputRelativeIndex
+                })
+                $outputRelativeIndex++
+            }
+
+            $outputRelativeIndex = 0
+            foreach ($stream in @(
                 $AudioTracks |
-                    Where-Object { $_.__copy -or $_.__process } |
-                    ForEach-Object { [int]$_._index }
-            )
-            $keptSourceSubtitleIndices = @(
-                $subtitleResult.SubtitleTracks |
-                    Where-Object { $_.__copy -or $_.__process } |
-                    ForEach-Object { [int]$_._index }
-            )
+                    Where-Object { $_.__copy -or $_.__process }
+            ))
+            {
+                $integrityStreamMaps.Add([pscustomobject]@{
+                    StreamType          = 'audio'
+                    StreamSpecifierType = 'a'
+                    SourceRelativeIndex = [int]$stream._index
+                    OutputRelativeIndex = $outputRelativeIndex
+                })
+                $outputRelativeIndex++
+            }
 
             $integrity = Test-EncodedFileIntegrity `
                 -FFPROBE $Config.FFPROBEPath `
                 -SourceProbe $ffprobeOutput `
                 -SourceFile $Filename `
                 -TempFile $TempFilename `
-                -KeptSourceVideoIndices $keptSourceVideoIndices `
-                -KeptSourceAudioIndices $keptSourceAudioIndices `
-                -KeptSourceSubtitleIndices $keptSourceSubtitleIndices
+                -StreamMaps @($integrityStreamMaps)
 
             switch ($integrity.Status)
             {
                 'mismatch' {
-                    $streamType = $null
-                    $sourceRelativeIndex = $null
-                    $outputRelativeIndex = $null
-                    if ($integrity.PSObject.Properties['StreamType'])
-                    {
-                        $streamType = $integrity.StreamType
-                    }
-                    if ($integrity.PSObject.Properties['SourceRelativeIndex'])
-                    {
-                        $sourceRelativeIndex = $integrity.SourceRelativeIndex
-                    }
-                    if ($integrity.PSObject.Properties['OutputRelativeIndex'])
-                    {
-                        $outputRelativeIndex = $integrity.OutputRelativeIndex
-                    }
-                    $streamLabel = Get-IntegrityStreamMapLabel `
-                        -StreamType $streamType `
-                        -SourceRelativeIndex $sourceRelativeIndex `
-                        -OutputRelativeIndex $outputRelativeIndex
-                    $msg = if ($integrity.Method -eq 'probe')
-                    {
-                        "Incomplete encoding for '{0}' [via probe] - encoded file could not be probed" -f $Filename
-                    }
-                    elseif ($null -eq $integrity.Expected -or $null -eq $integrity.Actual)
-                    {
-                        if ($streamLabel)
-                        {
-                            "Incomplete encoding for '{0}' [via {1}] - {2} is missing or has no duration" -f `
-                                $Filename, $integrity.Method, $streamLabel
-                        }
-                        else
-                        {
-                            "Incomplete encoding for '{0}' [via {1}] - mapped output stream is missing or has no duration" -f `
-                                $Filename, $integrity.Method
-                        }
-                    }
-                    elseif ($streamLabel)
-                    {
-                        "Incomplete encoding for '{0}' [via {1}] - {2} - expected {3:0.000}s, got {4:0.000}s (diff {5:0.000}s)" -f `
-                            $Filename, $integrity.Method, $streamLabel, $integrity.Expected, $integrity.Actual, $integrity.Diff
-                    }
-                    else
-                    {
-                        "Incomplete encoding for '{0}' [via {1}] - expected {2:0.000}s, got {3:0.000}s (diff {4:0.000}s)" -f `
-                            $Filename, $integrity.Method, $integrity.Expected, $integrity.Actual, $integrity.Diff
-                    }
+                    $msg = Get-IntegrityMismatchMessage -Filename $Filename -Integrity $integrity
                     if ($Config.AllowIntegrityMismatch)
                     {
                         $msg = "$msg — accepted because -AllowIntegrityMismatch is set"
@@ -570,7 +538,7 @@ function Invoke-ReencodeFile
                     }
                 }
                 'unknown' {
-                    $msg = "Integrity check inconclusive for '$Filename' - no comparable duration method - accepting file"
+                    $msg = Get-IntegrityUnknownMessage -Filename $Filename -Integrity $integrity
                     Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
                     [void]$State.IntegrityWarningFiles.Add($Filename)
                 }
