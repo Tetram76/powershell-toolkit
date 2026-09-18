@@ -1266,6 +1266,68 @@ Describe 'Test-EncodedFileIntegrity — packet-span' {
         $result.Actual | Should -BeNullOrEmpty
     }
 
+    It 'aligne fileOrigin sur les flux mappés ancrables des deux côtés : un pts=N/A audio source ne rejette pas une vidéo inchangée' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'audio' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'video' -Index 1 -TimeBase '1/1000')
+        )
+        # Audio source empoisonné : exclu de l'origine locale, vidéo ancrée à 5 s → faux mismatch si la sortie garde l'audio à 0.
+        $sourceText = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=0|pts=N/A|duration=1000'
+            'stream_index=0|pts=1000|duration=1000'
+            'stream_index=1|pts=5000|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=0|pts=1000|duration=1000'
+            'stream_index=1|pts=5000|duration=10000'
+        ) -join [Environment]::NewLine
+
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck `
+            -SourceProbe $probe `
+            -TempProbe $probe `
+            -KeptSourceVideoIndices @(0) `
+            -KeptSourceAudioIndices @(0)
+
+        $script:SourceSpanScan.Spans[1].ExactExtentSeconds | Should -Be $script:TempSpanScan.Spans[1].ExactExtentSeconds
+        $script:SourceSpanScan.Spans[1].ExactExtentSeconds | Should -Be 15
+        $result.Status | Should -Not -Be 'mismatch'
+        $result.Status | Should -Be 'unknown'
+    }
+
+    It 'aligne fileOrigin sur l''intersection : un audio source sans aucun PTS n''impose pas l''origine audio de la sortie' {
+        $probe = New-MediaProbe -FormatName 'matroska,webm' -Streams @(
+            (New-ProbeStream -CodecType 'audio' -Index 0 -TimeBase '1/1000')
+            (New-ProbeStream -CodecType 'video' -Index 1 -TimeBase '1/1000')
+        )
+        $sourceText = @(
+            'stream_index=0|pts=N/A|duration=1000'
+            'stream_index=1|pts=5000|duration=10000'
+        ) -join [Environment]::NewLine
+        $outputText = @(
+            'stream_index=0|pts=0|duration=1000'
+            'stream_index=1|pts=5000|duration=10000'
+        ) -join [Environment]::NewLine
+
+        $script:SourceSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $sourceText
+        $script:TempSpanScan = Invoke-ReadPacketSpanMap -Probe $probe -StreamIndices @(0, 1) -Text $outputText
+
+        $result = Invoke-IntegrityCheck `
+            -SourceProbe $probe `
+            -TempProbe $probe `
+            -KeptSourceVideoIndices @(0) `
+            -KeptSourceAudioIndices @(0)
+
+        $script:SourceSpanScan.Spans[1].ExactExtentSeconds | Should -Be $script:TempSpanScan.Spans[1].ExactExtentSeconds
+        $script:SourceSpanScan.Spans[1].ExactExtentSeconds | Should -Be 10
+        $result.Status | Should -Not -Be 'mismatch'
+        $result.Status | Should -Be 'unknown'
+    }
+
     It 'fallback PTS avec sortie tronquée : mismatch' {
         $source = New-MediaProbe -FormatName 'mpegts' -Streams @(
             (New-ProbeStream -CodecType 'video' -Index 0)
