@@ -2,7 +2,7 @@ using namespace System
 using namespace System.Collections.Generic
 using namespace System.IO
 
-Set-StrictMode -Version 3.0
+Set-StrictMode -Version Latest
 
 # Import dans le session state du module (équivalent NestedModules, sans '..' dans le manifeste).
 @(
@@ -529,32 +529,45 @@ function Invoke-ReencodeFile
                         -StreamType $streamType `
                         -SourceRelativeIndex $sourceRelativeIndex `
                         -OutputRelativeIndex $outputRelativeIndex
+                    $reason = $null
+                    if ($integrity.PSObject.Properties['Reason'] -and -not [string]::IsNullOrWhiteSpace([string]$integrity.Reason))
+                    {
+                        $reason = [string]$integrity.Reason
+                    }
                     $msg = if ($integrity.Method -eq 'probe')
                     {
-                        "Incomplete encoding for '{0}' [via probe] - encoded file could not be probed" -f $Filename
+                        "Integrity check failed for '{0}' [via probe] - encoded file could not be probed" -f $Filename
+                    }
+                    elseif ($integrity.Method -eq 'packet-probe')
+                    {
+                        "Integrity check failed for '{0}' [via packet-probe] - encoded file packet timeline could not be probed" -f $Filename
                     }
                     elseif ($null -eq $integrity.Expected -or $null -eq $integrity.Actual)
                     {
                         if ($streamLabel)
                         {
-                            "Incomplete encoding for '{0}' [via {1}] - {2} is missing or has no duration" -f `
-                                $Filename, $integrity.Method, $streamLabel
+                            "Integrity duration mismatch for '{0}' [{1}, via {2}] - mapped output stream is missing or has no packet timeline" -f `
+                                $Filename, $streamLabel, $integrity.Method
                         }
                         else
                         {
-                            "Incomplete encoding for '{0}' [via {1}] - mapped output stream is missing or has no duration" -f `
+                            "Integrity duration mismatch for '{0}' [via {1}] - mapped output stream is missing or has no packet timeline" -f `
                                 $Filename, $integrity.Method
                         }
                     }
                     elseif ($streamLabel)
                     {
-                        "Incomplete encoding for '{0}' [via {1}] - {2} - expected {3:0.000}s, got {4:0.000}s (diff {5:0.000}s)" -f `
-                            $Filename, $integrity.Method, $streamLabel, $integrity.Expected, $integrity.Actual, $integrity.Diff
+                        "Integrity duration mismatch for '{0}' [{1}, via {2}] - expected {3:0.000}s, got {4:0.000}s (diff {5:0.000}s)" -f `
+                            $Filename, $streamLabel, $integrity.Method, $integrity.Expected, $integrity.Actual, $integrity.Diff
                     }
                     else
                     {
-                        "Incomplete encoding for '{0}' [via {1}] - expected {2:0.000}s, got {3:0.000}s (diff {4:0.000}s)" -f `
+                        "Integrity duration mismatch for '{0}' [via {1}] - expected {2:0.000}s, got {3:0.000}s (diff {4:0.000}s)" -f `
                             $Filename, $integrity.Method, $integrity.Expected, $integrity.Actual, $integrity.Diff
+                    }
+                    if ($reason)
+                    {
+                        $msg = "$msg ($reason)"
                     }
                     if ($Config.AllowIntegrityMismatch)
                     {
@@ -570,7 +583,12 @@ function Invoke-ReencodeFile
                     }
                 }
                 'unknown' {
-                    $msg = "Integrity check inconclusive for '$Filename' - no comparable duration method - accepting file"
+                    $unknownReason = 'packet timeline unavailable'
+                    if ($integrity.PSObject.Properties['Reason'] -and -not [string]::IsNullOrWhiteSpace([string]$integrity.Reason))
+                    {
+                        $unknownReason = [string]$integrity.Reason
+                    }
+                    $msg = "Integrity check inconclusive for '$Filename' - $unknownReason - accepting file"
                     Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
                     [void]$State.IntegrityWarningFiles.Add($Filename)
                 }

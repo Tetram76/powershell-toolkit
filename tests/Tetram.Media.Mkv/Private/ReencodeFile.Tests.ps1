@@ -475,7 +475,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status   = 'mismatch'
-                Method   = 'format'
+                Method   = 'packet-span'
                 Expected = 100.0
                 Actual   = 90.0
                 Diff     = 10.0
@@ -503,13 +503,14 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status               = 'mismatch'
-                Method               = 'stream'
+                Method               = 'packet-span'
                 Expected             = 100.0
                 Actual               = 90.0
                 Diff                 = 10.0
                 StreamType           = 'audio'
                 SourceRelativeIndex  = 2
                 OutputRelativeIndex  = 1
+                Reason               = 'duration-unknown'
             }
         }
 
@@ -519,6 +520,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $script:ErrorLogs[0] | Should -Match '0:a:2'
         $script:ErrorLogs[0] | Should -Match '0:a:1'
         $script:ErrorLogs[0] | Should -Match 'expected 100'
+        $script:ErrorLogs[0] | Should -Match 'duration-unknown'
     }
 
     It 'signale un échec de probe sans message de durée vide' {
@@ -552,7 +554,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status   = 'mismatch'
-                Method   = 'format'
+                Method   = 'packet-span'
                 Expected = 100.0
                 Actual   = 90.0
                 Diff     = 10.0
@@ -571,7 +573,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $script:ErrorLogs | Should -BeNullOrEmpty
         $script:WarningLogs | Should -Not -BeNullOrEmpty
         $script:WarningLogs[0] | Should -Match 'mismatch-allow'
-        $script:WarningLogs[0] | Should -Match 'format'
+        $script:WarningLogs[0] | Should -Match 'packet-span'
         $script:WarningLogs[0] | Should -Match '100'
         $script:WarningLogs[0] | Should -Match '90'
         $script:WarningLogs[0] | Should -Match 'AllowIntegrityMismatch'
@@ -656,7 +658,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
             [pscustomobject]@{
                 Status   = 'ok'
-                Method   = 'stream'
+                Method   = 'packet-span'
                 Expected = 10.0
                 Actual   = 10.0
                 Diff     = 0.0

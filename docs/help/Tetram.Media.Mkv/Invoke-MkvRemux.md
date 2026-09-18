@@ -91,7 +91,7 @@ Effet disque :
 
 - `-WhatIf` : pas de réécriture média, pas de timestamps NFO. N'est pas un silence disque total : une exception fichier (catch de `Invoke-ReencodeFile`) append `reencode-errors.log` dans le répertoire courant, sans `ShouldProcess`.
 - `-CheckOnly` (sans `-WhatIf`) : pas de temporaire ffmpeg, pas de `Move-Item` / `Rename-Item` sur le média. Les timestamps NFO (`premiered`) sont malgré tout appliqués. Un échec ffmpeg est journalisé dans `reencode-errors.log`.
-- réencodage / `-NoTranscode` : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin (réencodage vers `.mkv`). Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). En réencodage, un écart de durée au-delà de max(1 s, 0,5 %), un fichier de sortie que ffprobe ne peut pas sonder, ou un flux mappé absent de la sortie, rejettent la sortie et conservent l'original par défaut ; avec `-AllowIntegrityMismatch`, le même mismatch reste détecté et signalé, mais devient un avertissement non bloquant et la sortie est acceptée. `-NoTranscode` n'exécute pas ce contrôle.
+- réencodage / `-NoTranscode` : ffmpeg écrit un temporaire sous `-TempPath`, puis `Move-Item` écrase le fichier source, puis un `Rename-Item` change l'extension si besoin (réencodage vers `.mkv`). Les horodatages du fichier sont restaurés. Des dossiers voisins peuvent voir leurs dates corrigées via NFO (`premiered`). En réencodage, le contrôle d'intégrité calcule pour chaque flux conservé (vidéo, audio, sous-titres) une étendue temporelle relative à une origine commune au fichier : min(pts) de tous les packets des flux contrôlés, convertis via la `time_base` de chaque flux. Pour un flux non-PGS l'étendue est max(pts + duration) − cette origine (si un packet n'a pas de duration exploitable mais qu'un Block du même flux le suit en ordre d'affichage, sa fin est le pts de ce suivant ; seul un `duration` inconnue sur le dernier Block rend le flux non mesurable) ; pour PGS (`hdmv_pgs_subtitle`), max(pts) − cette origine, car `duration` n'est jamais renseignée. Un décalage global identique est ainsi neutralisé ; un décalage, une troncature ou un allongement propre à une piste reste visible. `stream.duration` et le tag `DURATION` ne servent plus de référence. Un écart au-delà de max(1 s, 0,5 %), un fichier de sortie que ffprobe ne peut pas sonder (métadonnées ou packets), un flux mappé absent de la sortie, ou une timeline de sortie devenue non mesurable alors que la source l'était, rejettent la sortie et conservent l'original par défaut ; avec `-AllowIntegrityMismatch`, le même mismatch reste détecté et signalé, mais devient un avertissement non bloquant et la sortie est acceptée. Une timeline source non mesurable reste `unknown` (fichier accepté, comme auparavant). Le contrôle parcourt donc les packets de la source et de la sortie : il peut être plus coûteux en I/O sur les gros médias. `-NoTranscode` n'exécute pas ce contrôle.
 
 Fichiers / dossiers non traités : `Plex Versions`, `.deletedByTMM`, nom contenant `-trailer.`, fichiers lecture seule, absence de durée ffprobe (sauf `-ForceRecodeVideo` / `-NoTranscode`), destination déjà existante si l'extension change, rien à faire (déjà conforme), `.mp4` avec sous-titres sans `-AllowSubTitlesConversion` en réencodage normal. `-ScanReadOnlyDirectory` ne concerne que la descente dans des répertoires lecture seule, pas les fichiers.
 
@@ -151,7 +151,7 @@ Invoke-MkvRemux -Path '+D:\Media\Shows'
 
 ### Example 7: Accepter explicitement un mismatch d'intégrité
 
-Intention : continuer un réencodage malgré un mismatch déjà détecté (écart de durée, probe de sortie impossible, ou flux mappé manquant). Ce n'est pas le comportement recommandé par défaut : le contrôle s'exécute toujours, le mismatch est signalé en warning, et la sortie remplace l'original. Sans effet en `-NoTranscode` ni `-CheckOnly`.
+Intention : continuer un réencodage malgré un mismatch déjà détecté (écart de durée packet-span, probe de sortie impossible, timeline de sortie non mesurable, ou flux mappé manquant). Ce n'est pas le comportement recommandé par défaut : le contrôle s'exécute toujours, le mismatch est signalé en warning, et la sortie remplace l'original. Sans effet en `-NoTranscode` ni `-CheckOnly`.
 
 ```powershell
 Invoke-MkvRemux -ListFile 'D:\todo.txt' -AllowIntegrityMismatch
@@ -170,13 +170,21 @@ Invoke-MkvRemux -Path 'D:\Media' -Recurse -NoTranscode -RemoveAttachments
 ### -AllowIntegrityMismatch
 
 En réencodage réel uniquement. Par défaut, un mismatch d'intégrité rejette la
-sortie et conserve l'original : écart de durée supérieur à la tolérance
-(max 1 s ou 0,5 %), fichier de sortie que ffprobe ne peut pas sonder, ou flux
-mappé manquant en sortie. Avec ce commutateur, le même mismatch reste détecté
+sortie et conserve l'original : écart de durée packet-span supérieur à la
+tolérance (max 1 s ou 0,5 %), fichier de sortie que ffprobe ne peut pas sonder
+(métadonnées ou packets), flux mappé manquant en sortie, ou timeline de sortie
+devenue non mesurable alors que la source l'était. Les durées comparées sont
+calculées de la même façon des deux côtés : origine fichier =
+min(pts) de tous les flux contrôlés, puis étendue =
+max(pts + duration) − origine ; un packet sans duration prend
+la fin au pts du Block suivant, sauf le dernier (alors unknown).
+PGS : max(pts) − origine.
+`stream.duration` et le tag `DURATION` ne servent
+plus de référence. Avec ce commutateur, le même mismatch reste détecté
 et affiché, mais devient un avertissement non bloquant : le fichier de sortie
 est accepté. Le commutateur ne désactive pas le contrôle. Il n'existe pas en
-`-NoTranscode` ni en `-CheckOnly`. Le cas « durée incomparable » (`unknown`)
-était déjà accepté et n'est pas la raison d'être de ce paramètre.
+`-NoTranscode` ni en `-CheckOnly`. Le cas « timeline source non mesurable »
+(`unknown`) était déjà accepté et n'est pas la raison d'être de ce paramètre.
 
 ```yaml
 Type: System.Management.Automation.SwitchParameter

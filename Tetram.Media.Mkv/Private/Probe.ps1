@@ -1,10 +1,10 @@
 using namespace System
 using namespace System.IO
 
-Set-StrictMode -Version 3.0
+Set-StrictMode -Version Latest
 
 # -----------------------------------------------------------------------------
-# Probe.psm1 — ffprobe + extraction des durées + contrôle d'intégrité
+# Probe.psm1 — ffprobe + contrôle d'intégrité par span de packets
 # Sous-module privé de Tetram.Media.Mkv (chargé via NestedModules).
 # Ne fait pas Export-ModuleMember : les fonctions restent visibles dans le
 # scope du module Tetram.Media.Mkv mais ne fuient pas vers la session utilisateur.
@@ -33,70 +33,6 @@ function Get-FFprobeJson([string] $FFPROBE, [string] $File)
     {
         Write-ErrorLog "Invalid ffprobe json for '$File' — $( $_.Exception.Message )"; return $null
     }
-}
-
-function Get-DurationFromFormat
-{
-    param([hashtable] $Probe)
-    if ($null -eq $Probe)
-    {
-        return $null
-    }
-    $fmt = $Probe['format']
-    if (-not ($fmt -is [hashtable]))
-    {
-        return $null
-    }
-    $d = $fmt['duration']
-    if ($null -eq $d)
-    {
-        return $null
-    }
-    $ds = [string]$d
-    if ( [string]::IsNullOrWhiteSpace($ds))
-    {
-        return $null
-    }
-    try
-    {
-        $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
-        if ($sec -gt 0)
-        {
-            return $sec
-        }
-    }
-    catch
-    {
-    }
-    return $null
-}
-
-
-function Get-ParsedDurationSeconds
-{
-    param($Value)
-    if ($null -eq $Value)
-    {
-        return $null
-    }
-    $ds = [string]$Value
-    if ([string]::IsNullOrWhiteSpace($ds))
-    {
-        return $null
-    }
-    try
-    {
-        $sec = [double]::Parse($ds, [cultureinfo]::InvariantCulture)
-        # 0 est une durée mesurée (flux vide / tronqué), pas une métadonnée absente.
-        if ($sec -ge 0)
-        {
-            return $sec
-        }
-    }
-    catch
-    {
-    }
-    return $null
 }
 
 function Get-ProbeStreamByRelativeIndex
@@ -131,242 +67,500 @@ function Get-ProbeStreamByRelativeIndex
     return $null
 }
 
-function Get-DurationFromSpecificStream
+function Get-ProbeStreamByAbsoluteIndex
 {
     param(
         [hashtable] $Probe,
-        [string] $CodecType,
-        [int] $TypeRelativeIndex
+        [int] $StreamIndex
     )
-    $stream = Get-ProbeStreamByRelativeIndex -Probe $Probe -CodecType $CodecType -TypeRelativeIndex $TypeRelativeIndex
-    if ($null -eq $stream)
+    if ($null -eq $Probe)
     {
         return $null
     }
-    return Get-ParsedDurationSeconds -Value $stream['duration']
-}
-
-function ConvertTo-DurationSeconds
-{
-    param([string] $Tag)
-    if ( [string]::IsNullOrWhiteSpace($Tag))
-    {
-        return $null
-    }
-    $s = $Tag.Trim()
-    $dot = $s.IndexOf('.')
-    if ($dot -ge 0 -and ($s.Length - $dot - 1) -gt 7)
-    {
-        $s = $s.Substring(0, $dot + 1 + 7)
-    }
-    try
-    {
-        $ts = [TimeSpan]::Parse($s, [cultureinfo]::InvariantCulture)
-        $sec = $ts.TotalSeconds
-        if ($sec -ge 0)
-        {
-            return $sec
-        }
-    }
-    catch
-    {
-    }
-    return $null
-}
-
-function Get-DurationFromSpecificStreamTag
-{
-    param(
-        [hashtable] $Probe,
-        [string] $CodecType,
-        [int] $TypeRelativeIndex
-    )
-    $stream = Get-ProbeStreamByRelativeIndex -Probe $Probe -CodecType $CodecType -TypeRelativeIndex $TypeRelativeIndex
-    if ($null -eq $stream)
-    {
-        return $null
-    }
-    $tags = $stream['tags']
-    if ($null -eq $tags)
-    {
-        return $null
-    }
-    # OrderedHashtable (Get-FFprobeJson) : ContainsKey('DURATION') rate la clé JSON duration.
-    # Hashtable @{} des tests unitaires ne reproduit pas ce piège.
-    $raw = Get-ProbeProperty $tags 'DURATION'
-    if ($null -eq $raw)
-    {
-        return $null
-    }
-    return ConvertTo-DurationSeconds -Tag ([string]$raw)
-}
-
-function Get-DurationForStreamMetadata
-{
-    param(
-        [hashtable] $Probe,
-        [string] $CodecType,
-        [int] $TypeRelativeIndex
-    )
-    $streamDuration = Get-DurationFromSpecificStream -Probe $Probe -CodecType $CodecType -TypeRelativeIndex $TypeRelativeIndex
-    if ($null -ne $streamDuration)
-    {
-        return [pscustomobject]@{ Method = 'stream'; Duration = $streamDuration }
-    }
-    $tagDuration = Get-DurationFromSpecificStreamTag -Probe $Probe -CodecType $CodecType -TypeRelativeIndex $TypeRelativeIndex
-    if ($null -ne $tagDuration)
-    {
-        return [pscustomobject]@{ Method = 'tag'; Duration = $tagDuration }
-    }
-    return $null
-}
-
-function Get-DurationFromPacketCount
-{
-    param(
-        [string] $FFPROBE,
-        [string] $File,
-        [int] $StreamIndex = 0
-    )
-    if ([string]::IsNullOrWhiteSpace($File) -or -not [File]::Exists($File))
-    {
-        return $null
-    }
-    if ($StreamIndex -lt 0)
-    {
-        return $null
-    }
-    $ffprobeArgs = @(
-        $File,
-        '-v', 'error',
-        '-select_streams', "v:$StreamIndex",
-        '-count_packets',
-        '-show_entries', 'stream=nb_read_packets,r_frame_rate',
-        '-of', 'json'
-    )
-    $out = & $FFPROBE $ffprobeArgs 2> $null | Out-String
-    if (-not $?)
-    {
-        return $null
-    }
-    try
-    {
-        $j = ConvertFrom-Json -InputObject $out -AsHashtable
-    }
-    catch
-    {
-        return $null
-    }
-    $streams = $j['streams']
+    $streams = $Probe['streams']
     if ($null -eq $streams)
     {
         return $null
     }
-    $st = @($streams)[0]
-    if (-not ($st -is [hashtable]))
+    foreach ($s in @($streams))
     {
-        return $null
-    }
-    $nb = $st['nb_read_packets']
-    $rfr = $st['r_frame_rate']
-    if ($null -eq $nb -or $null -eq $rfr)
-    {
-        return $null
-    }
-    try
-    {
-        $n = [long]::Parse([string]$nb, [cultureinfo]::InvariantCulture)
-    }
-    catch
-    {
-        return $null
-    }
-    if ($n -le 0)
-    {
-        return $null
-    }
-    $rate = [string]$rfr
-    if ($rate -match '^(\d+)/(\d+)$')
-    {
-        $num = [double]$Matches[1]
-        $den = [double]$Matches[2]
-        if ($num -le 0 -or $den -le 0)
+        if (-not ($s -is [hashtable]))
         {
-            return $null
+            continue
         }
-        return $n * $den / $num
-    }
-    try
-    {
-        $fps = [double]::Parse($rate, [cultureinfo]::InvariantCulture)
-        if ($fps -le 0)
+        $raw = $s['index']
+        if ($null -eq $raw)
         {
-            return $null
+            continue
         }
-        return $n / $fps
+        try
+        {
+            if ([int]$raw -eq $StreamIndex)
+            {
+                return $s
+            }
+        }
+        catch
+        {
+        }
     }
-    catch
+    return $null
+}
+
+function ConvertFrom-FFprobeTimeBase
+{
+    param($Value)
+    if ($null -eq $Value)
     {
         return $null
+    }
+    $text = [string]$Value
+    if ($text -notmatch '^([0-9]+)/([0-9]+)$')
+    {
+        return $null
+    }
+    $numerator = [int64]$Matches[1]
+    $denominator = [int64]$Matches[2]
+    if ($numerator -le 0 -or $denominator -le 0)
+    {
+        return $null
+    }
+    [pscustomobject]@{
+        Numerator   = $numerator
+        Denominator = $denominator
     }
 }
 
-function Get-ComparableStreamDurationPair
+function ConvertFrom-FFprobeCompactPacketLine
+{
+    param([string] $Line)
+    if ([string]::IsNullOrWhiteSpace($Line))
+    {
+        return $null
+    }
+
+    $fields = @{}
+    foreach ($part in $Line.Split('|'))
+    {
+        $eq = $part.IndexOf('=')
+        if ($eq -lt 1)
+        {
+            continue
+        }
+        $fields[$part.Substring(0, $eq)] = $part.Substring($eq + 1)
+    }
+    if (-not $fields.ContainsKey('stream_index'))
+    {
+        return $null
+    }
+    return $fields
+}
+
+function ConvertTo-Int64Invariant
+{
+    param($Value, [ref] $Result)
+    if ($null -eq $Value)
+    {
+        return $false
+    }
+    $text = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($text))
+    {
+        return $false
+    }
+    try
+    {
+        $Result.Value = [int64]::Parse($text, [cultureinfo]::InvariantCulture)
+        return $true
+    }
+    catch
+    {
+        return $false
+    }
+}
+
+function New-FFprobePacketSpanScanResult
 {
     param(
-        [hashtable] $SourceProbe,
-        [hashtable] $TempProbe,
-        [string] $CodecType,
-        [int] $SourceRelativeIndex,
-        [int] $OutputRelativeIndex,
-        [string] $FFPROBE,
-        [string] $SourceFile,
-        [string] $TempFile
+        [switch] $Failed,
+        [string] $Reason,
+        $Spans
+    )
+    if ($null -eq $Spans)
+    {
+        $Spans = [System.Collections.Generic.Dictionary[int, object]]::new()
+    }
+    [pscustomobject]@{
+        ScanFailed = [bool]$Failed
+        Reason     = $Reason
+        Spans      = $Spans
+    }
+}
+
+function New-FFprobePacketSpanScratch
+{
+    param(
+        [hashtable] $Probe,
+        [int[]] $StreamIndices
     )
 
-    $outputStream = Get-ProbeStreamByRelativeIndex -Probe $TempProbe -CodecType $CodecType -TypeRelativeIndex $OutputRelativeIndex
-    if ($null -eq $outputStream)
+    $scratch = [System.Collections.Generic.Dictionary[int, object]]::new()
+    if ($null -eq $StreamIndices)
     {
-        $sourceMeta = Get-DurationForStreamMetadata -Probe $SourceProbe -CodecType $CodecType -TypeRelativeIndex $SourceRelativeIndex
-        $sourceDuration = if ($null -ne $sourceMeta) { $sourceMeta.Duration } else { $null }
-        return [pscustomobject]@{ Method = 'stream'; Source = $sourceDuration; Temp = $null; OutputMissing = $true }
+        return $scratch
     }
 
-    # stream.duration et tag DURATION du même flux mappé désignent la même grandeur ;
-    # les conteneurs ne l'exposent pas par le même canal (mp4 vs mkv).
-    $sourceMeta = Get-DurationForStreamMetadata -Probe $SourceProbe -CodecType $CodecType -TypeRelativeIndex $SourceRelativeIndex
-    $tempMeta = Get-DurationForStreamMetadata -Probe $TempProbe -CodecType $CodecType -TypeRelativeIndex $OutputRelativeIndex
-    if ($null -ne $sourceMeta -and $null -ne $tempMeta)
+    $seen = [System.Collections.Generic.HashSet[int]]::new()
+    foreach ($rawIndex in @($StreamIndices))
     {
-        $method = if ($sourceMeta.Method -eq $tempMeta.Method) { $sourceMeta.Method } else { 'stream' }
-        return [pscustomobject]@{ Method = $method; Source = $sourceMeta.Duration; Temp = $tempMeta.Duration; OutputMissing = $false }
-    }
-
-    if ($CodecType -eq 'video')
-    {
-        $sourceDuration = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $SourceFile -StreamIndex $SourceRelativeIndex
-        $tempDuration = Get-DurationFromPacketCount -FFPROBE $FFPROBE -File $TempFile -StreamIndex $OutputRelativeIndex
-        if ($null -ne $sourceDuration -and $null -ne $tempDuration)
+        $index = [int]$rawIndex
+        if (-not $seen.Add($index))
         {
-            return [pscustomobject]@{ Method = 'count'; Source = $sourceDuration; Temp = $tempDuration; OutputMissing = $false }
+            continue
+        }
+
+        $timeBase = $null
+        $endFromPtsOnly = $false
+        $stream = Get-ProbeStreamByAbsoluteIndex -Probe $Probe -StreamIndex $index
+        if ($null -ne $stream)
+        {
+            $timeBase = ConvertFrom-FFprobeTimeBase -Value $stream['time_base']
+            # PGS : ffprobe ne renseigne jamais packet.duration ; la fin de flux est max(pts).
+            $endFromPtsOnly = ([string]$stream['codec_name'] -ieq 'hdmv_pgs_subtitle')
+        }
+
+        $hasValidTimeBase = ($null -ne $timeBase)
+        $entry = [pscustomobject]@{
+            StreamIndex          = $index
+            TimeBaseNumerator    = $(if ($hasValidTimeBase) { $timeBase.Numerator } else { [int64]0 })
+            TimeBaseDenominator  = $(if ($hasValidTimeBase) { $timeBase.Denominator } else { [int64]0 })
+            HasValidTimeBase     = $hasValidTimeBase
+            EndFromPtsOnly       = $endFromPtsOnly
+            Measurable           = $hasValidTimeBase
+            Reason               = $(if (-not $hasValidTimeBase) { 'time_base-invalid' } else { $null })
+            HasPtsSample         = $false
+            HasSample            = $false
+            HasMaxPts            = $false
+            LastDisplayHasDuration = $false
+            MinPts               = [decimal]0
+            MaxPts               = [decimal]0
+            MaxEnd               = [decimal]0
+            PacketCount          = 0
+            DurationSeconds      = $null
+        }
+        $scratch[$index] = $entry
+    }
+
+    return $scratch
+}
+
+function Add-FFprobePacketSpanObservation
+{
+    param(
+        $Scratch,
+        [hashtable] $Fields
+    )
+    if ($null -eq $Scratch -or $null -eq $Fields)
+    {
+        return
+    }
+
+    $rawIndex = [int64]0
+    if (-not (ConvertTo-Int64Invariant -Value $Fields['stream_index'] -Result ([ref]$rawIndex)))
+    {
+        return
+    }
+    $index = [int]$rawIndex
+    if (-not $Scratch.ContainsKey($index))
+    {
+        return
+    }
+
+    $entry = $Scratch[$index]
+    if (-not $entry.HasValidTimeBase)
+    {
+        return
+    }
+
+    $pts = [int64]0
+    $duration = [int64]0
+    if (-not (ConvertTo-Int64Invariant -Value $Fields['pts'] -Result ([ref]$pts)))
+    {
+        $entry.Measurable = $false
+        $entry.Reason = 'pts-unavailable'
+        return
+    }
+
+    $start = [decimal]$pts
+    if (-not $entry.HasPtsSample)
+    {
+        $entry.MinPts = $start
+        $entry.HasPtsSample = $true
+    }
+    elseif ($start -lt $entry.MinPts)
+    {
+        $entry.MinPts = $start
+    }
+
+    if ($entry.EndFromPtsOnly)
+    {
+        if (-not $entry.HasSample)
+        {
+            $entry.MaxEnd = $start
+            $entry.HasSample = $true
+        }
+        elseif ($start -gt $entry.MaxEnd)
+        {
+            $entry.MaxEnd = $start
+        }
+        $entry.PacketCount++
+        return
+    }
+
+    $durationKnown = (ConvertTo-Int64Invariant -Value $Fields['duration'] -Result ([ref]$duration)) -and $duration -gt 0
+    # MKV : duration absente → fin = pts du Block suivant en affichage ; seul le dernier Block exige une duration.
+    if (-not $entry.HasMaxPts -or $start -gt $entry.MaxPts)
+    {
+        $entry.MaxPts = $start
+        $entry.HasMaxPts = $true
+        $entry.LastDisplayHasDuration = $durationKnown
+    }
+    elseif ($start -eq $entry.MaxPts)
+    {
+        $entry.LastDisplayHasDuration = $durationKnown
+    }
+
+    if (-not $durationKnown)
+    {
+        $entry.PacketCount++
+        return
+    }
+
+    $end = $start + [decimal]$duration
+    if (-not $entry.HasSample)
+    {
+        $entry.MaxEnd = $end
+        $entry.HasSample = $true
+    }
+    elseif ($end -gt $entry.MaxEnd)
+    {
+        $entry.MaxEnd = $end
+    }
+    $entry.PacketCount++
+}
+
+function ConvertTo-FFprobeTimelineSeconds
+{
+    param(
+        [decimal] $Ticks,
+        [int64] $Numerator,
+        [int64] $Denominator
+    )
+    if ($Denominator -eq 0)
+    {
+        return $null
+    }
+    return $Ticks * [decimal]$Numerator / [decimal]$Denominator
+}
+
+function Complete-FFprobePacketSpanScratch
+{
+    param($Scratch)
+
+    $spans = [System.Collections.Generic.Dictionary[int, object]]::new()
+    if ($null -eq $Scratch)
+    {
+        return $spans
+    }
+
+    $fileOrigin = $null
+    foreach ($index in @($Scratch.Keys))
+    {
+        $entry = $Scratch[$index]
+        if (-not $entry.HasValidTimeBase -or -not $entry.HasPtsSample)
+        {
+            continue
+        }
+        $startSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MinPts -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
+        if ($null -eq $startSeconds)
+        {
+            continue
+        }
+        if ($null -eq $fileOrigin -or $startSeconds -lt $fileOrigin)
+        {
+            $fileOrigin = $startSeconds
         }
     }
 
-    return $null
+    foreach ($index in @($Scratch.Keys))
+    {
+        $entry = $Scratch[$index]
+        if (-not $entry.HasValidTimeBase)
+        {
+            $entry.Measurable = $false
+            $entry.Reason = 'time_base-invalid'
+        }
+        elseif ($entry.Reason -eq 'pts-unavailable')
+        {
+            $entry.Measurable = $false
+        }
+        elseif (-not $entry.EndFromPtsOnly -and $entry.HasPtsSample -and -not $entry.LastDisplayHasDuration)
+        {
+            $entry.Measurable = $false
+            $entry.Reason = 'duration-unknown'
+        }
+        elseif (-not $entry.HasPtsSample -or -not $entry.HasSample -or $null -eq $fileOrigin)
+        {
+            $entry.Measurable = $false
+            $entry.Reason = 'no-packets'
+        }
+        else
+        {
+            $entry.Measurable = $true
+            $entry.Reason = $null
+            # Origine = min(pts) de tous les flux contrôlés, pas le min du flux : un délai initial reste visible.
+            $endSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MaxEnd -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
+            $entry.DurationSeconds = $endSeconds - $fileOrigin
+        }
+        if (-not $entry.Measurable)
+        {
+            $entry.DurationSeconds = $null
+            $entry.MinPts = $null
+            $entry.MaxEnd = $null
+        }
+        $spans[[int]$index] = $entry
+    }
+
+    return $spans
+}
+
+function Read-FFprobePacketSpanMap
+{
+    param(
+        [hashtable] $Probe,
+        [int[]] $StreamIndices,
+        [Parameter(Mandatory)] [System.IO.TextReader] $Reader
+    )
+
+    $scratch = New-FFprobePacketSpanScratch -Probe $Probe -StreamIndices $StreamIndices
+    while ($null -ne ($line = $Reader.ReadLine()))
+    {
+        $fields = ConvertFrom-FFprobeCompactPacketLine -Line $line
+        if ($null -eq $fields)
+        {
+            continue
+        }
+        Add-FFprobePacketSpanObservation -Scratch $scratch -Fields $fields
+    }
+
+    New-FFprobePacketSpanScanResult -Spans (Complete-FFprobePacketSpanScratch -Scratch $scratch)
+}
+
+function Get-FFprobePacketSpanArgumentList
+{
+    param([Parameter(Mandatory)] [string] $File)
+    @(
+        '-v', 'error',
+        '-show_packets',
+        '-show_entries', 'packet=stream_index,pts,duration',
+        '-of', 'compact=p=0:nk=0',
+        $File
+    )
+}
+
+function Select-FFprobePacketSpanScanResult
+{
+    param(
+        $Map,
+        [int] $ExitCode,
+        [string] $StdErr
+    )
+    # Un code non nul peut laisser un stdout partiel ; ne jamais valider ce résultat.
+    if ($ExitCode -ne 0)
+    {
+        if (-not [string]::IsNullOrWhiteSpace($StdErr))
+        {
+            Write-ErrorLog $StdErr
+        }
+        return New-FFprobePacketSpanScanResult -Failed -Reason 'ffprobe-failed'
+    }
+    return $Map
+}
+
+function Get-FFprobePacketSpanMap
+{
+    param(
+        [Parameter(Mandatory)] [string] $FFPROBE,
+        [Parameter(Mandatory)] [string] $File,
+        [Parameter(Mandatory)] [hashtable] $Probe,
+        [int[]] $StreamIndices
+    )
+
+    if ($null -eq $StreamIndices -or @($StreamIndices).Count -eq 0)
+    {
+        return New-FFprobePacketSpanScanResult -Spans ([System.Collections.Generic.Dictionary[int, object]]::new())
+    }
+
+    if ([string]::IsNullOrWhiteSpace($FFPROBE) -or [string]::IsNullOrWhiteSpace($File) -or -not [File]::Exists($File))
+    {
+        return New-FFprobePacketSpanScanResult -Failed -Reason 'ffprobe-failed'
+    }
+
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $FFPROBE
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    foreach ($arg in (Get-FFprobePacketSpanArgumentList -File $File))
+    {
+        [void]$psi.ArgumentList.Add($arg)
+    }
+
+    $proc = $null
+    try
+    {
+        $proc = [System.Diagnostics.Process]::new()
+        $proc.StartInfo = $psi
+        if (-not $proc.Start())
+        {
+            return New-FFprobePacketSpanScanResult -Failed -Reason 'ffprobe-failed'
+        }
+
+        # stderr drain async: un buffer plein bloquerait la lecture stdout ligne à ligne.
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        $map = Read-FFprobePacketSpanMap -Probe $Probe -StreamIndices $StreamIndices -Reader $proc.StandardOutput
+        $proc.WaitForExit()
+        $stderr = $stderrTask.GetAwaiter().GetResult()
+        return (Select-FFprobePacketSpanScanResult -Map $map -ExitCode $proc.ExitCode -StdErr $stderr)
+    }
+    catch
+    {
+        return New-FFprobePacketSpanScanResult -Failed -Reason 'ffprobe-failed'
+    }
+    finally
+    {
+        if ($null -ne $proc)
+        {
+            $proc.Dispose()
+        }
+    }
 }
 
 function Get-DurationComparison
 {
     param(
-        [double] $Expected,
-        [double] $Actual,
-        [double] $TolerancePercent,
-        [double] $ToleranceSecondsMin
+        $Expected,
+        $Actual,
+        $TolerancePercent,
+        $ToleranceSecondsMin
     )
-    $diff = [math]::Abs($Expected - $Actual)
-    $tolerance = [math]::Max($ToleranceSecondsMin, $Expected * $TolerancePercent / 100.0)
+    $expectedDec = [decimal]$Expected
+    $actualDec = [decimal]$Actual
+    $diff = [Math]::Abs($expectedDec - $actualDec)
+    $tolerance = [Math]::Max([decimal]$ToleranceSecondsMin, $expectedDec * [decimal]$TolerancePercent / [decimal]100)
     [pscustomobject]@{
-        Diff = $diff
+        Diff       = $diff
         IsMismatch = ($diff -gt $tolerance)
     }
 }
@@ -381,17 +575,19 @@ function New-IntegrityCheckResult
         $Diff = $null,
         [string] $StreamType = $null,
         $SourceRelativeIndex = $null,
-        $OutputRelativeIndex = $null
+        $OutputRelativeIndex = $null,
+        [string] $Reason = $null
     )
     [pscustomobject]@{
-        Status = $Status
-        Method = $Method
-        Expected = $Expected
-        Actual = $Actual
-        Diff = $Diff
-        StreamType = $StreamType
-        SourceRelativeIndex = $SourceRelativeIndex
-        OutputRelativeIndex = $OutputRelativeIndex
+        Status               = $Status
+        Method               = $Method
+        Expected             = $Expected
+        Actual               = $Actual
+        Diff                 = $Diff
+        StreamType           = $StreamType
+        SourceRelativeIndex  = $SourceRelativeIndex
+        OutputRelativeIndex  = $OutputRelativeIndex
+        Reason               = $Reason
     }
 }
 
@@ -420,68 +616,153 @@ function Get-IntegrityStreamMapLabel
     return ('source 0:{0}:{1} -> output 0:{0}:{2}' -f $letter, [int]$SourceRelativeIndex, [int]$OutputRelativeIndex)
 }
 
+function ConvertTo-StreamAbsoluteIndex
+{
+    param($Stream)
+    if ($null -eq $Stream)
+    {
+        return $null
+    }
+    $raw = $Stream['index']
+    if ($null -eq $raw)
+    {
+        return $null
+    }
+    try
+    {
+        return [int]$raw
+    }
+    catch
+    {
+        return $null
+    }
+}
+
+function Get-KeptIntegrityStreamPairs
+{
+    param(
+        [hashtable] $SourceProbe,
+        [hashtable] $TempProbe,
+        [int[]] $KeptSourceVideoIndices,
+        [int[]] $KeptSourceAudioIndices,
+        [int[]] $KeptSourceSubtitleIndices
+    )
+
+    $pairs = [System.Collections.Generic.List[object]]::new()
+    foreach ($codecType in @('video', 'audio', 'subtitle'))
+    {
+        $kept = [System.Collections.Generic.List[int]]::new()
+        $keptIndices = switch ($codecType)
+        {
+            'video' { $KeptSourceVideoIndices }
+            'audio' { $KeptSourceAudioIndices }
+            'subtitle' { $KeptSourceSubtitleIndices }
+        }
+        if ($null -ne $keptIndices)
+        {
+            foreach ($idx in $keptIndices)
+            {
+                $kept.Add([int]$idx)
+            }
+        }
+
+        for ($outputRelativeIndex = 0; $outputRelativeIndex -lt $kept.Count; $outputRelativeIndex++)
+        {
+            $sourceRelativeIndex = [int]$kept[$outputRelativeIndex]
+            $sourceStream = Get-ProbeStreamByRelativeIndex -Probe $SourceProbe -CodecType $codecType -TypeRelativeIndex $sourceRelativeIndex
+            $outputStream = Get-ProbeStreamByRelativeIndex -Probe $TempProbe -CodecType $codecType -TypeRelativeIndex $outputRelativeIndex
+            if ($null -eq $outputStream)
+            {
+                return [pscustomobject]@{
+                    Missing = (New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-span' `
+                            -StreamType $codecType -SourceRelativeIndex $sourceRelativeIndex -OutputRelativeIndex $outputRelativeIndex `
+                            -Reason 'output-stream-missing')
+                    Pairs   = $pairs
+                }
+            }
+
+            $pairs.Add([pscustomobject]@{
+                    CodecType            = $codecType
+                    SourceRelativeIndex  = $sourceRelativeIndex
+                    OutputRelativeIndex  = $outputRelativeIndex
+                    SourceAbsoluteIndex  = (ConvertTo-StreamAbsoluteIndex -Stream $sourceStream)
+                    OutputAbsoluteIndex  = (ConvertTo-StreamAbsoluteIndex -Stream $outputStream)
+                })
+        }
+    }
+
+    [pscustomobject]@{
+        Missing = $null
+        Pairs   = $pairs
+    }
+}
+
+function Get-PacketSpanEntry
+{
+    param(
+        $Spans,
+        $Index
+    )
+    if ($null -eq $Spans -or $null -eq $Index)
+    {
+        return $null
+    }
+    $key = [int]$Index
+    if (-not $Spans.ContainsKey($key))
+    {
+        return $null
+    }
+    return $Spans[$key]
+}
+
 function Find-KeptStreamDurationMismatch
 {
     param(
-        [string] $CodecType,
-        [int[]] $KeptIndices,
-        [hashtable] $SourceProbe,
-        [hashtable] $TempProbe,
-        [string] $FFPROBE,
-        [string] $SourceFile,
-        [string] $TempFile,
-        [double] $TolerancePercent,
-        [double] $ToleranceSecondsMin,
+        $Pairs,
+        $SourceSpans,
+        $OutputSpans,
+        $TolerancePercent,
+        $ToleranceSecondsMin,
         [ref] $HadUnknownStream,
         [ref] $LastOk
     )
 
-    # Copie vers List[int] plutôt que `$kept = if (...) { @() } else { @($KeptIndices) }` :
-    # l'expression `if` déballe un tableau à un élément, et `.Count` lève sous StrictMode.
-    $kept = [System.Collections.Generic.List[int]]::new()
-    if ($null -ne $KeptIndices)
+    foreach ($pair in @($Pairs))
     {
-        foreach ($idx in $KeptIndices)
+        $sourceSpan = Get-PacketSpanEntry -Spans $SourceSpans -Index $pair.SourceAbsoluteIndex
+        if ($null -eq $sourceSpan -or -not $sourceSpan.Measurable)
         {
-            $kept.Add([int]$idx)
-        }
-    }
-    for ($outputRelativeIndex = 0; $outputRelativeIndex -lt $kept.Count; $outputRelativeIndex++)
-    {
-        $sourceRelativeIndex = [int]$kept[$outputRelativeIndex]
-        $pair = Get-ComparableStreamDurationPair `
-            -SourceProbe $SourceProbe `
-            -TempProbe $TempProbe `
-            -CodecType $CodecType `
-            -SourceRelativeIndex $sourceRelativeIndex `
-            -OutputRelativeIndex $outputRelativeIndex `
-            -FFPROBE $FFPROBE `
-            -SourceFile $SourceFile `
-            -TempFile $TempFile
-        if ($null -eq $pair)
-        {
-            # Un flux indéterminable ne doit pas masquer un mismatch plus loin.
             $HadUnknownStream.Value = $true
             continue
         }
-        if ($pair.OutputMissing)
+
+        $outputSpan = Get-PacketSpanEntry -Spans $OutputSpans -Index $pair.OutputAbsoluteIndex
+        if ($null -eq $outputSpan -or -not $outputSpan.Measurable)
         {
-            return New-IntegrityCheckResult -Status 'mismatch' -Method $pair.Method -Expected $pair.Source -Actual $null `
-                -StreamType $CodecType -SourceRelativeIndex $sourceRelativeIndex -OutputRelativeIndex $outputRelativeIndex
+            $reason = 'packet-timeline-unavailable'
+            if ($null -ne $outputSpan -and -not [string]::IsNullOrWhiteSpace([string]$outputSpan.Reason))
+            {
+                $reason = [string]$outputSpan.Reason
+            }
+            return New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-span' -Expected $sourceSpan.DurationSeconds -Actual $null `
+                -StreamType $pair.CodecType -SourceRelativeIndex $pair.SourceRelativeIndex -OutputRelativeIndex $pair.OutputRelativeIndex `
+                -Reason $reason
         }
 
         $streamCmp = Get-DurationComparison `
-            -Expected $pair.Source `
-            -Actual $pair.Temp `
+            -Expected $sourceSpan.DurationSeconds `
+            -Actual $outputSpan.DurationSeconds `
             -TolerancePercent $TolerancePercent `
             -ToleranceSecondsMin $ToleranceSecondsMin
         if ($streamCmp.IsMismatch)
         {
-            return New-IntegrityCheckResult -Status 'mismatch' -Method $pair.Method -Expected $pair.Source -Actual $pair.Temp -Diff $streamCmp.Diff `
-                -StreamType $CodecType -SourceRelativeIndex $sourceRelativeIndex -OutputRelativeIndex $outputRelativeIndex
+            return New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-span' `
+                -Expected $sourceSpan.DurationSeconds -Actual $outputSpan.DurationSeconds -Diff $streamCmp.Diff `
+                -StreamType $pair.CodecType -SourceRelativeIndex $pair.SourceRelativeIndex -OutputRelativeIndex $pair.OutputRelativeIndex
         }
-        $LastOk.Value = New-IntegrityCheckResult -Status 'ok' -Method $pair.Method -Expected $pair.Source -Actual $pair.Temp -Diff $streamCmp.Diff `
-            -StreamType $CodecType -SourceRelativeIndex $sourceRelativeIndex -OutputRelativeIndex $outputRelativeIndex
+        $LastOk.Value = New-IntegrityCheckResult -Status 'ok' -Method 'packet-span' `
+            -Expected $sourceSpan.DurationSeconds -Actual $outputSpan.DurationSeconds -Diff $streamCmp.Diff `
+            -StreamType $pair.CodecType -SourceRelativeIndex $pair.SourceRelativeIndex -OutputRelativeIndex $pair.OutputRelativeIndex
     }
 
     return $null
@@ -507,48 +788,64 @@ function Test-EncodedFileIntegrity
         return New-IntegrityCheckResult -Status 'mismatch' -Method 'probe'
     }
 
-    # format.duration prouve un média incorrect, jamais qu'il est complet.
-    $lastOk = $null
-    $sourceFormat = Get-DurationFromFormat -Probe $SourceProbe
-    $tempFormat = Get-DurationFromFormat -Probe $tempProbe
-    if ($null -ne $sourceFormat -and $null -ne $tempFormat)
+    $built = Get-KeptIntegrityStreamPairs `
+        -SourceProbe $SourceProbe `
+        -TempProbe $tempProbe `
+        -KeptSourceVideoIndices $KeptSourceVideoIndices `
+        -KeptSourceAudioIndices $KeptSourceAudioIndices `
+        -KeptSourceSubtitleIndices $KeptSourceSubtitleIndices
+    if ($null -ne $built.Missing)
     {
-        $formatCmp = Get-DurationComparison `
-            -Expected $sourceFormat `
-            -Actual $tempFormat `
-            -TolerancePercent $TolerancePercent `
-            -ToleranceSecondsMin $ToleranceSecondsMin
-        if ($formatCmp.IsMismatch)
+        return $built.Missing
+    }
+
+    $pairs = @($built.Pairs)
+    if ($pairs.Count -eq 0)
+    {
+        return New-IntegrityCheckResult -Status 'unknown' -Method 'unknown'
+    }
+
+    $sourceIndices = [System.Collections.Generic.List[int]]::new()
+    $outputIndices = [System.Collections.Generic.List[int]]::new()
+    $sourceSeen = [System.Collections.Generic.HashSet[int]]::new()
+    $outputSeen = [System.Collections.Generic.HashSet[int]]::new()
+    foreach ($pair in $pairs)
+    {
+        if ($null -ne $pair.SourceAbsoluteIndex -and $sourceSeen.Add([int]$pair.SourceAbsoluteIndex))
         {
-            return New-IntegrityCheckResult -Status 'mismatch' -Method 'format' -Expected $sourceFormat -Actual $tempFormat -Diff $formatCmp.Diff
+            $sourceIndices.Add([int]$pair.SourceAbsoluteIndex)
+        }
+        if ($null -ne $pair.OutputAbsoluteIndex -and $outputSeen.Add([int]$pair.OutputAbsoluteIndex))
+        {
+            $outputIndices.Add([int]$pair.OutputAbsoluteIndex)
         }
     }
 
-    $hadUnknownStream = $false
-    $streamTypeArgs = @{
-        SourceProbe = $SourceProbe
-        TempProbe = $tempProbe
-        FFPROBE = $FFPROBE
-        SourceFile = $SourceFile
-        TempFile = $TempFile
-        TolerancePercent = $TolerancePercent
-        ToleranceSecondsMin = $ToleranceSecondsMin
-        HadUnknownStream = [ref]$hadUnknownStream
-        LastOk = [ref]$lastOk
-    }
-    foreach ($codecType in @('video', 'audio', 'subtitle'))
+    $sourceMap = Get-FFprobePacketSpanMap -FFPROBE $FFPROBE -File $SourceFile -Probe $SourceProbe -StreamIndices $sourceIndices.ToArray()
+    if ($sourceMap.ScanFailed)
     {
-        $keptIndices = switch ($codecType)
-        {
-            'video' { $KeptSourceVideoIndices }
-            'audio' { $KeptSourceAudioIndices }
-            'subtitle' { $KeptSourceSubtitleIndices }
-        }
-        $mismatch = Find-KeptStreamDurationMismatch @streamTypeArgs -CodecType $codecType -KeptIndices $keptIndices
-        if ($null -ne $mismatch)
-        {
-            return $mismatch
-        }
+        return New-IntegrityCheckResult -Status 'unknown' -Method 'unknown' -Reason 'ffprobe-failed'
+    }
+
+    $outputMap = Get-FFprobePacketSpanMap -FFPROBE $FFPROBE -File $TempFile -Probe $tempProbe -StreamIndices $outputIndices.ToArray()
+    if ($outputMap.ScanFailed)
+    {
+        return New-IntegrityCheckResult -Status 'mismatch' -Method 'packet-probe' -Reason 'ffprobe-failed'
+    }
+
+    $hadUnknownStream = $false
+    $lastOk = $null
+    $mismatch = Find-KeptStreamDurationMismatch `
+        -Pairs $pairs `
+        -SourceSpans $sourceMap.Spans `
+        -OutputSpans $outputMap.Spans `
+        -TolerancePercent $TolerancePercent `
+        -ToleranceSecondsMin $ToleranceSecondsMin `
+        -HadUnknownStream ([ref]$hadUnknownStream) `
+        -LastOk ([ref]$lastOk)
+    if ($null -ne $mismatch)
+    {
+        return $mismatch
     }
 
     if ($hadUnknownStream)
