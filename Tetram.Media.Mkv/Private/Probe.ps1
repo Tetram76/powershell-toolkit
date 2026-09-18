@@ -242,7 +242,7 @@ function New-FFprobePacketSpanScratch
             if ($null -ne $stream)
             {
                 $timeBase = ConvertFrom-FFprobeTimeBase -Value $stream['time_base']
-                # PGS : ffprobe ne renseigne jamais packet.duration ; la métrique de référence est max(pts).
+                # PGS : le contrôle utilise volontairement max(pts) et ne dépend pas de packet.duration.
                 $endFromPtsOnly = ([string]$stream['codec_name'] -ieq 'hdmv_pgs_subtitle')
             }
 
@@ -259,7 +259,7 @@ function New-FFprobePacketSpanScratch
                 HasKnownEndSample               = $false
                 HasUnavailablePts               = $false
                 HasUnavailableDuration          = $false
-                LastDisplayHasDuration          = $false
+                HasUnknownDurationAtMaxPts      = $false
                 MinPts                          = [decimal]0
                 MaxPts                          = [decimal]0
                 MaxKnownEnd                     = [decimal]0
@@ -344,16 +344,21 @@ function Add-FFprobePacketSpanObservation
 
     if ($entry.AllowMissingIntermediateDuration)
     {
-        # RFC 9559 : BlockDuration absent → durée = delta vers le Block suivant en display order ; seul le dernier Block exige une duration.
+        # RFC 9559 : sans DefaultDuration, BlockDuration absent = delta vers le Block suivant en display order.
+        # FFmpeg ne fait pas ce lookahead ; il matérialise DefaultDuration dans packet.duration.
+        # duration=N/A implique donc block_duration=0 et default_duration=0 : ces packets ne peuvent
+        # pas dépasser maxPTS, MaxKnownEnd n'est pas sous-estimé. Un packet au maxPTS sans duration
+        # rend la borne exacte incertifiable — un packet connu au même PTS, même arrivé plus tard
+        # dans ffprobe, ne peut pas réparer cet état.
         if (-not $entry.HasMaxPts -or $start -gt $entry.MaxPts)
         {
             $entry.MaxPts = $start
             $entry.HasMaxPts = $true
-            $entry.LastDisplayHasDuration = $durationKnown
+            $entry.HasUnknownDurationAtMaxPts = -not $durationKnown
         }
-        elseif ($start -eq $entry.MaxPts)
+        elseif ($start -eq $entry.MaxPts -and -not $durationKnown)
         {
-            $entry.LastDisplayHasDuration = $durationKnown
+            $entry.HasUnknownDurationAtMaxPts = $true
         }
     }
     elseif (-not $entry.HasMaxPts -or $start -gt $entry.MaxPts)
@@ -457,19 +462,15 @@ function Complete-FFprobePacketSpanScratch
             }
             elseif ($entry.AllowMissingIntermediateDuration)
             {
-                if (-not $entry.LastDisplayHasDuration)
+                if ($entry.HasUnknownDurationAtMaxPts)
                 {
                     $entry.Reason = 'duration-unknown'
-                }
-                elseif (-not $entry.HasKnownEndSample)
-                {
-                    $entry.PtsMetricAvailable = $false
-                    $entry.PtsExtentSeconds = $null
-                    $entry.Reason = 'no-packets'
                 }
                 else
                 {
                     # Origine = min(pts) de tous les flux contrôlés, pas le min du flux : un délai initial reste visible.
+                    # HasUnknownDurationAtMaxPts faux au maxPTS implique un packet à duration connue
+                    # à ce PTS, donc HasKnownEndSample est déjà vrai.
                     $endSeconds = ConvertTo-FFprobeTimelineSeconds -Ticks $entry.MaxKnownEnd -Numerator $entry.TimeBaseNumerator -Denominator $entry.TimeBaseDenominator
                     $entry.ExactExtentSeconds = $endSeconds - $fileOrigin
                     $entry.ExactMetricAvailable = $true
@@ -793,6 +794,7 @@ function Get-PacketSpanComparisonMetric
 
     $outputExact = ($null -ne $OutputSpan -and $OutputSpan.ExactMetricAvailable)
     $outputPts = ($null -ne $OutputSpan -and $OutputSpan.PtsMetricAvailable)
+    # EndFromPtsOnly est lu sur la source : le chemin contrôlé ne recode jamais vers PGS (-c:s copy).
     $sourcePgs = [bool]$SourceSpan.EndFromPtsOnly
 
     # Une grandeur n'est comparable que si les deux côtés l'ont calculée avec la même formule.
@@ -809,19 +811,25 @@ function Get-PacketSpanComparisonMetric
         return 'mismatch'
     }
 
-    if ($SourceSpan.ExactMetricAvailable -and $outputExact)
+    # Fallback PTS seulement si la source n'a pas de borne exacte : ne pas masquer
+    # une perte de duration terminale côté sortie derrière une égalité de maxPTS.
+    if ($SourceSpan.ExactMetricAvailable)
     {
-        return 'packet-end-span'
+        if ($outputExact)
+        {
+            return 'packet-end-span'
+        }
+        return 'mismatch'
     }
-    if ($SourceSpan.PtsMetricAvailable -and $outputPts)
+    if ($SourceSpan.PtsMetricAvailable)
     {
-        return 'packet-pts-span'
+        if ($outputPts)
+        {
+            return 'packet-pts-span'
+        }
+        return 'mismatch'
     }
-    if (-not $SourceSpan.ExactMetricAvailable -and -not $SourceSpan.PtsMetricAvailable)
-    {
-        return 'unknown'
-    }
-    return 'mismatch'
+    return 'unknown'
 }
 
 function Get-PacketSpanEntry

@@ -523,6 +523,32 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $script:ErrorLogs[0] | Should -Match 'duration-unknown'
     }
 
+    It 'ne décrit pas une perte de borne exacte comme un flux de sortie manquant' {
+        $file = Join-Path $TestDrive 'lost-exact-end.mp4'
+        Set-Content -LiteralPath $file -Value 'source-original'
+
+        Mock -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity {
+            [pscustomobject]@{
+                Status               = 'mismatch'
+                Method               = 'packet-span'
+                Expected             = 110.0
+                Actual               = $null
+                Diff                 = $null
+                StreamType           = 'video'
+                SourceRelativeIndex  = 0
+                OutputRelativeIndex  = 0
+                Reason               = 'duration-unknown'
+            }
+        }
+
+        $state = Invoke-ReencodeFileForIntegrity -Filename $file -Config (New-ReencodeFileTestConfig) -TempPath $TestDrive
+
+        $state.IntegrityFailureFiles | Should -Contain $file
+        $script:ErrorLogs[0] | Should -Match 'output lost the exact end bound that the source had'
+        $script:ErrorLogs[0] | Should -Match 'duration-unknown'
+        $script:ErrorLogs[0] | Should -Not -Match 'mapped output stream is missing'
+    }
+
     It 'signale un échec de probe sans message de durée vide' {
         $file = Join-Path $TestDrive 'probe-fail.mp4'
         Set-Content -LiteralPath $file -Value 'source-original'

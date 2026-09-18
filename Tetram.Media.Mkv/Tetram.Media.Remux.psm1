@@ -544,7 +544,19 @@ function Invoke-ReencodeFile
                     }
                     elseif ($null -eq $integrity.Expected -or $null -eq $integrity.Actual)
                     {
-                        if ($streamLabel)
+                        # Actual null + duration-unknown : la sortie a une timeline PTS, seule la borne exacte a disparu.
+                        $lostExactEnd = ($null -ne $integrity.Expected) -and ($null -eq $integrity.Actual) -and ($reason -eq 'duration-unknown')
+                        if ($lostExactEnd -and $streamLabel)
+                        {
+                            "Integrity duration mismatch for '{0}' [{1}, via {2}] - output lost the exact end bound that the source had" -f `
+                                $Filename, $streamLabel, $integrity.Method
+                        }
+                        elseif ($lostExactEnd)
+                        {
+                            "Integrity duration mismatch for '{0}' [via {1}] - output lost the exact end bound that the source had" -f `
+                                $Filename, $integrity.Method
+                        }
+                        elseif ($streamLabel)
                         {
                             "Integrity duration mismatch for '{0}' [{1}, via {2}] - mapped output stream is missing or has no packet timeline" -f `
                                 $Filename, $streamLabel, $integrity.Method
