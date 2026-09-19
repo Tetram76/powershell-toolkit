@@ -33,7 +33,7 @@ BeforeAll {
             [long] $StartPos = 0,
             [long] $PosStep = 2000,
             [long] $Size = 1000,
-            $StreamIndex = $null
+            $StreamIndex = 0
         )
 
         $dt = 1.0 / $Fps
@@ -516,6 +516,8 @@ Describe 'Get-IntegrityPacketWindow — ffprobe' {
         $argLine | Should -Match 'a:0'
         $argLine | Should -Match '-read_intervals'
         $argLine | Should -Match '45%55'
+        $argLine | Should -Match 'packet=stream_index,pts_time,pos,size'
+        $argLine | Should -Not -Match 'duration'
     }
 
     It 'préserve un tableau vide distinct de null quand packets est []' {
@@ -573,6 +575,16 @@ Describe 'Get-IntegrityUnknownDetail' {
         }
         $fromHint | Should -Be 'source 0:v:0 has no usable end PTS'
         $fromPts | Should -Be $fromHint
+    }
+
+    It 'mappe no-anchor-cadence sur l''absence de cadence exploitable autour de l''anchor' {
+        $detail = InModuleScope 'Tetram.Media.Mkv' {
+            Get-IntegrityUnknownDetail -Integrity ([pscustomobject]@{
+                    Reason = 'no-anchor-cadence'
+                    Method = 'interleave'
+                })
+        }
+        $detail | Should -Be 'no usable A/V packet cadence around an interleave anchor'
     }
 }
 
@@ -800,29 +812,60 @@ Describe 'Get-IntegrityTailGuardInterval' {
     }
 }
 
+Describe 'Get-IntegrityAnchorSearchWindow' {
+    It 'sépare le seek clampé à 0 et la fenêtre PTS qui peut être négative' {
+        $window = InModuleScope 'Tetram.Media.Mkv' {
+            Get-IntegrityAnchorSearchWindow -Anchor 0
+        }
+        $window.PtsStart | Should -Be -5
+        $window.PtsEnd | Should -Be 5
+        $window.ReadIntervals | Should -Be '0%5'
+    }
+
+    It 'aligne seek et PTS quand l''anchor est loin de 0' {
+        $window = InModuleScope 'Tetram.Media.Mkv' {
+            Get-IntegrityAnchorSearchWindow -Anchor 50
+        }
+        $window.PtsStart | Should -Be 45
+        $window.PtsEnd | Should -Be 55
+        $window.ReadIntervals | Should -Be '45%55'
+    }
+}
+
 Describe 'Get-IntegrityPacketsForAbsoluteStream' {
-    It 'conserve les packets non indexés (mocks unitaires) et ignore les non indexés d''un échantillon mixte' {
+    It 'propage $null (échec de probe amont)' {
+        $selected = InModuleScope 'Tetram.Media.Mkv' {
+            Get-IntegrityPacketsForAbsoluteStream -Packets $null -AbsoluteStreamIndex 0
+        }
+        $null -eq $selected | Should -BeTrue
+    }
+
+    It 'retourne un tableau vide si aucun StreamIndex n''est exploitable' {
         $unindexed = @(
             (New-IntegrityPacket -PtsTime 0 -Pos 1 -Size 10)
             (New-IntegrityPacket -PtsTime 0.04 -Pos 2 -Size 10)
         )
-        $kept = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $unindexed } {
+        $selected = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $unindexed } {
             param($Packets)
             Get-IntegrityPacketsForAbsoluteStream -Packets $Packets -AbsoluteStreamIndex 0
         }
-        @($kept).Count | Should -Be 2
+        @($selected).Count | Should -Be 0
+    }
 
+    It 'ignore les packets sans index et ne garde que l''index demandé' {
         $mixed = @(
             (New-IntegrityPacket -PtsTime 0 -Pos 1 -Size 10)
             (New-IntegrityPacket -PtsTime 0.02 -Pos 2 -Size 10 -StreamIndex 1)
-            (New-IntegrityPacket -PtsTime 0.04 -Pos 3 -Size 10 -StreamIndex 0)
+            (New-IntegrityPacket -PtsTime 0.04 -Pos 3 -Size 10 -StreamIndex 2)
+            (New-IntegrityPacket -PtsTime 0.06 -Pos 4 -Size 10)
         )
         $selected = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $mixed } {
             param($Packets)
-            Get-IntegrityPacketsForAbsoluteStream -Packets $Packets -AbsoluteStreamIndex 0
+            Get-IntegrityPacketsForAbsoluteStream -Packets $Packets -AbsoluteStreamIndex 1
         }
         @($selected).Count | Should -Be 1
-        $selected[0].PtsTime | Should -Be 0.04
+        $selected[0].PtsTime | Should -Be 0.02
+        $selected[0].StreamIndex | Should -Be 1
     }
 
     It 'filtre par stream_index quand il est présent' {
@@ -838,6 +881,361 @@ Describe 'Get-IntegrityPacketsForAbsoluteStream' {
         @($selected).Count | Should -Be 2
         $selected[0].PtsTime | Should -Be 0
         $selected[1].PtsTime | Should -Be 0.04
+    }
+
+    It 'retourne un tableau vide pour un index absent (aucun fallback heuristique)' {
+        $packets = @(
+            (New-IntegrityPacket -PtsTime 0 -Pos 1 -Size 10 -StreamIndex 0)
+            (New-IntegrityPacket -PtsTime 0.04 -Pos 2 -Size 10 -StreamIndex 2)
+        )
+        $selected = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets } {
+            param($Packets)
+            Get-IntegrityPacketsForAbsoluteStream -Packets $Packets -AbsoluteStreamIndex 1
+        }
+        @($selected).Count | Should -Be 0
+    }
+}
+
+Describe 'Get-IntegrityTargetedInterleaveCadence' {
+    It 'privilégie la cadence locale des packets ciblés' {
+        $packets = @(
+            (New-IntegrityPacket -PtsTime 49.98 -Pos 1 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.00 -Pos 2 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.02 -Pos 3 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.04 -Pos 4 -StreamIndex 1)
+        )
+        $profile = [pscustomobject]@{
+            Cadence      = 0.04
+            StartCadence = 0.04
+            EndCadence   = $null
+        }
+        $cadence = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityTargetedInterleaveCadence -TemporalProfile $Profile -Packets $Packets
+        }
+        [math]::Abs([double]$cadence - 0.02) | Should -BeLessThan 1e-9
+    }
+
+    It 'utilise TemporalProfile.Cadence quand la cadence locale est impossible' {
+        $packets = @((New-IntegrityPacket -PtsTime 50.00 -Pos 1 -StreamIndex 1))
+        $profile = [pscustomobject]@{
+            Cadence      = 0.04
+            StartCadence = 0.08
+            EndCadence   = 0.02
+        }
+        $cadence = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityTargetedInterleaveCadence -TemporalProfile $Profile -Packets $Packets
+        }
+        $cadence | Should -Be 0.04
+    }
+
+    It 'utilise max(StartCadence, EndCadence) si Cadence est absente' {
+        $packets = @((New-IntegrityPacket -PtsTime 50.00 -Pos 1 -StreamIndex 1))
+        $profile = [pscustomobject]@{
+            Cadence      = $null
+            StartCadence = 0.040
+            EndCadence   = 0.020
+        }
+        $cadence = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityTargetedInterleaveCadence -TemporalProfile $Profile -Packets $Packets
+        }
+        $cadence | Should -Be 0.040
+    }
+
+    It 'utilise la seule cadence de bord disponible' {
+        $packets = @((New-IntegrityPacket -PtsTime 50.00 -Pos 1 -StreamIndex 1))
+        $profile = [pscustomobject]@{
+            Cadence      = $null
+            StartCadence = 0.040
+            EndCadence   = $null
+        }
+        $cadence = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityTargetedInterleaveCadence -TemporalProfile $Profile -Packets $Packets
+        }
+        $cadence | Should -Be 0.040
+    }
+
+    It 'retourne $null s''il n''existe aucune cadence exploitable' {
+        $packets = @((New-IntegrityPacket -PtsTime 50.00 -Pos 1 -StreamIndex 1))
+        $profile = [pscustomobject]@{
+            Cadence      = $null
+            StartCadence = $null
+            EndCadence   = $null
+        }
+        $cadence = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityTargetedInterleaveCadence -TemporalProfile $Profile -Packets $Packets
+        }
+        $null -eq $cadence | Should -BeTrue
+    }
+
+    It 'n''utilise pas un trou de seek comme cadence locale' {
+        $packets = @(
+            (New-IntegrityPacket -PtsTime 45.0 -Pos 1 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.0 -Pos 2 -StreamIndex 1)
+        )
+        $cadence = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets } {
+            param($Packets)
+            Get-IntegrityTargetedInterleaveCadence -TemporalProfile $null -Packets $Packets
+        }
+        $null -eq $cadence | Should -BeTrue
+    }
+}
+
+Describe 'Get-IntegrityTargetedInterleaveCandidate' {
+    It 'refuse un packet à +4,9 s même s''il est dans la fenêtre de recherche de ±5 s' {
+        $packets = @(
+            (New-IntegrityPacket -PtsTime 54.880 -Pos 80000000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 54.900 -Pos 80002000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 54.920 -Pos 80004000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 54.940 -Pos 80006000L -Size 1536 -StreamIndex 1)
+        )
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets } {
+            param($Packets)
+            Get-IntegrityTargetedInterleaveCandidate `
+                -TemporalProfile $null `
+                -Packets $Packets `
+                -Anchor 50.0 `
+                -WindowStart 45.0 `
+                -WindowEnd 55.0
+        }
+        $picked.Status | Should -Be 'unknown'
+        $picked.Reason | Should -Be 'no-anchor-candidate'
+        $null -eq $picked.Packet | Should -BeTrue
+    }
+
+    It 'accepte un packet à 15 ms d''écart pour une cadence locale de 20 ms' {
+        $packets = @(
+            (New-IntegrityPacket -PtsTime 50.015 -Pos 5100000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.035 -Pos 5102000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.055 -Pos 5104000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.075 -Pos 5106000L -Size 1536 -StreamIndex 1)
+        )
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets } {
+            param($Packets)
+            Get-IntegrityTargetedInterleaveCandidate `
+                -TemporalProfile $null `
+                -Packets $Packets `
+                -Anchor 50.0 `
+                -WindowStart 45.0 `
+                -WindowEnd 55.0
+        }
+        $picked.Status | Should -Be 'ok'
+        $picked.Packet.PtsTime | Should -Be 50.015
+        [math]::Abs([double]$picked.Cadence - 0.02) | Should -BeLessThan 1e-9
+    }
+
+    It 'privilégie la cadence locale face à StartCadence plus large' {
+        $packets = @(
+            (New-IntegrityPacket -PtsTime 50.060 -Pos 5100000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.080 -Pos 5102000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.100 -Pos 5104000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.120 -Pos 5106000L -Size 1536 -StreamIndex 1)
+        )
+        $profile = [pscustomobject]@{
+            Cadence      = $null
+            StartCadence = 0.040
+            EndCadence   = $null
+        }
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityTargetedInterleaveCandidate `
+                -TemporalProfile $Profile `
+                -Packets $Packets `
+                -Anchor 50.0 `
+                -WindowStart 45.0 `
+                -WindowEnd 55.0
+        }
+        $picked.Status | Should -Be 'unknown'
+        $picked.Reason | Should -Be 'no-anchor-candidate'
+    }
+
+    It 'accepte via TemporalProfile.Cadence quand un seul PTS local est disponible' {
+        $packets = @((New-IntegrityPacket -PtsTime 50.030 -Pos 5100000L -Size 1536 -StreamIndex 1))
+        $profile = [pscustomobject]@{
+            Cadence      = 0.04
+            StartCadence = $null
+            EndCadence   = $null
+        }
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityTargetedInterleaveCandidate `
+                -TemporalProfile $Profile `
+                -Packets $Packets `
+                -Anchor 50.0 `
+                -WindowStart 45.0 `
+                -WindowEnd 55.0
+        }
+        $picked.Status | Should -Be 'ok'
+        $picked.Packet.PtsTime | Should -Be 50.030
+        $picked.Cadence | Should -Be 0.04
+    }
+
+    It 'refuse via TemporalProfile.Cadence si la distance dépasse 2×cadence' {
+        $packets = @((New-IntegrityPacket -PtsTime 50.090 -Pos 5100000L -Size 1536 -StreamIndex 1))
+        $profile = [pscustomobject]@{
+            Cadence      = 0.04
+            StartCadence = $null
+            EndCadence   = $null
+        }
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityTargetedInterleaveCandidate `
+                -TemporalProfile $Profile `
+                -Packets $Packets `
+                -Anchor 50.0 `
+                -WindowStart 45.0 `
+                -WindowEnd 55.0
+        }
+        $picked.Status | Should -Be 'unknown'
+        $picked.Reason | Should -Be 'no-anchor-candidate'
+    }
+
+    It 'signale no-anchor-cadence si aucune cadence n''est disponible' {
+        $packets = @((New-IntegrityPacket -PtsTime 50.000 -Pos 5100000L -Size 1536 -StreamIndex 1))
+        $profile = [pscustomobject]@{
+            Cadence      = $null
+            StartCadence = $null
+            EndCadence   = $null
+        }
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityTargetedInterleaveCandidate `
+                -TemporalProfile $Profile `
+                -Packets $Packets `
+                -Anchor 50.0 `
+                -WindowStart 45.0 `
+                -WindowEnd 55.0
+        }
+        $picked.Status | Should -Be 'unknown'
+        $picked.Reason | Should -Be 'no-anchor-cadence'
+        $null -eq $picked.Packet | Should -BeTrue
+    }
+
+    It 'exclut les packets d''un seek ffprobe antérieur à la fenêtre avant cadence et nearest' {
+        $packets = @(
+            (New-IntegrityPacket -PtsTime 43.0 -Pos 1000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 44.0 -Pos 2000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 45.0 -Pos 3000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.060 -Pos 5100000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.080 -Pos 5102000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.100 -Pos 5104000L -Size 1536 -StreamIndex 1)
+        )
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets } {
+            param($Packets)
+            Get-IntegrityTargetedInterleaveCandidate `
+                -TemporalProfile $null `
+                -Packets $Packets `
+                -Anchor 50.0 `
+                -WindowStart 45.0 `
+                -WindowEnd 55.0
+        }
+        $picked.Status | Should -Be 'unknown'
+        $picked.Reason | Should -Be 'no-anchor-candidate'
+    }
+
+    It 'conserve un packet à PTS négatif autour de l''anchor 0' {
+        $packets = @(
+            (New-IntegrityPacket -PtsTime -0.045 -Pos 82615734L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime -0.025 -Pos 82617734L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime -0.005 -Pos 82619734L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 0.015 -Pos 82621734L -Size 1536 -StreamIndex 1)
+        )
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets } {
+            param($Packets)
+            Get-IntegrityTargetedInterleaveCandidate `
+                -TemporalProfile $null `
+                -Packets $Packets `
+                -Anchor 0.0 `
+                -WindowStart -5.0 `
+                -WindowEnd 5.0
+        }
+        $picked.Status | Should -Be 'ok'
+        $picked.Packet.PtsTime | Should -Be -0.005
+    }
+
+    It 'refuse un packet séparé par un trou de seek même s''il est dans ±5 s' {
+        $packets = @(
+            (New-IntegrityPacket -PtsTime 45.0 -Pos 1000L -Size 1536 -StreamIndex 1)
+            (New-IntegrityPacket -PtsTime 50.0 -Pos 80000000L -Size 1536 -StreamIndex 1)
+        )
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets } {
+            param($Packets)
+            Get-IntegrityTargetedInterleaveCandidate `
+                -TemporalProfile $null `
+                -Packets $Packets `
+                -Anchor 47.0 `
+                -WindowStart 42.0 `
+                -WindowEnd 52.0
+        }
+        $picked.Status | Should -Be 'unknown'
+        $picked.Reason | Should -Be 'no-anchor-cadence'
+        $null -eq $picked.Packet | Should -BeTrue
+    }
+}
+
+Describe 'Get-IntegrityInterleaveCandidate' {
+    It 'n''accepte pas un packet hors fenêtre même si 2×Cadence du profil le couvrirait' {
+        $packets = @((New-IntegrityPacket -PtsTime 43.0 -Pos 1000L -Size 1536 -StreamIndex 0))
+        $profile = [pscustomobject]@{
+            FirstPtsTime = 0
+            LastPtsTime  = 100
+            Cadence      = 4.0
+        }
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityInterleaveCandidate `
+                -TemporalProfile $Profile `
+                -Packets $Packets `
+                -Anchor 50.0 `
+                -WindowStart 45.0 `
+                -WindowEnd 55.0
+        }
+        $picked.Status | Should -Be 'unknown'
+        $null -eq $picked.Packet | Should -BeTrue
+    }
+
+    It 'conserve un packet à PTS négatif autour de l''anchor 0' {
+        $packets = @((New-IntegrityPacket -PtsTime -0.005 -Pos 82619734L -Size 1536 -StreamIndex 1))
+        $profile = [pscustomobject]@{
+            FirstPtsTime = -0.04
+            LastPtsTime  = 100
+            Cadence      = 0.04
+        }
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityInterleaveCandidate `
+                -TemporalProfile $Profile `
+                -Packets $Packets `
+                -Anchor 0.0 `
+                -WindowStart -5.0 `
+                -WindowEnd 5.0
+        }
+        $picked.Status | Should -Be 'ok'
+        $picked.Packet.PtsTime | Should -Be -0.005
+    }
+
+    It 'refuse un packet hors 2×Cadence du profil même dans la fenêtre' {
+        $packets = @((New-IntegrityPacket -PtsTime 50.090 -Pos 5100000L -Size 1536 -StreamIndex 0))
+        $profile = [pscustomobject]@{
+            FirstPtsTime = 0
+            LastPtsTime  = 100
+            Cadence      = 0.04
+        }
+        $picked = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ Packets = $packets; Profile = $profile } {
+            param($Packets, $Profile)
+            Get-IntegrityInterleaveCandidate `
+                -TemporalProfile $Profile `
+                -Packets $Packets `
+                -Anchor 50.0 `
+                -WindowStart 45.0 `
+                -WindowEnd 55.0
+        }
+        $picked.Status | Should -Be 'unknown'
+        $null -eq $picked.Packet | Should -BeTrue
     }
 }
 
@@ -909,9 +1307,9 @@ Describe 'Get-IntegrityTemporalProfile' {
     It 'ignore packet.duration absente' {
         Mock -ModuleName Tetram.Media.Remux Get-IntegrityPacketWindow {
             @(
-                (New-IntegrityPacket -PtsTime 0.00 -Pos 1)
-                (New-IntegrityPacket -PtsTime 0.04 -Pos 2)
-                (New-IntegrityPacket -PtsTime 0.08 -Pos 3)
+                (New-IntegrityPacket -PtsTime 0.00 -Pos 1 -StreamIndex 0)
+                (New-IntegrityPacket -PtsTime 0.04 -Pos 2 -StreamIndex 0)
+                (New-IntegrityPacket -PtsTime 0.08 -Pos 3 -StreamIndex 0)
             )
         }
 
@@ -977,7 +1375,7 @@ Describe 'Get-IntegrityTemporalProfile' {
             if ($ReadIntervals -eq '%+5') {
                 return New-CfrPackets -Count 8 -Fps 25
             }
-            return @((New-IntegrityPacket -PtsTime $null -Pos 1))
+            return @((New-IntegrityPacket -PtsTime $null -Pos 1 -StreamIndex 0))
         }
 
         $profile = InModuleScope 'Tetram.Media.Mkv' -Parameters @{ File = $script:SourceFile } {
@@ -1174,7 +1572,7 @@ Describe 'Get-IntegrityTemporalProfile' {
         Mock -ModuleName Tetram.Media.Remux Get-IntegrityPacketWindow {
             param($ReadIntervals)
             if ($ReadIntervals -eq '%+5') {
-                return @((New-IntegrityPacket -PtsTime 0 -Pos 1 -Size 10))
+                return @((New-IntegrityPacket -PtsTime 0 -Pos 1 -Size 10 -StreamIndex 0))
             }
             return New-CfrPackets -Count 8 -Fps 25 -StartPts 90
         }
@@ -1818,7 +2216,10 @@ Describe 'Test-EncodedFileIntegrity — span / offset / mapping' {
                     )
                 }
                 if ($ReadIntervals -eq '%+5') {
-                    return New-CfrPackets -Count 32 -Fps 25 -StartPos 4913010 -StreamIndex 0
+                    return @(
+                        (New-CfrPackets -Count 32 -Fps 25 -StartPos 4913010 -StreamIndex 0) +
+                        (New-CfrPackets -Count 32 -Fps 50 -StartPts -0.005 -StartPos 82615734L -Size 1536 -StreamIndex 1)
+                    )
                 }
                 if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$') {
                     $windowStart = [double]$Matches[1]
@@ -1826,8 +2227,12 @@ Describe 'Test-EncodedFileIntegrity — span / offset / mapping' {
                     if (($windowEnd - $windowStart) -ge 9.0 -and $windowStart -ge 99.9) {
                         return ,([object[]]@())
                     }
+                    $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+                    return @((New-IntegrityPacket -PtsTime $mid -Pos 4913010L -Size 200000L -StreamIndex 0))
                 }
-                return New-CfrPackets -Count 32 -Fps 25 -StartPts 99.0 -StartPos 70000000 -StreamIndex 0
+                else {
+                    return New-CfrPackets -Count 32 -Fps 25 -StartPts 99.0 -StartPos 4913010 -StreamIndex 0
+                }
             }
 
             if ($StreamSpecifier -like 'a:*') {
@@ -1837,13 +2242,38 @@ Describe 'Test-EncodedFileIntegrity — span / offset / mapping' {
                     $windowEnd = [double]$Matches[2]
                     $mid = ($windowStart + $windowEnd) / 2.0
                 }
-                return @((New-IntegrityPacket -PtsTime $mid -Pos 82615734L -Size 1536 -StreamIndex 1))
+                return @(
+                    (New-IntegrityPacket -PtsTime ($mid - 0.025) -Pos 82615734L -Size 1536 -StreamIndex 1)
+                    (New-IntegrityPacket -PtsTime ($mid - 0.005) -Pos 82617734L -Size 1536 -StreamIndex 1)
+                    (New-IntegrityPacket -PtsTime ($mid + 0.015) -Pos 82619734L -Size 1536 -StreamIndex 1)
+                    (New-IntegrityPacket -PtsTime ($mid + 0.035) -Pos 82621734L -Size 1536 -StreamIndex 1)
+                )
             }
             $mid = 0
             if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$') {
                 $windowStart = [double]$Matches[1]
                 $windowEnd = [double]$Matches[2]
                 $mid = ($windowStart + $windowEnd) / 2.0
+            }
+            return @((New-IntegrityPacket -PtsTime $mid -Pos 4913010L -Size 200000 -StreamIndex 0))
+        }
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityTargetedInterleavePackets {
+            param($StreamSpecifier, $ReadIntervals)
+            $mid = 0.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            if ($StreamSpecifier -like 'a:*')
+            {
+                return @(
+                    (New-IntegrityPacket -PtsTime ($mid - 0.025) -Pos 82615734L -Size 1536 -StreamIndex 1)
+                    (New-IntegrityPacket -PtsTime ($mid - 0.005) -Pos 82617734L -Size 1536 -StreamIndex 1)
+                    (New-IntegrityPacket -PtsTime ($mid + 0.015) -Pos 82619734L -Size 1536 -StreamIndex 1)
+                    (New-IntegrityPacket -PtsTime ($mid + 0.035) -Pos 82621734L -Size 1536 -StreamIndex 1)
+                )
             }
             return @((New-IntegrityPacket -PtsTime $mid -Pos 4913010L -Size 200000 -StreamIndex 0))
         }
@@ -1990,25 +2420,31 @@ Describe 'Test-EncodedFileIntegrity — sous-titres exclus' {
 
         function script:New-IntegrityTemporalProfileForTest {
     param(
-        [double] $First,
-        [double] $Last,
-        [double] $Cadence,
+        $First,
+        $Last,
+        $Cadence,
         $StartPackets,
         $TailPackets,
-        [int] $AbsoluteStreamIndex = 0
+        [int] $AbsoluteStreamIndex = 0,
+        $StartCadence,
+        $EndCadence,
+        [bool] $Usable = $true
     )
+
+    $resolvedStart = if ($PSBoundParameters.ContainsKey('StartCadence')) { $StartCadence } else { $Cadence }
+    $resolvedEnd = if ($PSBoundParameters.ContainsKey('EndCadence')) { $EndCadence } else { $Cadence }
 
     [pscustomobject]@{
         FirstPtsTime        = $First
         LastPtsTime         = $Last
-        SpanSeconds         = $Last - $First
-        StartCadence        = $Cadence
-        EndCadence          = $Cadence
+        SpanSeconds         = if ($null -ne $First -and $null -ne $Last) { $Last - $First } else { $null }
+        StartCadence        = $resolvedStart
+        EndCadence          = $resolvedEnd
         Cadence             = $Cadence
         StartPackets        = @($StartPackets)
         TailPackets         = @($TailPackets)
         AbsoluteStreamIndex = $AbsoluteStreamIndex
-        IsUsable            = $true
+        IsUsable            = $Usable
         UnknownReason       = $null
     }
 }
@@ -2606,6 +3042,234 @@ Describe 'Test-IntegrityOutputInterleave' {
         $result.Status | Should -Be 'mismatch'
         $result.Method | Should -Be 'interleave'
         $result.AnchorFraction | Should -Be 0.5
+    }
+
+    It 'unknown (pas mismatch) si le fallback ciblé trouve un packet à +4,9 s dans la fenêtre ±5 s' {
+        $script:FarPos = 80000000L
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityPacketWindow {
+            param($ReadIntervals)
+            $mid = 50.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            @((New-IntegrityPacket -PtsTime $mid -Pos 5000000L -Size 1000 -StreamIndex 0))
+        }
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityTargetedInterleavePackets {
+            param($StreamSpecifier)
+            if ($StreamSpecifier -notlike 'a:*')
+            {
+                return ,@()
+            }
+            @(
+                (New-IntegrityPacket -PtsTime 54.880 -Pos $script:FarPos -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime 54.900 -Pos ($script:FarPos + 2000L) -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime 54.920 -Pos ($script:FarPos + 4000L) -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime 54.940 -Pos ($script:FarPos + 6000L) -Size 1536 -StreamIndex 1)
+            )
+        }
+        $video = New-IntegrityTemporalProfileForTest -First 0 -Last 100 -Cadence 0.04 `
+            -StartPackets @((New-IntegrityPacket -PtsTime 0 -Pos 5000000 -Size 1000)) `
+            -TailPackets @((New-IntegrityPacket -PtsTime 100 -Pos 9000000 -Size 1000))
+        $audio = New-IntegrityTemporalProfileForTest -First $null -Last $null -Cadence $null `
+            -StartCadence $null -EndCadence $null -Usable $false `
+            -StartPackets @() -TailPackets @()
+
+        $result = Invoke-InterleaveUnderTest -VideoProfile $video -AudioProfile $audio
+
+        $result.Status | Should -Be 'unknown'
+        $result.Method | Should -Be 'interleave'
+        $result.Reason | Should -Be 'no-anchor-candidate'
+    }
+
+    It 'mismatch à l''anchor 0 via fallback ciblé malgré un PTS audio négatif' {
+        $script:FarPos = 82615734L
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityPacketWindow {
+            param($ReadIntervals)
+            $mid = 50.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            @((New-IntegrityPacket -PtsTime $mid -Pos 4913010L -Size 200000 -StreamIndex 0))
+        }
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityTargetedInterleavePackets {
+            param($StreamSpecifier, $ReadIntervals)
+            if ($StreamSpecifier -notlike 'a:*')
+            {
+                return ,@()
+            }
+            $mid = 50.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            if ([math]::Abs($mid) -lt 0.5)
+            {
+                return @(
+                    (New-IntegrityPacket -PtsTime -0.045 -Pos $script:FarPos -Size 1536 -StreamIndex 1)
+                    (New-IntegrityPacket -PtsTime -0.025 -Pos ($script:FarPos + 2000L) -Size 1536 -StreamIndex 1)
+                    (New-IntegrityPacket -PtsTime -0.005 -Pos ($script:FarPos + 4000L) -Size 1536 -StreamIndex 1)
+                    (New-IntegrityPacket -PtsTime 0.015 -Pos ($script:FarPos + 6000L) -Size 1536 -StreamIndex 1)
+                )
+            }
+            @(
+                (New-IntegrityPacket -PtsTime ($mid - 0.025) -Pos 5150000L -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime ($mid - 0.005) -Pos 5152000L -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime ($mid + 0.015) -Pos 5154000L -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime ($mid + 0.035) -Pos 5156000L -Size 1536 -StreamIndex 1)
+            )
+        }
+        $video = New-IntegrityTemporalProfileForTest -First 0 -Last 100 -Cadence 0.04 `
+            -StartPackets @((New-IntegrityPacket -PtsTime 0 -Pos 4913010L -Size 200000)) `
+            -TailPackets @((New-IntegrityPacket -PtsTime 100 -Pos 4913010L -Size 200000))
+        $audio = New-IntegrityTemporalProfileForTest -First $null -Last $null -Cadence $null `
+            -StartCadence $null -EndCadence $null -Usable $false `
+            -StartPackets @() -TailPackets @()
+
+        $result = Invoke-InterleaveUnderTest -VideoProfile $video -AudioProfile $audio
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'interleave'
+        $result.AnchorFraction | Should -Be 0
+    }
+
+    It 'accepte un fallback ciblé contemporain via cadence locale (pos saine)' {
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityPacketWindow {
+            param($ReadIntervals)
+            $mid = 50.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            @((New-IntegrityPacket -PtsTime $mid -Pos 5000000L -Size 1000 -StreamIndex 0))
+        }
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityTargetedInterleavePackets {
+            param($StreamSpecifier, $ReadIntervals)
+            if ($StreamSpecifier -notlike 'a:*')
+            {
+                return ,@()
+            }
+            $mid = 50.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            @(
+                (New-IntegrityPacket -PtsTime ($mid - 0.025) -Pos 5150000L -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime ($mid - 0.005) -Pos 5152000L -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime ($mid + 0.015) -Pos 5154000L -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime ($mid + 0.035) -Pos 5156000L -Size 1536 -StreamIndex 1)
+            )
+        }
+        $video = New-IntegrityTemporalProfileForTest -First 0 -Last 100 -Cadence 0.04 `
+            -StartPackets @((New-IntegrityPacket -PtsTime 0 -Pos 5000000 -Size 1000)) `
+            -TailPackets @((New-IntegrityPacket -PtsTime 100 -Pos 9000000 -Size 1000))
+        $audio = New-IntegrityTemporalProfileForTest -First $null -Last $null -Cadence $null `
+            -StartCadence $null -EndCadence $null -Usable $false `
+            -StartPackets @() -TailPackets @()
+
+        $result = Invoke-InterleaveUnderTest -VideoProfile $video -AudioProfile $audio
+
+        $result.Status | Should -Be 'ok'
+    }
+
+    It 'mismatch si le fallback ciblé contemporain a une position pathologique' {
+        $script:FarPos = 5000000L + (2L * 5L * 1024L * 1024L) + 1536L + 1L
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityPacketWindow {
+            param($ReadIntervals)
+            $mid = 50.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            @((New-IntegrityPacket -PtsTime $mid -Pos 5000000L -Size 1000 -StreamIndex 0))
+        }
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityTargetedInterleavePackets {
+            param($StreamSpecifier, $ReadIntervals)
+            if ($StreamSpecifier -notlike 'a:*')
+            {
+                return ,@()
+            }
+            $mid = 50.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            @(
+                (New-IntegrityPacket -PtsTime ($mid - 0.025) -Pos $script:FarPos -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime ($mid - 0.005) -Pos ($script:FarPos + 2000L) -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime ($mid + 0.015) -Pos ($script:FarPos + 4000L) -Size 1536 -StreamIndex 1)
+                (New-IntegrityPacket -PtsTime ($mid + 0.035) -Pos ($script:FarPos + 6000L) -Size 1536 -StreamIndex 1)
+            )
+        }
+        $video = New-IntegrityTemporalProfileForTest -First 0 -Last 100 -Cadence 0.04 `
+            -StartPackets @((New-IntegrityPacket -PtsTime 0 -Pos 5000000 -Size 1000)) `
+            -TailPackets @((New-IntegrityPacket -PtsTime 100 -Pos 9000000 -Size 1000))
+        $audio = New-IntegrityTemporalProfileForTest -First $null -Last $null -Cadence $null `
+            -StartCadence $null -EndCadence $null -Usable $false `
+            -StartPackets @() -TailPackets @()
+
+        $result = Invoke-InterleaveUnderTest -VideoProfile $video -AudioProfile $audio
+
+        $result.Status | Should -Be 'mismatch'
+        $result.Method | Should -Be 'interleave'
+    }
+
+    It 'unknown si le fallback ciblé n''a aucune cadence (le packet n''entre pas dans le spread)' {
+        $script:FarPos = 80000000L
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityPacketWindow {
+            param($ReadIntervals)
+            $mid = 50.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            @((New-IntegrityPacket -PtsTime $mid -Pos 5000000L -Size 1000 -StreamIndex 0))
+        }
+        Mock -ModuleName Tetram.Media.Remux Get-IntegrityTargetedInterleavePackets {
+            param($StreamSpecifier, $ReadIntervals)
+            if ($StreamSpecifier -notlike 'a:*')
+            {
+                return ,@()
+            }
+            $mid = 50.0
+            if ($ReadIntervals -match '^([0-9eE.+-]+)%([0-9eE.+-]+)$')
+            {
+                $windowStart = [double]$Matches[1]
+                $windowEnd = [double]$Matches[2]
+                $mid = if ($windowStart -le 0) { $windowEnd - 5.0 } else { ($windowStart + $windowEnd) / 2.0 }
+            }
+            @((New-IntegrityPacket -PtsTime $mid -Pos $script:FarPos -Size 1536 -StreamIndex 1))
+        }
+        $video = New-IntegrityTemporalProfileForTest -First 0 -Last 100 -Cadence 0.04 `
+            -StartPackets @((New-IntegrityPacket -PtsTime 0 -Pos 5000000 -Size 1000)) `
+            -TailPackets @((New-IntegrityPacket -PtsTime 100 -Pos 9000000 -Size 1000))
+        $audio = New-IntegrityTemporalProfileForTest -First $null -Last $null -Cadence $null `
+            -StartCadence $null -EndCadence $null -Usable $false `
+            -StartPackets @() -TailPackets @()
+
+        $result = Invoke-InterleaveUnderTest -VideoProfile $video -AudioProfile $audio
+
+        $result.Status | Should -Be 'unknown'
+        $result.Method | Should -Be 'interleave'
+        $result.Reason | Should -Be 'no-anchor-cadence'
     }
 }
 

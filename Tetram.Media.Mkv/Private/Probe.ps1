@@ -20,8 +20,9 @@ $script:IntegrityTailLookbackSeconds = 10.0
 $script:IntegrityTailLookaheadSeconds = 5.0
 $script:IntegrityTailGuardSeconds = 10.0
 
-# Politique de projet : fenêtre absolue autour d'un anchor interne, calée sur
-# cluster_time_limit=5000 du muxer FFmpeg seekable — jamais une sonde jusqu'à EOF.
+# Politique de projet : largeur de RECHERCHE autour d'un anchor d'interleave
+# (calée sur cluster_time_limit=5000). Ce n'est PAS une tolérance de contemporanéité :
+# un packet n'entre dans PhysicalSpread que s'il est à <= 2×cadence de l'anchor.
 $script:IntegrityAnchorWindowSeconds = 5.0
 
 # Politique de projet : un budget Cluster FFmpeg seekable (cluster_size_limit = 5 MiB).
@@ -342,13 +343,20 @@ function Get-IntegrityTailGuardInterval
     return Get-IntegrityClosedReadInterval -Start $guardStart -End $guardEnd
 }
 
-function Get-IntegrityAnchorWindowInterval
+function Get-IntegrityAnchorSearchWindow
 {
     param([double] $Anchor)
 
-    $windowStart = [math]::Max(0.0, [double]$Anchor - $script:IntegrityAnchorWindowSeconds)
-    $windowEnd = [double]$Anchor + $script:IntegrityAnchorWindowSeconds
-    return Get-IntegrityClosedReadInterval -Start $windowStart -End $windowEnd
+    # Seek ffprobe refuse un temps négatif ; le filtre PTS, lui, doit
+    # conserver un packet historique à pts ≈ -0.005 autour de l'anchor 0.
+    $ptsStart = [double]$Anchor - $script:IntegrityAnchorWindowSeconds
+    $ptsEnd = [double]$Anchor + $script:IntegrityAnchorWindowSeconds
+    $seekStart = [math]::Max(0.0, $ptsStart)
+    return [pscustomobject]@{
+        PtsStart        = $ptsStart
+        PtsEnd          = $ptsEnd
+        ReadIntervals   = Get-IntegrityClosedReadInterval -Start $seekStart -End $ptsEnd
+    }
 }
 
 function Get-IntegrityPacketWindow
@@ -510,21 +518,6 @@ function Get-IntegrityPacketsForAbsoluteStream
         return $null
     }
 
-    $anyIndexed = $false
-    foreach ($packet in @($Packets))
-    {
-        if ($null -ne $packet -and $null -ne $packet.StreamIndex)
-        {
-            $anyIndexed = $true
-            break
-        }
-    }
-
-    if (-not $anyIndexed)
-    {
-        return ConvertTo-IntegrityPacketArray -Packets $Packets
-    }
-
     $selected = @()
     foreach ($packet in @($Packets))
     {
@@ -532,6 +525,7 @@ function Get-IntegrityPacketsForAbsoluteStream
         {
             continue
         }
+
         if ([int]$packet.StreamIndex -eq $AbsoluteStreamIndex)
         {
             $selected += $packet
@@ -1146,7 +1140,8 @@ function Get-IntegrityUnknownDetail
         'no-start-pts' { if ($streamLabel) { '{0} has no usable start PTS' -f $streamLabel } else { 'no usable start PTS' } }
         'no-start-cadence' { if ($streamLabel) { '{0} has no start cadence' -f $streamLabel } else { 'no start cadence' } }
         'no-end-cadence' { if ($streamLabel) { '{0} has no end cadence' -f $streamLabel } else { 'no end cadence' } }
-        'no-anchor-candidate' { 'no comparable A/V packets around an active anchor' }
+        'no-anchor-candidate' { 'no comparable A/V packets around an interleave anchor' }
+        'no-anchor-cadence' { 'no usable A/V packet cadence around an interleave anchor' }
         'mapped-source-stream-missing' { if ($streamLabel) { '{0} is missing from the source probe' -f $streamLabel } else { 'mapped source stream is missing' } }
         default {
             if ($streamLabel -and $reason) { '{0} - {1}' -f $streamLabel, $reason }
@@ -1361,7 +1356,9 @@ function Get-IntegrityInterleaveCandidate
     param(
         $TemporalProfile,
         $Packets,
-        [double] $Anchor
+        [double] $Anchor,
+        [double] $WindowStart,
+        [double] $WindowEnd
     )
 
     if (-not (Test-IntegrityStreamActiveAtAnchor -TemporalProfile $TemporalProfile -Anchor $Anchor))
@@ -1369,7 +1366,11 @@ function Get-IntegrityInterleaveCandidate
         return [pscustomobject]@{ Status = 'inactive'; Packet = $null }
     }
 
-    $candidate = Get-IntegrityNearestPacket -Packets $Packets -Anchor $Anchor
+    $packetsInWindow = Get-IntegrityPacketsInPtsRange `
+        -Packets $Packets `
+        -Start $WindowStart `
+        -End $WindowEnd
+    $candidate = Get-IntegrityNearestPacket -Packets $packetsInWindow -Anchor $Anchor
     if ($null -eq $candidate -or $null -eq $candidate.PtsTime)
     {
         return [pscustomobject]@{ Status = 'unknown'; Packet = $null }
@@ -1388,6 +1389,193 @@ function Get-IntegrityInterleaveCandidate
     }
 
     return [pscustomobject]@{ Status = 'ok'; Packet = $candidate }
+}
+
+function Get-IntegrityTargetedInterleaveCadence
+{
+    param(
+        $TemporalProfile,
+        $Packets
+    )
+
+    # Politique de projet : la cadence mesurée dans la fenêtre d'anchor décrit
+    # ce voisinage plus fidèlement qu'une cadence de début/fin de stream.
+    # Un delta de trou (seek ffprobe non exact) n'est pas une cadence : 2×cadence
+    # ne doit pas atteindre la demi-fenêtre de recherche.
+    $localCadence = Get-IntegrityMedianPositivePtsDelta -Packets $Packets
+    if ($null -ne $localCadence -and [double]$localCadence -gt 0 -and ((2.0 * [double]$localCadence) -lt $script:IntegrityAnchorWindowSeconds))
+    {
+        return [double]$localCadence
+    }
+
+    if ($null -ne $TemporalProfile)
+    {
+        $profileCadence = ConvertTo-IntegrityFiniteDouble -Value $TemporalProfile.Cadence
+        if ($null -ne $profileCadence -and $profileCadence -gt 0)
+        {
+            return $profileCadence
+        }
+
+        $edgeCadences = @()
+        foreach ($value in @($TemporalProfile.StartCadence, $TemporalProfile.EndCadence))
+        {
+            $cadence = ConvertTo-IntegrityFiniteDouble -Value $value
+            if ($null -ne $cadence -and $cadence -gt 0)
+            {
+                $edgeCadences += $cadence
+            }
+        }
+
+        if ($edgeCadences.Count -gt 0)
+        {
+            return [double]($edgeCadences | Measure-Object -Maximum).Maximum
+        }
+    }
+
+    return $null
+}
+
+function Get-IntegrityTargetedInterleaveCandidate
+{
+    param(
+        $TemporalProfile,
+        $Packets,
+        [double] $Anchor,
+        [double] $WindowStart,
+        [double] $WindowEnd
+    )
+
+    $packetsInWindow = Get-IntegrityPacketsInPtsRange `
+        -Packets $Packets `
+        -Start $WindowStart `
+        -End $WindowEnd
+
+    $candidate = Get-IntegrityNearestPacket -Packets $packetsInWindow -Anchor $Anchor
+    if ($null -eq $candidate -or $null -eq $candidate.PtsTime)
+    {
+        return [pscustomobject]@{
+            Status  = 'unknown'
+            Packet  = $null
+            Cadence = $null
+            Reason  = 'no-anchor-candidate'
+        }
+    }
+
+    $cadence = Get-IntegrityTargetedInterleaveCadence `
+        -TemporalProfile $TemporalProfile `
+        -Packets $packetsInWindow
+    if ($null -eq $cadence)
+    {
+        return [pscustomobject]@{
+            Status  = 'unknown'
+            Packet  = $null
+            Cadence = $null
+            Reason  = 'no-anchor-cadence'
+        }
+    }
+
+    $distance = [math]::Abs([double]$candidate.PtsTime - [double]$Anchor)
+    if ($distance -gt (2.0 * $cadence))
+    {
+        return [pscustomobject]@{
+            Status  = 'unknown'
+            Packet  = $null
+            Cadence = $cadence
+            Reason  = 'no-anchor-candidate'
+        }
+    }
+
+    if ($null -eq $candidate.Pos)
+    {
+        return [pscustomobject]@{
+            Status  = 'unknown'
+            Packet  = $null
+            Cadence = $cadence
+            Reason  = 'no-anchor-candidate'
+        }
+    }
+
+    return [pscustomobject]@{
+        Status  = 'ok'
+        Packet  = $candidate
+        Cadence = $cadence
+        Reason  = $null
+    }
+}
+
+function New-IntegrityInterleaveUnknownResult
+{
+    param(
+        $Map,
+        [string] $Reason,
+        [double] $Anchor
+    )
+
+    return New-IntegrityCheckResult `
+        -Status 'unknown' `
+        -Method 'interleave' `
+        -Reason $Reason `
+        -StreamType $Map.StreamType `
+        -SourceRelativeIndex $Map.SourceRelativeIndex `
+        -OutputRelativeIndex $Map.OutputRelativeIndex `
+        -AnchorTime $Anchor
+}
+
+function Get-IntegrityTargetedInterleaveFallback
+{
+    param(
+        [Parameter(Mandatory)] [string] $FFPROBE,
+        [Parameter(Mandatory)] [string] $File,
+        $Map,
+        [Parameter(Mandatory)] [string] $ReadIntervals,
+        $TemporalProfile,
+        [double] $Anchor,
+        [double] $WindowStart,
+        [double] $WindowEnd,
+        [switch] $UseProfileCadence
+    )
+
+    $specifier = '{0}:{1}' -f $Map.StreamSpecifierType, [int]$Map.OutputRelativeIndex
+    $targeted = Get-IntegrityTargetedInterleavePackets `
+        -FFPROBE $FFPROBE `
+        -File $File `
+        -StreamSpecifier $specifier `
+        -ReadIntervals $ReadIntervals
+    if ($null -eq $targeted)
+    {
+        return [pscustomobject]@{
+            Status = 'unknown'
+            Packet = $null
+            Reason = 'anchor-probe-failed'
+        }
+    }
+
+    if ($UseProfileCadence)
+    {
+        $picked = Get-IntegrityInterleaveCandidate `
+            -TemporalProfile $TemporalProfile `
+            -Packets $targeted `
+            -Anchor $Anchor `
+            -WindowStart $WindowStart `
+            -WindowEnd $WindowEnd
+        if ($picked.Status -eq 'ok' -or $picked.Status -eq 'inactive')
+        {
+            return $picked
+        }
+
+        return [pscustomobject]@{
+            Status = 'unknown'
+            Packet = $null
+            Reason = 'no-anchor-candidate'
+        }
+    }
+
+    return Get-IntegrityTargetedInterleaveCandidate `
+        -TemporalProfile $TemporalProfile `
+        -Packets $targeted `
+        -Anchor $Anchor `
+        -WindowStart $WindowStart `
+        -WindowEnd $WindowEnd
 }
 
 function Test-IntegrityOutputInterleave
@@ -1432,20 +1620,19 @@ function Test-IntegrityOutputInterleave
     foreach ($fraction in $fractions)
     {
         $anchor = $referenceStart + $fraction * $referenceSpan
-        $interval = Get-IntegrityAnchorWindowInterval -Anchor $anchor
+        $search = Get-IntegrityAnchorSearchWindow -Anchor $anchor
         $commonPackets = Get-CachedIntegrityPacketWindow `
             -Cache $WindowCache `
             -FFPROBE $FFPROBE `
             -File $TempFile `
-            -ReadIntervals $interval
+            -ReadIntervals $search.ReadIntervals
 
         if ($null -eq $commonPackets)
         {
-            $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'anchor-probe-failed' `
-                -StreamType $referenceMap.StreamType `
-                -SourceRelativeIndex $referenceMap.SourceRelativeIndex `
-                -OutputRelativeIndex $referenceMap.OutputRelativeIndex `
-                -AnchorTime $anchor
+            $unknownResult ??= New-IntegrityInterleaveUnknownResult `
+                -Map $referenceMap `
+                -Reason 'anchor-probe-failed' `
+                -Anchor $anchor
             continue
         }
 
@@ -1465,43 +1652,25 @@ function Test-IntegrityOutputInterleave
             {
                 # Profil temporel inexploitable : sonde PAR STREAM. Un flux
                 # physiquement retardé est absent de la fenêtre fichier commune.
-                $specifier = '{0}:{1}' -f $map.StreamSpecifierType, [int]$map.OutputRelativeIndex
-                $targeted = Get-IntegrityTargetedInterleavePackets `
+                $picked = Get-IntegrityTargetedInterleaveFallback `
                     -FFPROBE $FFPROBE `
                     -File $TempFile `
-                    -StreamSpecifier $specifier `
-                    -ReadIntervals $interval
-                if ($null -eq $targeted)
+                    -Map $map `
+                    -ReadIntervals $search.ReadIntervals `
+                    -TemporalProfile $temporalProfile `
+                    -Anchor $anchor `
+                    -WindowStart $search.PtsStart `
+                    -WindowEnd $search.PtsEnd
+                if ($picked.Status -ne 'ok')
                 {
-                    $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'anchor-probe-failed' `
-                        -StreamType $map.StreamType `
-                        -SourceRelativeIndex $map.SourceRelativeIndex `
-                        -OutputRelativeIndex $map.OutputRelativeIndex `
-                        -AnchorTime $anchor
+                    $unknownResult ??= New-IntegrityInterleaveUnknownResult `
+                        -Map $map `
+                        -Reason $picked.Reason `
+                        -Anchor $anchor
                     continue
                 }
 
-                $candidate = Get-IntegrityNearestPacket -Packets $targeted -Anchor $anchor
-                if ($null -eq $candidate -or $null -eq $candidate.PtsTime -or $null -eq $candidate.Pos)
-                {
-                    $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'no-anchor-candidate' `
-                        -StreamType $map.StreamType `
-                        -SourceRelativeIndex $map.SourceRelativeIndex `
-                        -OutputRelativeIndex $map.OutputRelativeIndex `
-                        -AnchorTime $anchor
-                    continue
-                }
-                if ([math]::Abs([double]$candidate.PtsTime - $anchor) -gt $script:IntegrityAnchorWindowSeconds)
-                {
-                    $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'no-anchor-candidate' `
-                        -StreamType $map.StreamType `
-                        -SourceRelativeIndex $map.SourceRelativeIndex `
-                        -OutputRelativeIndex $map.OutputRelativeIndex `
-                        -AnchorTime $anchor
-                    continue
-                }
-
-                $candidates += $candidate
+                $candidates += $picked.Packet
                 continue
             }
 
@@ -1520,7 +1689,12 @@ function Test-IntegrityOutputInterleave
                 Get-IntegrityPacketsForAbsoluteStream -Packets $commonPackets -AbsoluteStreamIndex ([int]$streamIndex)
             }
 
-            $picked = Get-IntegrityInterleaveCandidate -TemporalProfile $temporalProfile -Packets $packets -Anchor $anchor
+            $picked = Get-IntegrityInterleaveCandidate `
+                -TemporalProfile $temporalProfile `
+                -Packets $packets `
+                -Anchor $anchor `
+                -WindowStart $search.PtsStart `
+                -WindowEnd $search.PtsEnd
             if ($picked.Status -eq 'inactive')
             {
                 continue
@@ -1531,34 +1705,26 @@ function Test-IntegrityOutputInterleave
                 # Le fallback ciblé peut être plus coûteux parce qu'il cherche précisément
                 # un stream physiquement retardé. Son usage est limité aux anchors où la
                 # sonde commune n'a pas retrouvé un stream actif.
-                $specifier = '{0}:{1}' -f $map.StreamSpecifierType, [int]$map.OutputRelativeIndex
-                $targeted = Get-IntegrityTargetedInterleavePackets `
+                $picked = Get-IntegrityTargetedInterleaveFallback `
                     -FFPROBE $FFPROBE `
                     -File $TempFile `
-                    -StreamSpecifier $specifier `
-                    -ReadIntervals $interval
-                if ($null -eq $targeted)
-                {
-                    $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'anchor-probe-failed' `
-                        -StreamType $map.StreamType `
-                        -SourceRelativeIndex $map.SourceRelativeIndex `
-                        -OutputRelativeIndex $map.OutputRelativeIndex `
-                        -AnchorTime $anchor
-                    continue
-                }
-
-                $picked = Get-IntegrityInterleaveCandidate -TemporalProfile $temporalProfile -Packets $targeted -Anchor $anchor
+                    -Map $map `
+                    -ReadIntervals $search.ReadIntervals `
+                    -TemporalProfile $temporalProfile `
+                    -Anchor $anchor `
+                    -WindowStart $search.PtsStart `
+                    -WindowEnd $search.PtsEnd `
+                    -UseProfileCadence
                 if ($picked.Status -eq 'inactive')
                 {
                     continue
                 }
                 if ($picked.Status -ne 'ok')
                 {
-                    $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'no-anchor-candidate' `
-                        -StreamType $map.StreamType `
-                        -SourceRelativeIndex $map.SourceRelativeIndex `
-                        -OutputRelativeIndex $map.OutputRelativeIndex `
-                        -AnchorTime $anchor
+                    $unknownResult ??= New-IntegrityInterleaveUnknownResult `
+                        -Map $map `
+                        -Reason $picked.Reason `
+                        -Anchor $anchor
                     continue
                 }
             }
