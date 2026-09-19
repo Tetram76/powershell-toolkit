@@ -261,7 +261,7 @@ Describe 'Invoke-MkvRemux - configuration et récapitulatif' {
         Mock -ModuleName Tetram.Media.Remux Get-FfprobePath { 'ffprobe' }
         Mock -ModuleName Tetram.Media.Remux Invoke-PathList {
             param($Paths, $State, $Config, $Cmdlet)
-            [void]$State.IntegrityWarningFiles.Add('accepted.mkv')
+            $State.IntegrityWarningFiles += 'accepted.mkv'
         }
         Mock -ModuleName Tetram.Media.Remux Write-InfoLog {}
         Mock -ModuleName Tetram.Media.Remux Write-InfoWarning {}

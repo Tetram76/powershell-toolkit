@@ -10,13 +10,15 @@ Set-StrictMode -Version 3.0
 # Sous-module privé de Tetram.Media.Mkv (dot-sourcé par Tetram.Media.Remux.psm1).
 # -----------------------------------------------------------------------------
 
-# Politique de projet : plafonner l'échantillon de début (coût constant, jusqu'à 31 deltas).
-# 32 n'est pas une limite FFmpeg ni une exigence Matroska.
-$script:IntegrityStartPacketCount = 32
-
-# Politique de projet : reculer avant le hint de fin. Un lookback trop petit rate la vraie fin ;
-# trop grand relit trop de packets. Ce n'est pas une durée-preuve.
+# Les profils temporels utilisent des fenêtres multi-stream bornées. -select_streams
+# est exclu de ce chemin parce que ffprobe peut alors démuxer beaucoup plus de données
+# avant que le stream sélectionné fasse progresser l'intervalle.
+# 5 s est une politique de projet, pas une norme FFmpeg/Matroska.
+$script:IntegrityInitialWindowSeconds = 5.0
+$script:IntegrityStartHintWindowSeconds = 5.0
 $script:IntegrityTailLookbackSeconds = 10.0
+$script:IntegrityTailLookaheadSeconds = 5.0
+$script:IntegrityTailGuardSeconds = 10.0
 
 # Politique de projet : fenêtre absolue autour d'un anchor interne, calée sur
 # cluster_time_limit=5000 du muxer FFmpeg seekable — jamais une sonde jusqu'à EOF.
@@ -182,6 +184,7 @@ function ConvertTo-IntegrityPacket
     $pts = $null
     $pos = $null
     $size = $null
+    $streamIndex = $null
 
     if ($null -ne $Packet)
     {
@@ -190,6 +193,7 @@ function ConvertTo-IntegrityPacket
             $pts = ConvertTo-IntegrityFiniteDouble -Value $Packet['pts_time']
             $pos = ConvertTo-IntegrityNonNegativeInt64 -Value $Packet['pos']
             $size = ConvertTo-IntegrityNonNegativeInt64 -Value $Packet['size']
+            $streamIndex = ConvertTo-IntegrityNonNegativeInt64 -Value $Packet['stream_index']
         }
         elseif ($Packet.PSObject.Properties['PtsTime'])
         {
@@ -197,19 +201,25 @@ function ConvertTo-IntegrityPacket
             $pts = ConvertTo-IntegrityFiniteDouble -Value $Packet.PtsTime
             $pos = ConvertTo-IntegrityNonNegativeInt64 -Value $Packet.Pos
             $size = ConvertTo-IntegrityNonNegativeInt64 -Value $Packet.Size
+            if ($Packet.PSObject.Properties['StreamIndex'])
+            {
+                $streamIndex = ConvertTo-IntegrityNonNegativeInt64 -Value $Packet.StreamIndex
+            }
         }
         else
         {
             $pts = ConvertTo-IntegrityFiniteDouble -Value ($Packet.pts_time)
             $pos = ConvertTo-IntegrityNonNegativeInt64 -Value ($Packet.pos)
             $size = ConvertTo-IntegrityNonNegativeInt64 -Value ($Packet.size)
+            $streamIndex = ConvertTo-IntegrityNonNegativeInt64 -Value ($Packet.stream_index)
         }
     }
 
     [pscustomobject]@{
-        PtsTime = $pts
-        Pos     = $pos
-        Size    = $size
+        PtsTime     = $pts
+        Pos         = $pos
+        Size        = $size
+        StreamIndex = $streamIndex
     }
 }
 
@@ -244,17 +254,92 @@ function ConvertTo-IntegrityPacketArray
     return ,([object[]]@($Packets))
 }
 
+
+function Get-IntegrityClosedReadInterval
+{
+    param(
+        [double] $Start,
+        [double] $End
+    )
+
+    return '{0}%{1}' -f `
+        (ConvertTo-IntegrityInvariantNumberString -Value $Start), `
+        (ConvertTo-IntegrityInvariantNumberString -Value $End)
+}
+
 function Get-IntegrityStartReadInterval
 {
-    return '%+#{0}' -f $script:IntegrityStartPacketCount
+    return '%+{0}' -f (ConvertTo-IntegrityInvariantNumberString -Value $script:IntegrityInitialWindowSeconds)
+}
+
+function Get-IntegrityStartHintWindowInterval
+{
+    param([double] $Hint)
+
+    $windowStart = [math]::Max(0.0, [double]$Hint - $script:IntegrityStartHintWindowSeconds)
+    $windowEnd = [double]$Hint + $script:IntegrityStartHintWindowSeconds
+    return Get-IntegrityClosedReadInterval -Start $windowStart -End $windowEnd
+}
+
+function Get-IntegrityPacketsInPtsRange
+{
+    param(
+        $Packets,
+        [double] $Start,
+        [double] $End,
+        [switch] $ExclusiveStart
+    )
+
+    if ($null -eq $Packets)
+    {
+        return $null
+    }
+
+    $selected = @()
+    foreach ($packet in @($Packets))
+    {
+        if ($null -eq $packet -or $null -eq $packet.PtsTime)
+        {
+            continue
+        }
+        $pts = [double]$packet.PtsTime
+        $afterStart = if ($ExclusiveStart) { $pts -gt $Start } else { $pts -ge $Start }
+        if ($afterStart -and $pts -le $End)
+        {
+            $selected += $packet
+        }
+    }
+
+    return ConvertTo-IntegrityPacketArray -Packets $selected
 }
 
 function Get-IntegrityTailReadInterval
 {
     param([double] $Hint)
 
+    # 0%(H+5) reste une fenêtre fermée. L'intervalle interdit est START% (EOF).
+    if (-not [double]::IsFinite($Hint) -or $Hint -le 0)
+    {
+        return $null
+    }
+
     $tailStart = [math]::Max(0.0, [double]$Hint - $script:IntegrityTailLookbackSeconds)
-    return '{0}%' -f (ConvertTo-IntegrityInvariantNumberString -Value $tailStart)
+    $tailEnd = [double]$Hint + $script:IntegrityTailLookaheadSeconds
+    if ($tailEnd -le $tailStart)
+    {
+        return $null
+    }
+
+    return Get-IntegrityClosedReadInterval -Start $tailStart -End $tailEnd
+}
+
+function Get-IntegrityTailGuardInterval
+{
+    param([double] $Hint)
+
+    $guardStart = [double]$Hint + $script:IntegrityTailLookaheadSeconds
+    $guardEnd = $guardStart + $script:IntegrityTailGuardSeconds
+    return Get-IntegrityClosedReadInterval -Start $guardStart -End $guardEnd
 }
 
 function Get-IntegrityAnchorWindowInterval
@@ -263,26 +348,22 @@ function Get-IntegrityAnchorWindowInterval
 
     $windowStart = [math]::Max(0.0, [double]$Anchor - $script:IntegrityAnchorWindowSeconds)
     $windowEnd = [double]$Anchor + $script:IntegrityAnchorWindowSeconds
-    return '{0}%{1}' -f `
-        (ConvertTo-IntegrityInvariantNumberString -Value $windowStart), `
-        (ConvertTo-IntegrityInvariantNumberString -Value $windowEnd)
+    return Get-IntegrityClosedReadInterval -Start $windowStart -End $windowEnd
 }
 
-function Get-IntegrityPacketSample
+function Get-IntegrityPacketWindow
 {
     param(
         [Parameter(Mandatory)] [string] $FFPROBE,
         [Parameter(Mandatory)] [string] $File,
-        [Parameter(Mandatory)] [string] $StreamSpecifier,
         [Parameter(Mandatory)] [string] $ReadIntervals
     )
 
     $ffprobeArgs = @(
         '-v', 'error'
-        '-select_streams', $StreamSpecifier
         '-read_intervals', $ReadIntervals
         '-show_packets'
-        '-show_entries', 'packet=pts_time,pos,size'
+        '-show_entries', 'packet=stream_index,pts_time,pos,size'
         '-of', 'json'
         $File
     )
@@ -313,19 +394,266 @@ function Get-IntegrityPacketSample
         return ConvertTo-IntegrityPacketArray -Packets @()
     }
 
-    $packets = [List[object]]::new()
+    $packets = @()
     foreach ($raw in @($rawPackets))
     {
-        $packets.Add((ConvertTo-IntegrityPacket -Packet $raw))
+        $packets += ConvertTo-IntegrityPacket -Packet $raw
     }
     return ConvertTo-IntegrityPacketArray -Packets $packets
+}
+
+function Get-IntegrityTargetedInterleavePackets
+{
+    param(
+        [Parameter(Mandatory)] [string] $FFPROBE,
+        [Parameter(Mandatory)] [string] $File,
+        [Parameter(Mandatory)] [string] $StreamSpecifier,
+        [Parameter(Mandatory)] [string] $ReadIntervals
+    )
+
+    # Exception intentionnelle :
+    # -select_streams peut provoquer une lecture physique supérieure à la largeur
+    # apparente de la fenêtre si le stream est physiquement retardé.
+    # Ce comportement est utile ici pour révéler précisément un mauvais interleave.
+    # Ne pas réutiliser ce helper pour les profils temporels.
+    $ffprobeArgs = @(
+        '-v', 'error'
+        '-select_streams', $StreamSpecifier
+        '-read_intervals', $ReadIntervals
+        '-show_packets'
+        '-show_entries', 'packet=stream_index,pts_time,pos,size'
+        '-of', 'json'
+        $File
+    )
+
+    $out = & $FFPROBE $ffprobeArgs 2>$null | Out-String
+    if (-not $?)
+    {
+        return $null
+    }
+
+    try
+    {
+        $json = ConvertFrom-Json -InputObject $out -AsHashtable
+    }
+    catch
+    {
+        return $null
+    }
+
+    if ($null -eq $json)
+    {
+        return $null
+    }
+
+    $rawPackets = $json['packets']
+    if ($null -eq $rawPackets)
+    {
+        return ConvertTo-IntegrityPacketArray -Packets @()
+    }
+
+    $packets = @()
+    foreach ($raw in @($rawPackets))
+    {
+        $packets += ConvertTo-IntegrityPacket -Packet $raw
+    }
+    return ConvertTo-IntegrityPacketArray -Packets $packets
+}
+
+function Get-CachedIntegrityPacketWindow
+{
+    param(
+        $Cache,
+        [Parameter(Mandatory)] [string] $FFPROBE,
+        [Parameter(Mandatory)] [string] $File,
+        [Parameter(Mandatory)] [string] $ReadIntervals
+    )
+
+    $key = '{0}|{1}' -f $File, $ReadIntervals
+    if ($null -ne $Cache -and $Cache.ContainsKey($key))
+    {
+        $cached = $Cache[$key]
+        if ($null -eq $cached)
+        {
+            return $null
+        }
+        return ConvertTo-IntegrityPacketArray -Packets $cached
+    }
+
+    $sample = Get-IntegrityPacketWindow `
+        -FFPROBE $FFPROBE `
+        -File $File `
+        -ReadIntervals $ReadIntervals
+
+    if ($null -ne $Cache)
+    {
+        $Cache[$key] = $sample
+    }
+
+    if ($null -eq $sample)
+    {
+        return $null
+    }
+
+    return ConvertTo-IntegrityPacketArray -Packets $sample
+}
+
+function Get-IntegrityPacketsForAbsoluteStream
+{
+    param(
+        $Packets,
+        [int] $AbsoluteStreamIndex
+    )
+
+    if ($null -eq $Packets)
+    {
+        return $null
+    }
+
+    $anyIndexed = $false
+    foreach ($packet in @($Packets))
+    {
+        if ($null -ne $packet -and $null -ne $packet.StreamIndex)
+        {
+            $anyIndexed = $true
+            break
+        }
+    }
+
+    if (-not $anyIndexed)
+    {
+        return ConvertTo-IntegrityPacketArray -Packets $Packets
+    }
+
+    $selected = @()
+    foreach ($packet in @($Packets))
+    {
+        if ($null -eq $packet -or $null -eq $packet.StreamIndex)
+        {
+            continue
+        }
+        if ([int]$packet.StreamIndex -eq $AbsoluteStreamIndex)
+        {
+            $selected += $packet
+        }
+    }
+
+    return ConvertTo-IntegrityPacketArray -Packets $selected
+}
+
+function Get-ProbeStreamAbsoluteIndex
+{
+    param([hashtable] $Stream)
+
+    if ($null -eq $Stream)
+    {
+        return $null
+    }
+
+    return ConvertTo-IntegrityNonNegativeInt64 -Value $Stream['index']
+}
+
+function ConvertTo-IntegrityPositiveDuration
+{
+    param($Value)
+
+    $duration = ConvertTo-IntegrityFiniteDouble -Value $Value
+    if ($null -eq $duration -or $duration -le 0)
+    {
+        return $null
+    }
+
+    return $duration
+}
+
+function Get-IntegrityMinPts
+{
+    param($Packets)
+
+    $minPts = $null
+    foreach ($packet in @($Packets))
+    {
+        if ($null -eq $packet -or $null -eq $packet.PtsTime)
+        {
+            continue
+        }
+        if ($null -eq $minPts -or [double]$packet.PtsTime -lt [double]$minPts)
+        {
+            $minPts = [double]$packet.PtsTime
+        }
+    }
+
+    return $minPts
+}
+
+function Get-IntegrityMaxPts
+{
+    param($Packets)
+
+    $maxPts = $null
+    foreach ($packet in @($Packets))
+    {
+        if ($null -eq $packet -or $null -eq $packet.PtsTime)
+        {
+            continue
+        }
+        if ($null -eq $maxPts -or [double]$packet.PtsTime -gt [double]$maxPts)
+        {
+            $maxPts = [double]$packet.PtsTime
+        }
+    }
+
+    return $maxPts
+}
+
+function Get-IntegrityStartSeekHint
+{
+    param(
+        [hashtable] $Probe,
+        [hashtable] $Stream
+    )
+
+    if ($null -ne $Stream)
+    {
+        $streamStart = ConvertTo-IntegrityFiniteDouble -Value $Stream['start_time']
+        if ($null -ne $streamStart)
+        {
+            return $streamStart
+        }
+    }
+
+    if ($null -eq $Probe)
+    {
+        return $null
+    }
+
+    $fmt = $Probe['format']
+    if (-not ($fmt -is [hashtable]))
+    {
+        return $null
+    }
+
+    $formatStart = ConvertTo-IntegrityFiniteDouble -Value $fmt['start_time']
+    if ($null -eq $formatStart)
+    {
+        return $null
+    }
+
+    # format.start_time au début du fichier ne localise pas une piste tardive.
+    $windowStart = [math]::Max(0.0, [double]$formatStart - $script:IntegrityStartHintWindowSeconds)
+    if ($windowStart -le 0)
+    {
+        return $null
+    }
+
+    return $formatStart
 }
 
 function Get-IntegrityMedianPositivePtsDelta
 {
     param($Packets)
 
-    $pts = [List[double]]::new()
+    $pts = @()
     $seen = [HashSet[double]]::new()
     foreach ($packet in @($Packets))
     {
@@ -336,7 +664,7 @@ function Get-IntegrityMedianPositivePtsDelta
         $value = [double]$packet.PtsTime
         if ($seen.Add($value))
         {
-            $pts.Add($value)
+            $pts += $value
         }
     }
 
@@ -346,13 +674,13 @@ function Get-IntegrityMedianPositivePtsDelta
     }
 
     $sortedPts = @($pts | Sort-Object)
-    $deltas = [List[double]]::new()
+    $deltas = @()
     for ($i = 1; $i -lt $sortedPts.Count; $i++)
     {
         $delta = [double]$sortedPts[$i] - [double]$sortedPts[$i - 1]
         if ($delta -gt 0)
         {
-            $deltas.Add($delta)
+            $deltas += $delta
         }
     }
 
@@ -383,7 +711,7 @@ function Get-IntegrityTailSeekHint
     if ($null -ne $Stream)
     {
         $streamStart = ConvertTo-IntegrityFiniteDouble -Value $Stream['start_time']
-        $streamDuration = ConvertTo-IntegrityFiniteDouble -Value $Stream['duration']
+        $streamDuration = ConvertTo-IntegrityPositiveDuration -Value $Stream['duration']
     }
 
     $formatStart = $null
@@ -394,25 +722,35 @@ function Get-IntegrityTailSeekHint
         if ($fmt -is [hashtable])
         {
             $formatStart = ConvertTo-IntegrityFiniteDouble -Value $fmt['start_time']
-            $formatDuration = ConvertTo-IntegrityFiniteDouble -Value $fmt['duration']
+            $formatDuration = ConvertTo-IntegrityPositiveDuration -Value $fmt['duration']
         }
     }
 
+    $candidates = @()
     if ($null -ne $streamStart -and $null -ne $streamDuration)
     {
-        return $streamStart + $streamDuration
+        $candidates += ($streamStart + $streamDuration)
     }
     if ($null -ne $formatStart -and $null -ne $formatDuration)
     {
-        return $formatStart + $formatDuration
+        $candidates += ($formatStart + $formatDuration)
     }
     if ($null -ne $streamDuration)
     {
-        return $streamDuration
+        $candidates += $streamDuration
     }
     if ($null -ne $formatDuration)
     {
-        return $formatDuration
+        $candidates += $formatDuration
+    }
+
+    foreach ($candidate in $candidates)
+    {
+        $hint = ConvertTo-IntegrityFiniteDouble -Value $candidate
+        if ($null -ne $hint -and $hint -gt 0)
+        {
+            return $hint
+        }
     }
 
     return $null
@@ -429,21 +767,23 @@ function New-IntegrityTemporalProfile
         $Cadence = $null,
         $StartPackets = @(),
         $TailPackets = @(),
+        $AbsoluteStreamIndex = $null,
         [bool] $IsUsable = $false,
         [string] $UnknownReason = $null
     )
 
     [pscustomobject]@{
-        FirstPtsTime  = $FirstPtsTime
-        LastPtsTime   = $LastPtsTime
-        SpanSeconds   = $SpanSeconds
-        StartCadence  = $StartCadence
-        EndCadence    = $EndCadence
-        Cadence       = $Cadence
-        StartPackets  = @($StartPackets)
-        TailPackets   = @($TailPackets)
-        IsUsable      = $IsUsable
-        UnknownReason = $UnknownReason
+        FirstPtsTime         = $FirstPtsTime
+        LastPtsTime          = $LastPtsTime
+        SpanSeconds          = $SpanSeconds
+        StartCadence         = $StartCadence
+        EndCadence           = $EndCadence
+        Cadence              = $Cadence
+        StartPackets         = @($StartPackets)
+        TailPackets          = @($TailPackets)
+        AbsoluteStreamIndex  = $AbsoluteStreamIndex
+        IsUsable             = $IsUsable
+        UnknownReason        = $UnknownReason
     }
 }
 
@@ -452,98 +792,193 @@ function Get-IntegrityTemporalProfile
     param(
         [Parameter(Mandatory)] [string] $FFPROBE,
         [Parameter(Mandatory)] [string] $File,
-        [Parameter(Mandatory)] [string] $StreamSpecifier,
         [hashtable] $Probe,
-        [hashtable] $Stream
+        [hashtable] $Stream,
+        $WindowCache
     )
 
-    $startPackets = Get-IntegrityPacketSample `
+    $streamIndex = Get-ProbeStreamAbsoluteIndex -Stream $Stream
+    $initial = Get-CachedIntegrityPacketWindow `
+        -Cache $WindowCache `
         -FFPROBE $FFPROBE `
         -File $File `
-        -StreamSpecifier $StreamSpecifier `
         -ReadIntervals (Get-IntegrityStartReadInterval)
 
-    if ($null -eq $startPackets)
+    if ($null -eq $initial)
     {
-        return New-IntegrityTemporalProfile -UnknownReason 'no-start-pts'
+        return New-IntegrityTemporalProfile `
+            -AbsoluteStreamIndex $streamIndex `
+            -UnknownReason 'no-start-pts'
     }
 
-    $firstPts = $null
-    foreach ($packet in @($startPackets))
+    $startPackets = if ($null -eq $streamIndex)
     {
-        if ($null -eq $packet.PtsTime)
+        ConvertTo-IntegrityPacketArray -Packets $initial
+    }
+    else
+    {
+        Get-IntegrityPacketsForAbsoluteStream -Packets $initial -AbsoluteStreamIndex ([int]$streamIndex)
+    }
+
+    $firstPts = Get-IntegrityMinPts -Packets $startPackets
+    if ($null -eq $firstPts)
+    {
+        $startHint = Get-IntegrityStartSeekHint -Probe $Probe -Stream $Stream
+        if ($null -eq $startHint)
         {
-            continue
+            return New-IntegrityTemporalProfile `
+                -StartPackets $startPackets `
+                -AbsoluteStreamIndex $streamIndex `
+                -UnknownReason 'no-start-seek-hint'
         }
-        if ($null -eq $firstPts -or [double]$packet.PtsTime -lt [double]$firstPts)
+
+        $hintWindow = Get-CachedIntegrityPacketWindow `
+            -Cache $WindowCache `
+            -FFPROBE $FFPROBE `
+            -File $File `
+            -ReadIntervals (Get-IntegrityStartHintWindowInterval -Hint $startHint)
+
+        if ($null -eq $hintWindow)
         {
-            $firstPts = [double]$packet.PtsTime
+            return New-IntegrityTemporalProfile `
+                -AbsoluteStreamIndex $streamIndex `
+                -UnknownReason 'no-start-pts'
+        }
+
+        $startPackets = if ($null -eq $streamIndex)
+        {
+            ConvertTo-IntegrityPacketArray -Packets $hintWindow
+        }
+        else
+        {
+            Get-IntegrityPacketsForAbsoluteStream -Packets $hintWindow -AbsoluteStreamIndex ([int]$streamIndex)
+        }
+
+        $hintWindowStart = [math]::Max(0.0, [double]$startHint - $script:IntegrityStartHintWindowSeconds)
+        $hintWindowEnd = [double]$startHint + $script:IntegrityStartHintWindowSeconds
+        $startPackets = Get-IntegrityPacketsInPtsRange `
+            -Packets $startPackets `
+            -Start $hintWindowStart `
+            -End $hintWindowEnd
+
+        $firstPts = Get-IntegrityMinPts -Packets $startPackets
+        if ($null -eq $firstPts)
+        {
+            return New-IntegrityTemporalProfile `
+                -StartPackets $startPackets `
+                -AbsoluteStreamIndex $streamIndex `
+                -UnknownReason 'no-start-packet-near-hint'
         }
     }
 
     $startCadence = Get-IntegrityMedianPositivePtsDelta -Packets $startPackets
-
     $hint = Get-IntegrityTailSeekHint -Probe $Probe -Stream $Stream
-    if ($null -eq $hint)
+    $tailStart = $null
+    $tailEnd = $null
+    $tailInterval = $null
+    if ($null -ne $hint)
+    {
+        $tailStart = [math]::Max(0.0, [double]$hint - $script:IntegrityTailLookbackSeconds)
+        $tailEnd = [double]$hint + $script:IntegrityTailLookaheadSeconds
+        $tailInterval = Get-IntegrityTailReadInterval -Hint $hint
+    }
+    if ($null -eq $tailInterval)
     {
         return New-IntegrityTemporalProfile `
             -FirstPtsTime $firstPts `
             -StartCadence $startCadence `
             -StartPackets $startPackets `
+            -AbsoluteStreamIndex $streamIndex `
             -UnknownReason 'no-tail-seek-hint'
     }
 
-    $tailInterval = Get-IntegrityTailReadInterval -Hint $hint
-    $tailPackets = Get-IntegrityPacketSample `
+    $fileTailPackets = Get-CachedIntegrityPacketWindow `
+        -Cache $WindowCache `
         -FFPROBE $FFPROBE `
         -File $File `
-        -StreamSpecifier $StreamSpecifier `
         -ReadIntervals $tailInterval
 
-    if ($null -eq $tailPackets)
+    if ($null -eq $fileTailPackets)
     {
         return New-IntegrityTemporalProfile `
             -FirstPtsTime $firstPts `
             -StartCadence $startCadence `
             -StartPackets $startPackets `
+            -AbsoluteStreamIndex $streamIndex `
             -UnknownReason 'tail-probe-failed'
     }
 
-    $lastPts = $null
-    foreach ($packet in @($tailPackets))
+    $tailPackets = if ($null -eq $streamIndex)
     {
-        if ($null -eq $packet.PtsTime)
-        {
-            continue
-        }
-        if ($null -eq $lastPts -or [double]$packet.PtsTime -gt [double]$lastPts)
-        {
-            $lastPts = [double]$packet.PtsTime
-        }
+        ConvertTo-IntegrityPacketArray -Packets $fileTailPackets
+    }
+    else
+    {
+        Get-IntegrityPacketsForAbsoluteStream -Packets $fileTailPackets -AbsoluteStreamIndex ([int]$streamIndex)
     }
 
-    $endCadence = Get-IntegrityMedianPositivePtsDelta -Packets $tailPackets
-
-    if ($null -eq $firstPts)
-    {
-        return New-IntegrityTemporalProfile `
-            -LastPtsTime $lastPts `
-            -StartCadence $startCadence `
-            -EndCadence $endCadence `
-            -StartPackets $startPackets `
-            -TailPackets $tailPackets `
-            -UnknownReason 'no-start-pts'
-    }
-
+    $tailPackets = Get-IntegrityPacketsInPtsRange -Packets $tailPackets -Start $tailStart -End $tailEnd
+    $lastPts = Get-IntegrityMaxPts -Packets $tailPackets
     if ($null -eq $lastPts)
     {
         return New-IntegrityTemporalProfile `
             -FirstPtsTime $firstPts `
             -StartCadence $startCadence `
+            -StartPackets $startPackets `
+            -TailPackets $tailPackets `
+            -AbsoluteStreamIndex $streamIndex `
+            -UnknownReason 'no-end-packet-near-hint'
+    }
+
+    $endCadence = Get-IntegrityMedianPositivePtsDelta -Packets $tailPackets
+    $guardStart = [double]$hint + $script:IntegrityTailLookaheadSeconds
+    $guardEnd = $guardStart + $script:IntegrityTailGuardSeconds
+    $guardWindow = Get-CachedIntegrityPacketWindow `
+        -Cache $WindowCache `
+        -FFPROBE $FFPROBE `
+        -File $File `
+        -ReadIntervals (Get-IntegrityTailGuardInterval -Hint $hint)
+
+    if ($null -eq $guardWindow)
+    {
+        return New-IntegrityTemporalProfile `
+            -FirstPtsTime $firstPts `
+            -LastPtsTime $lastPts `
+            -StartCadence $startCadence `
             -EndCadence $endCadence `
             -StartPackets $startPackets `
             -TailPackets $tailPackets `
-            -UnknownReason 'no-end-pts'
+            -AbsoluteStreamIndex $streamIndex `
+            -UnknownReason 'tail-probe-failed'
+    }
+
+    $guardPackets = if ($null -eq $streamIndex)
+    {
+        ConvertTo-IntegrityPacketArray -Packets $guardWindow
+    }
+    else
+    {
+        Get-IntegrityPacketsForAbsoluteStream -Packets $guardWindow -AbsoluteStreamIndex ([int]$streamIndex)
+    }
+
+    # ExclusiveStart : un packet pile à H+5 appartient déjà à la fenêtre tail.
+    $guardPackets = Get-IntegrityPacketsInPtsRange `
+        -Packets $guardPackets `
+        -Start $guardStart `
+        -End $guardEnd `
+        -ExclusiveStart
+
+    if (@($guardPackets).Count -gt 0)
+    {
+        return New-IntegrityTemporalProfile `
+            -FirstPtsTime $firstPts `
+            -LastPtsTime $lastPts `
+            -StartCadence $startCadence `
+            -EndCadence $endCadence `
+            -StartPackets $startPackets `
+            -TailPackets $tailPackets `
+            -AbsoluteStreamIndex $streamIndex `
+            -UnknownReason 'tail-hint-underestimates-stream'
     }
 
     if ($lastPts -lt $firstPts)
@@ -555,6 +990,7 @@ function Get-IntegrityTemporalProfile
             -EndCadence $endCadence `
             -StartPackets $startPackets `
             -TailPackets $tailPackets `
+            -AbsoluteStreamIndex $streamIndex `
             -UnknownReason 'no-end-pts'
     }
 
@@ -568,6 +1004,7 @@ function Get-IntegrityTemporalProfile
             -EndCadence $endCadence `
             -StartPackets $startPackets `
             -TailPackets $tailPackets `
+            -AbsoluteStreamIndex $streamIndex `
             -UnknownReason 'no-start-cadence'
     }
 
@@ -582,6 +1019,7 @@ function Get-IntegrityTemporalProfile
             -Cadence $startCadence `
             -StartPackets $startPackets `
             -TailPackets $tailPackets `
+            -AbsoluteStreamIndex $streamIndex `
             -UnknownReason 'no-end-cadence'
     }
 
@@ -596,6 +1034,7 @@ function Get-IntegrityTemporalProfile
         -Cadence $cadence `
         -StartPackets $startPackets `
         -TailPackets $tailPackets `
+        -AbsoluteStreamIndex $streamIndex `
         -IsUsable $true
 }
 
@@ -679,7 +1118,7 @@ function Get-IntegrityUnknownDetail
 
     switch ($reason)
     {
-        'no-end-pts' {
+        { $_ -in @('no-end-pts', 'no-end-packet-near-hint') } {
             $side = Get-IntegrityResultProperty -Integrity $Integrity -Name 'Side'
             if ([string]::IsNullOrWhiteSpace($side))
             {
@@ -698,6 +1137,10 @@ function Get-IntegrityUnknownDetail
             }
         }
         'no-tail-seek-hint' { if ($streamLabel) { '{0} has no tail seek hint' -f $streamLabel } else { 'no tail seek hint' } }
+        'tail-window-truncated' { if ($streamLabel) { '{0} tail window stopped at the duration hint' -f $streamLabel } else { 'tail window stopped at the duration hint' } }
+        'tail-hint-underestimates-stream' { if ($streamLabel) { '{0} tail hint underestimates the stream' -f $streamLabel } else { 'tail hint underestimates the stream' } }
+        'no-start-seek-hint' { if ($streamLabel) { '{0} has no start seek hint' -f $streamLabel } else { 'no start seek hint' } }
+        'no-start-packet-near-hint' { if ($streamLabel) { '{0} has no start packet near the start hint' -f $streamLabel } else { 'no start packet near the start hint' } }
         'tail-probe-failed' { if ($streamLabel) { '{0} tail probe failed' -f $streamLabel } else { 'tail probe failed' } }
         'anchor-probe-failed' { if ($streamLabel) { '{0} anchor probe failed' -f $streamLabel } else { 'anchor probe failed' } }
         'no-start-pts' { if ($streamLabel) { '{0} has no usable start PTS' -f $streamLabel } else { 'no usable start PTS' } }
@@ -836,26 +1279,26 @@ function Get-OrderedIntegrityStreamMaps
 {
     param($StreamMaps)
 
-    $maps = [List[object]]::new()
+    $maps = @()
     if ($null -ne $StreamMaps)
     {
         foreach ($map in @($StreamMaps))
         {
             if ($null -ne $map)
             {
-                $maps.Add($map)
+                $maps += $map
             }
         }
     }
 
-    $ordered = [List[object]]::new()
+    $ordered = @()
     foreach ($map in @($maps | Where-Object { $_.StreamType -eq 'video' } | Sort-Object OutputRelativeIndex))
     {
-        $ordered.Add($map)
+        $ordered += $map
     }
     foreach ($map in @($maps | Where-Object { $_.StreamType -eq 'audio' } | Sort-Object OutputRelativeIndex))
     {
-        $ordered.Add($map)
+        $ordered += $map
     }
 
     # `return @()` se déroule en $null : .Count lève sous StrictMode.
@@ -953,7 +1396,8 @@ function Test-IntegrityOutputInterleave
         [Parameter(Mandatory)] [string] $FFPROBE,
         [Parameter(Mandatory)] [string] $TempFile,
         [object[]] $StreamMaps,
-        [hashtable] $OutputProfiles
+        [hashtable] $OutputProfiles,
+        $WindowCache
     )
 
     $maps = Get-OrderedIntegrityStreamMaps -StreamMaps $StreamMaps
@@ -988,54 +1432,46 @@ function Test-IntegrityOutputInterleave
     foreach ($fraction in $fractions)
     {
         $anchor = $referenceStart + $fraction * $referenceSpan
-        $candidates = [List[object]]::new()
+        $interval = Get-IntegrityAnchorWindowInterval -Anchor $anchor
+        $commonPackets = Get-CachedIntegrityPacketWindow `
+            -Cache $WindowCache `
+            -FFPROBE $FFPROBE `
+            -File $TempFile `
+            -ReadIntervals $interval
 
+        if ($null -eq $commonPackets)
+        {
+            $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'anchor-probe-failed' `
+                -StreamType $referenceMap.StreamType `
+                -SourceRelativeIndex $referenceMap.SourceRelativeIndex `
+                -OutputRelativeIndex $referenceMap.OutputRelativeIndex `
+                -AnchorTime $anchor
+            continue
+        }
+
+        $candidates = @()
         foreach ($map in $maps)
         {
             $key = Get-IntegrityProfileKey -Map $map
             $temporalProfile = $OutputProfiles[$key]
-            if ($null -eq $temporalProfile -or $null -eq $temporalProfile.Cadence -or $null -eq $temporalProfile.FirstPtsTime -or $null -eq $temporalProfile.LastPtsTime)
-            {
-                $reason = if ($null -ne $temporalProfile -and -not [string]::IsNullOrWhiteSpace($temporalProfile.UnknownReason))
-                {
-                    $temporalProfile.UnknownReason
-                }
-                else
-                {
-                    'no-start-pts'
-                }
-                $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason $reason `
-                    -StreamType $map.StreamType `
-                    -SourceRelativeIndex $map.SourceRelativeIndex `
-                    -OutputRelativeIndex $map.OutputRelativeIndex `
-                    -AnchorTime $anchor
-                continue
-            }
+            $profileUsable = (
+                $null -ne $temporalProfile -and
+                $null -ne $temporalProfile.Cadence -and
+                $null -ne $temporalProfile.FirstPtsTime -and
+                $null -ne $temporalProfile.LastPtsTime
+            )
 
-            if (-not (Test-IntegrityStreamActiveAtAnchor -TemporalProfile $temporalProfile -Anchor $anchor))
+            if (-not $profileUsable)
             {
-                continue
-            }
-
-            $packets = $null
-            if ($fraction -eq 0.0)
-            {
-                $packets = $temporalProfile.StartPackets
-            }
-            elseif ($fraction -eq 1.0)
-            {
-                $packets = $temporalProfile.TailPackets
-            }
-            else
-            {
-                $interval = Get-IntegrityAnchorWindowInterval -Anchor $anchor
+                # Profil temporel inexploitable : sonde PAR STREAM. Un flux
+                # physiquement retardé est absent de la fenêtre fichier commune.
                 $specifier = '{0}:{1}' -f $map.StreamSpecifierType, [int]$map.OutputRelativeIndex
-                $packets = Get-IntegrityPacketSample `
+                $targeted = Get-IntegrityTargetedInterleavePackets `
                     -FFPROBE $FFPROBE `
                     -File $TempFile `
                     -StreamSpecifier $specifier `
                     -ReadIntervals $interval
-                if ($null -eq $packets)
+                if ($null -eq $targeted)
                 {
                     $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'anchor-probe-failed' `
                         -StreamType $map.StreamType `
@@ -1044,6 +1480,44 @@ function Test-IntegrityOutputInterleave
                         -AnchorTime $anchor
                     continue
                 }
+
+                $candidate = Get-IntegrityNearestPacket -Packets $targeted -Anchor $anchor
+                if ($null -eq $candidate -or $null -eq $candidate.PtsTime -or $null -eq $candidate.Pos)
+                {
+                    $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'no-anchor-candidate' `
+                        -StreamType $map.StreamType `
+                        -SourceRelativeIndex $map.SourceRelativeIndex `
+                        -OutputRelativeIndex $map.OutputRelativeIndex `
+                        -AnchorTime $anchor
+                    continue
+                }
+                if ([math]::Abs([double]$candidate.PtsTime - $anchor) -gt $script:IntegrityAnchorWindowSeconds)
+                {
+                    $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'no-anchor-candidate' `
+                        -StreamType $map.StreamType `
+                        -SourceRelativeIndex $map.SourceRelativeIndex `
+                        -OutputRelativeIndex $map.OutputRelativeIndex `
+                        -AnchorTime $anchor
+                    continue
+                }
+
+                $candidates += $candidate
+                continue
+            }
+
+            if (-not (Test-IntegrityStreamActiveAtAnchor -TemporalProfile $temporalProfile -Anchor $anchor))
+            {
+                continue
+            }
+
+            $streamIndex = ConvertTo-IntegrityNonNegativeInt64 -Value $temporalProfile.AbsoluteStreamIndex
+            $packets = if ($null -eq $streamIndex)
+            {
+                ConvertTo-IntegrityPacketArray -Packets @()
+            }
+            else
+            {
+                Get-IntegrityPacketsForAbsoluteStream -Packets $commonPackets -AbsoluteStreamIndex ([int]$streamIndex)
             }
 
             $picked = Get-IntegrityInterleaveCandidate -TemporalProfile $temporalProfile -Packets $packets -Anchor $anchor
@@ -1051,17 +1525,45 @@ function Test-IntegrityOutputInterleave
             {
                 continue
             }
+
             if ($picked.Status -ne 'ok')
             {
-                $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'no-anchor-candidate' `
-                    -StreamType $map.StreamType `
-                    -SourceRelativeIndex $map.SourceRelativeIndex `
-                    -OutputRelativeIndex $map.OutputRelativeIndex `
-                    -AnchorTime $anchor
-                continue
+                # Le fallback ciblé peut être plus coûteux parce qu'il cherche précisément
+                # un stream physiquement retardé. Son usage est limité aux anchors où la
+                # sonde commune n'a pas retrouvé un stream actif.
+                $specifier = '{0}:{1}' -f $map.StreamSpecifierType, [int]$map.OutputRelativeIndex
+                $targeted = Get-IntegrityTargetedInterleavePackets `
+                    -FFPROBE $FFPROBE `
+                    -File $TempFile `
+                    -StreamSpecifier $specifier `
+                    -ReadIntervals $interval
+                if ($null -eq $targeted)
+                {
+                    $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'anchor-probe-failed' `
+                        -StreamType $map.StreamType `
+                        -SourceRelativeIndex $map.SourceRelativeIndex `
+                        -OutputRelativeIndex $map.OutputRelativeIndex `
+                        -AnchorTime $anchor
+                    continue
+                }
+
+                $picked = Get-IntegrityInterleaveCandidate -TemporalProfile $temporalProfile -Packets $targeted -Anchor $anchor
+                if ($picked.Status -eq 'inactive')
+                {
+                    continue
+                }
+                if ($picked.Status -ne 'ok')
+                {
+                    $unknownResult ??= New-IntegrityCheckResult -Status 'unknown' -Method 'interleave' -Reason 'no-anchor-candidate' `
+                        -StreamType $map.StreamType `
+                        -SourceRelativeIndex $map.SourceRelativeIndex `
+                        -OutputRelativeIndex $map.OutputRelativeIndex `
+                        -AnchorTime $anchor
+                    continue
+                }
             }
 
-            $candidates.Add($picked.Packet)
+            $candidates += $picked.Packet
         }
 
         if ($candidates.Count -lt 2)
@@ -1162,6 +1664,8 @@ function Test-EncodedFileIntegrity
     $unknownResult = $null
     $sourceProfiles = @{}
     $outputProfiles = @{}
+    $sourceWindowCache = @{}
+    $outputWindowCache = @{}
 
     foreach ($map in $maps)
     {
@@ -1187,13 +1691,12 @@ function Test-EncodedFileIntegrity
         }
 
         $key = Get-IntegrityProfileKey -Map $map
-        $outputSpecifier = '{0}:{1}' -f $map.StreamSpecifierType, [int]$map.OutputRelativeIndex
         $outputProfile = Get-IntegrityTemporalProfile `
             -FFPROBE $FFPROBE `
             -File $TempFile `
-            -StreamSpecifier $outputSpecifier `
             -Probe $tempProbe `
-            -Stream $outputStream
+            -Stream $outputStream `
+            -WindowCache $outputWindowCache
         $outputProfiles[$key] = $outputProfile
 
         if ($null -eq $sourceStream)
@@ -1208,13 +1711,12 @@ function Test-EncodedFileIntegrity
             continue
         }
 
-        $sourceSpecifier = '{0}:{1}' -f $map.StreamSpecifierType, [int]$map.SourceRelativeIndex
         $sourceProfile = Get-IntegrityTemporalProfile `
             -FFPROBE $FFPROBE `
             -File $SourceFile `
-            -StreamSpecifier $sourceSpecifier `
             -Probe $SourceProbe `
-            -Stream $sourceStream
+            -Stream $sourceStream `
+            -WindowCache $sourceWindowCache
         $sourceProfiles[$key] = $sourceProfile
 
         if (-not $sourceProfile.IsUsable -or -not $outputProfile.IsUsable)
@@ -1340,7 +1842,8 @@ function Test-EncodedFileIntegrity
         -FFPROBE $FFPROBE `
         -TempFile $TempFile `
         -StreamMaps $maps `
-        -OutputProfiles $outputProfiles
+        -OutputProfiles $outputProfiles `
+        -WindowCache $outputWindowCache
 
     if ($interleave.Status -eq 'mismatch')
     {

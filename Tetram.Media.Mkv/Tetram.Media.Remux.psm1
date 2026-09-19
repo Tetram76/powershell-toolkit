@@ -1,5 +1,4 @@
 using namespace System
-using namespace System.Collections.Generic
 using namespace System.IO
 
 Set-StrictMode -Version 3.0
@@ -256,8 +255,8 @@ function Initialize-ReencodeState
         ErrorLog = 'reencode-errors.log'
         BaseTempFilename = Join-Path $TempPath ([guid]::NewGuid().ToString())
         Attempts = 0
-        IntegrityWarningFiles = [List[string]]::new()
-        IntegrityFailureFiles = [List[string]]::new()
+        IntegrityWarningFiles = @()
+        IntegrityFailureFiles = @()
         SessionResult = [EncodingResult]::new()
     }
 
@@ -482,19 +481,19 @@ function Invoke-ReencodeFile
 
         if (-not $Config.NoTranscode -and -not $WhatIfPreference -and (Test-Path -LiteralPath $TempFilename -PathType Leaf))
         {
-            $integrityStreamMaps = [List[object]]::new()
+            $integrityStreamMaps = @()
             $outputRelativeIndex = 0
             foreach ($stream in @(
                 $videoResult.VideoTracks |
                     Where-Object { $_.__copy -or $_.__process }
             ))
             {
-                $integrityStreamMaps.Add([pscustomobject]@{
+                $integrityStreamMaps += [pscustomobject]@{
                     StreamType          = 'video'
                     StreamSpecifierType = 'v'
                     SourceRelativeIndex = [int]$stream._index
                     OutputRelativeIndex = $outputRelativeIndex
-                })
+                }
                 $outputRelativeIndex++
             }
 
@@ -504,12 +503,12 @@ function Invoke-ReencodeFile
                     Where-Object { $_.__copy -or $_.__process }
             ))
             {
-                $integrityStreamMaps.Add([pscustomobject]@{
+                $integrityStreamMaps += [pscustomobject]@{
                     StreamType          = 'audio'
                     StreamSpecifierType = 'a'
                     SourceRelativeIndex = [int]$stream._index
                     OutputRelativeIndex = $outputRelativeIndex
-                })
+                }
                 $outputRelativeIndex++
             }
 
@@ -528,19 +527,19 @@ function Invoke-ReencodeFile
                     {
                         $msg = "$msg — accepted because -AllowIntegrityMismatch is set"
                         Write-InfoWarning -Text $msg -Force
-                        [void]$State.IntegrityWarningFiles.Add($Filename)
+                        $State.IntegrityWarningFiles += $Filename
                     }
                     else
                     {
                         Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
-                        [void]$State.IntegrityFailureFiles.Add($Filename)
+                        $State.IntegrityFailureFiles += $Filename
                         return
                     }
                 }
                 'unknown' {
                     $msg = Get-IntegrityUnknownMessage -Filename $Filename -Integrity $integrity
                     Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
-                    [void]$State.IntegrityWarningFiles.Add($Filename)
+                    $State.IntegrityWarningFiles += $Filename
                 }
             }
         }
