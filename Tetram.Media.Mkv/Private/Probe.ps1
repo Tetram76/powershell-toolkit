@@ -1398,10 +1398,11 @@ function Get-IntegrityTargetedInterleaveCadence
         $Packets
     )
 
-    # Politique de projet : la cadence mesurée dans la fenêtre d'anchor décrit
-    # ce voisinage plus fidèlement qu'une cadence de début/fin de stream.
-    # Un delta de trou (seek ffprobe non exact) n'est pas une cadence : 2×cadence
-    # ne doit pas atteindre la demi-fenêtre de recherche.
+    # La cadence locale n'est utilisable que si la tolérance de contemporanéité
+    # qu'elle induit (2×cadence) reste strictement plus étroite que la demi-fenêtre
+    # de recherche. Sinon tout packet trouvé dans cette fenêtre pourrait satisfaire
+    # le critère de contemporanéité, ce qui reviendrait à réutiliser implicitement
+    # ±IntegrityAnchorWindowSeconds comme tolérance.
     $localCadence = Get-IntegrityMedianPositivePtsDelta -Packets $Packets
     if ($null -ne $localCadence -and [double]$localCadence -gt 0 -and ((2.0 * [double]$localCadence) -lt $script:IntegrityAnchorWindowSeconds))
     {
