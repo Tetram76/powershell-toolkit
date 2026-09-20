@@ -381,8 +381,9 @@ function Get-FFmpegArgs
         '-metadata:s', 'VENDOR_ID='
         '-metadata:s', 'BPS='
         '-metadata:s', 'BPS-eng='
-        '-metadata:s', 'DURATION=' # to enforce lowercase, will be forced to lowercase by ffmpeg
+        '-metadata:s', 'DURATION='
         '-metadata:s', 'DURATION-eng='
+        '-metadata:s', 'NUMBER_OF_FRAMES='
         '-metadata:s', 'NUMBER_OF_FRAMES-eng='
         '-metadata:s', 'NUMBER_OF_BYTES='
         '-metadata:s', 'NUMBER_OF_BYTES-eng='
