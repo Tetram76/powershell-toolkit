@@ -529,7 +529,7 @@ function Invoke-ReencodeFile
                         $msg = "$msg — accepted because -AllowIntegrityMismatch is set"
                         Write-InfoWarning -Text $msg -Force
                         $State.IntegrityWarningFiles += $Filename
-                        $State.IntegrityWarningMessages += $msg
+                        $State.IntegrityWarningMessages += "$(Get-IntegrityMismatchDetail -Integrity $integrity) — accepted because -AllowIntegrityMismatch is set"
                     }
                     else
                     {
@@ -542,7 +542,7 @@ function Invoke-ReencodeFile
                     $msg = Get-IntegrityUnknownMessage -Filename $Filename -Integrity $integrity
                     Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
                     $State.IntegrityWarningFiles += $Filename
-                    $State.IntegrityWarningMessages += $msg
+                    $State.IntegrityWarningMessages += Get-IntegrityUnknownMessageBody -Integrity $integrity
                 }
             }
         }
@@ -871,27 +871,46 @@ function Invoke-MkvRemux
         }
         if ($state.IntegrityWarningFiles.Count -gt 0)
         {
-            Write-InfoWarning -Text ("{0} file(s) accepted with integrity warning:" -f $state.IntegrityWarningFiles.Count) -Force
-            # Regroupement littéral (ordinal, sans normalisation), dans l'ordre de première apparition
-            $warningCounts = [System.Collections.Generic.Dictionary[string, int]]::new([StringComparer]::Ordinal)
-            $warningOrder = [System.Collections.Generic.List[string]]::new()
-            foreach ($message in $state.IntegrityWarningMessages)
+            # Regroupement par fichier (ordre de première apparition), puis par message
+            # complet dans ce fichier (littéral, ordinal, sans normalisation).
+            $fileOrder = [System.Collections.Generic.List[string]]::new()
+            $fileMessages = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.List[string]]]::new([StringComparer]::Ordinal)
+            for ($i = 0; $i -lt $state.IntegrityWarningFiles.Count; $i++)
             {
-                if ($warningCounts.ContainsKey($message))
+                $file = $state.IntegrityWarningFiles[$i]
+                if (-not $fileMessages.ContainsKey($file))
                 {
-                    $warningCounts[$message]++
+                    $fileMessages.Add($file, [System.Collections.Generic.List[string]]::new())
+                    $fileOrder.Add($file)
                 }
-                else
-                {
-                    $warningCounts.Add($message, 1)
-                    $warningOrder.Add($message)
-                }
+                $fileMessages[$file].Add($state.IntegrityWarningMessages[$i])
             }
-            foreach ($message in $warningOrder)
+
+            Write-InfoWarning -Text ("{0} file(s) accepted with integrity warning:" -f $fileOrder.Count) -Force
+            foreach ($file in $fileOrder)
             {
-                $count = $warningCounts[$message]
-                $suffix = if ($count -gt 1) { " [x $count]" } else { '' }
-                Write-InfoWarning -Text "  - $message$suffix" -Force
+                Write-InfoWarning -Text "  - $file" -Force
+
+                $warningCounts = [System.Collections.Generic.Dictionary[string, int]]::new([StringComparer]::Ordinal)
+                $warningOrder = [System.Collections.Generic.List[string]]::new()
+                foreach ($message in $fileMessages[$file])
+                {
+                    if ($warningCounts.ContainsKey($message))
+                    {
+                        $warningCounts[$message]++
+                    }
+                    else
+                    {
+                        $warningCounts.Add($message, 1)
+                        $warningOrder.Add($message)
+                    }
+                }
+                foreach ($message in $warningOrder)
+                {
+                    $count = $warningCounts[$message]
+                    $suffix = if ($count -gt 1) { " [x $count]" } else { '' }
+                    Write-InfoWarning -Text "    - $message$suffix" -Force
+                }
             }
         }
     }

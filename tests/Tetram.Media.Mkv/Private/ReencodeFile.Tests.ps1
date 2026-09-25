@@ -586,7 +586,11 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $state.SessionResult.Count | Should -Be 1
         $script:ErrorLogs | Should -BeNullOrEmpty
         $script:WarningLogs | Should -HaveCount 1
-        $state.IntegrityWarningMessages[0] | Should -BeExactly $script:WarningLogs[0]
+        # Le message mémorisé pour le récapitulatif est le corps sans nom de fichier :
+        # accolé au préfixe "Integrity mismatch for '<fichier>' ", il reconstitue exactement
+        # le message affiché en direct (aucune reconstruction indépendante du texte).
+        $script:WarningLogs[0] | Should -BeExactly "Integrity mismatch for '$file' $($state.IntegrityWarningMessages[0])"
+        $state.IntegrityWarningMessages[0] | Should -Not -Match ([regex]::Escape($file))
         $state.IntegrityWarningMessages[0] | Should -BeLike '* — accepted because -AllowIntegrityMismatch is set'
         $script:WarningLogs[0] | Should -Match 'mismatch-allow'
         $script:WarningLogs[0] | Should -Match 'timestamp-span'
@@ -629,7 +633,10 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Test-Path -LiteralPath (Join-Path $TestDrive 'unknown-duration.mkv') -PathType Leaf | Should -BeTrue
         $script:ErrorLogs | Should -HaveCount 1
         $state.IntegrityWarningMessages | Should -HaveCount 1
-        $state.IntegrityWarningMessages[0] | Should -BeExactly $script:ErrorLogs[0]
+        # Même invariant que pour le mismatch accepté : le corps mémorisé, préfixé de
+        # "Integrity check inconclusive for '<fichier>' ", reconstitue le message émis.
+        $script:ErrorLogs[0] | Should -BeExactly "Integrity check inconclusive for '$file' $($state.IntegrityWarningMessages[0])"
+        $state.IntegrityWarningMessages[0] | Should -Not -Match ([regex]::Escape($file))
         $script:ErrorLogs[0] | Should -Match 'inconclusive'
         $script:ErrorLogs[0] | Should -Match 'timestamp-span'
         $script:ErrorLogs[0] | Should -Not -Match 'comparable duration'

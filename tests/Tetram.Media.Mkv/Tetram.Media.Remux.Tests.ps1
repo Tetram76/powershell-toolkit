@@ -256,36 +256,7 @@ Describe 'Invoke-MkvRemux - configuration et récapitulatif' {
         $script:capturedConfig.RemoveAttachments | Should -BeFalse
     }
 
-    It 'présente les warnings d''intégrité sans les limiter aux durées invérifiables' {
-        $message = "Integrity check inconclusive for 'accepted.mkv' [timestamp-span] - source 0:a:0 -> output 0:a:0 has no usable end PTS; accepting file"
-        Mock -ModuleName Tetram.Media.Remux Get-FFmpegPath { 'ffmpeg' }
-        Mock -ModuleName Tetram.Media.Remux Get-FfprobePath { 'ffprobe' }
-        Mock -ModuleName Tetram.Media.Remux Invoke-PathList {
-            param($Paths, $State, $Config, $Cmdlet)
-            $State.IntegrityWarningFiles += 'accepted.mkv'
-            $State.IntegrityWarningMessages += $message
-        }
-        Mock -ModuleName Tetram.Media.Remux Write-InfoLog {}
-        Mock -ModuleName Tetram.Media.Remux Write-InfoWarning {}
-
-        Invoke-MkvRemux -Path $TestDrive
-
-        Should -Invoke -ModuleName Tetram.Media.Remux Write-InfoWarning -Times 1 -ParameterFilter {
-            $Force -and
-            $Text -eq '1 file(s) accepted with integrity warning:'
-        }
-        Should -Invoke -ModuleName Tetram.Media.Remux Write-InfoWarning -Times 1 -ParameterFilter {
-            $Force -and $Text -ceq "  - $message"
-        }
-        Should -Invoke -ModuleName Tetram.Media.Remux Write-InfoWarning -Times 0 -ParameterFilter {
-            $Text -eq '  - accepted.mkv'
-        }
-        Should -Invoke -ModuleName Tetram.Media.Remux Write-InfoWarning -Times 0 -ParameterFilter {
-            $Text -like '*unverifiable*'
-        }
-    }
-
-    Context 'récapitulatif des warnings d''intégrité acceptés' {
+    Context 'récapitulatif des warnings d''intégrité acceptés, groupés par fichier' {
         BeforeEach {
             $script:summaryWarnings = [System.Collections.Generic.List[string]]::new()
             $script:injectedFiles = @()
@@ -304,91 +275,104 @@ Describe 'Invoke-MkvRemux - configuration et récapitulatif' {
             }
         }
 
-        It 'n''affiche jamais [x 1] pour un warning rencontré une seule fois' {
-            $message = "Integrity mismatch for 'one.mkv' [interleave] - A/V packet spread at 50% is 14.3 MiB, limit 10.2 MiB — accepted because -AllowIntegrityMismatch is set"
-            $script:injectedFiles = @('one.mkv')
-            $script:injectedMessages = @($message)
+        It 'affiche chaque fichier en premier niveau puis son warning complet en second niveau' {
+            $messageA = "[timestamp-span] - source 0:a:0 -> output 0:a:0 has no usable end PTS; accepting file"
+            $messageB = "[interleave] - A/V packet spread at 50% is 14.3 MiB, limit 10.2 MiB — accepted because -AllowIntegrityMismatch is set"
+            $script:injectedFiles = @('a.mkv', 'b.mkv')
+            $script:injectedMessages = @($messageA, $messageB)
 
             Invoke-MkvRemux -Path $TestDrive
 
             $expected = @(
-                '1 file(s) accepted with integrity warning:'
-                "  - $message"
+                '2 file(s) accepted with integrity warning:'
+                '  - a.mkv'
+                "    - $messageA"
+                '  - b.mkv'
+                "    - $messageB"
             )
             ($script:summaryWarnings -join "`n") | Should -BeExactly ($expected -join "`n")
             @($script:summaryWarnings | Where-Object { $_ -like '*`[x 1`]*' }) | Should -HaveCount 0
         }
 
-        It 'regroupe des messages strictement identiques en une seule ligne suffixée [x N]' {
-            $message = "Integrity check inconclusive for 'same.mkv' [timestamp-span] - source 0:a:0 -> output 0:a:0 has no usable end PTS; accepting file"
+        It 'compte les fichiers distincts dans l''en-tête, pas les occurrences' {
+            $message = "[timestamp-span] - source 0:a:0 -> output 0:a:0 has no usable end PTS; accepting file"
             $script:injectedFiles = @('same.mkv', 'same.mkv', 'same.mkv')
             $script:injectedMessages = @($message, $message, $message)
 
             Invoke-MkvRemux -Path $TestDrive
 
             $expected = @(
-                '3 file(s) accepted with integrity warning:'
-                "  - $message [x 3]"
+                '1 file(s) accepted with integrity warning:'
+                '  - same.mkv'
+                "    - $message [x 3]"
             )
             ($script:summaryWarnings -join "`n") | Should -BeExactly ($expected -join "`n")
         }
 
-        It 'garde distincts deux warnings du même type avec des valeurs différentes' {
-            $message1 = 'Non-monotonous DTS at 00:12:34.567'
-            $message2 = 'Non-monotonous DTS at 00:18:42.123'
-            $script:injectedFiles = @('a.mkv', 'b.mkv')
-            $script:injectedMessages = @($message1, $message2)
+        It 'ne regroupe pas à travers les fichiers un message strictement identique' {
+            $message = "[interleave] - A/V packet spread at 50% is 14.3 MiB, limit 10.2 MiB — accepted because -AllowIntegrityMismatch is set"
+            # same.mkv est traité deux fois avec le même message ; other.mkv une fois avec ce même texte.
+            $script:injectedFiles = @('same.mkv', 'same.mkv', 'other.mkv')
+            $script:injectedMessages = @($message, $message, $message)
 
             Invoke-MkvRemux -Path $TestDrive
 
             $expected = @(
                 '2 file(s) accepted with integrity warning:'
-                "  - $message1"
-                "  - $message2"
+                '  - same.mkv'
+                "    - $message [x 2]"
+                '  - other.mkv'
+                "    - $message"
             )
             ($script:summaryWarnings -join "`n") | Should -BeExactly ($expected -join "`n")
         }
 
-        It 'compare le message complet de façon littérale (valeur et casse)' {
-            $script:injectedFiles = @('a.mkv', 'b.mkv', 'c.mkv')
-            $script:injectedMessages = @('warning value=10', 'warning value=11', 'Warning value=10')
+        It 'garde distincts, pour un même fichier, deux warnings du même type avec des valeurs différentes' {
+            $message1 = 'Non-monotonous DTS at 00:12:34.567'
+            $message2 = 'Non-monotonous DTS at 00:18:42.123'
+            $script:injectedFiles = @('a.mkv', 'a.mkv')
+            $script:injectedMessages = @($message1, $message2)
 
             Invoke-MkvRemux -Path $TestDrive
 
             $expected = @(
-                '3 file(s) accepted with integrity warning:'
-                '  - warning value=10'
-                '  - warning value=11'
-                '  - Warning value=10'
+                '1 file(s) accepted with integrity warning:'
+                '  - a.mkv'
+                "    - $message1"
+                "    - $message2"
             )
             ($script:summaryWarnings -join "`n") | Should -BeExactly ($expected -join "`n")
         }
 
-        It 'conserve l''ordre de première apparition sans trier' {
-            $script:injectedFiles = @('1.mkv', '2.mkv', '3.mkv', '4.mkv', '5.mkv')
+        It 'compare le message de façon littérale (casse) au sein d''un même fichier' {
+            $script:injectedFiles = @('a.mkv', 'a.mkv')
+            $script:injectedMessages = @('warning value=10', 'Warning value=10')
+
+            Invoke-MkvRemux -Path $TestDrive
+
+            $expected = @(
+                '1 file(s) accepted with integrity warning:'
+                '  - a.mkv'
+                '    - warning value=10'
+                '    - Warning value=10'
+            )
+            ($script:summaryWarnings -join "`n") | Should -BeExactly ($expected -join "`n")
+        }
+
+        It 'conserve l''ordre de première apparition des fichiers, puis des messages au sein de chacun' {
+            $script:injectedFiles = @('f2.mkv', 'f1.mkv', 'f2.mkv', 'f3.mkv', 'f1.mkv')
             $script:injectedMessages = @('B warning', 'A warning', 'B warning', 'C warning', 'A warning')
 
             Invoke-MkvRemux -Path $TestDrive
 
             $expected = @(
-                '5 file(s) accepted with integrity warning:'
-                '  - B warning [x 2]'
-                '  - A warning [x 2]'
-                '  - C warning'
-            )
-            ($script:summaryWarnings -join "`n") | Should -BeExactly ($expected -join "`n")
-        }
-
-        It 'rend un récapitulatif mixte : warning A, puis warning B [x 2]' {
-            $script:injectedFiles = @('a.mkv', 'b1.mkv', 'b2.mkv')
-            $script:injectedMessages = @('warning A', 'warning B', 'warning B')
-
-            Invoke-MkvRemux -Path $TestDrive
-
-            $expected = @(
                 '3 file(s) accepted with integrity warning:'
-                '  - warning A'
-                '  - warning B [x 2]'
+                '  - f2.mkv'
+                '    - B warning [x 2]'
+                '  - f1.mkv'
+                '    - A warning [x 2]'
+                '  - f3.mkv'
+                '    - C warning'
             )
             ($script:summaryWarnings -join "`n") | Should -BeExactly ($expected -join "`n")
         }
