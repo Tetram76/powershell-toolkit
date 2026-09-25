@@ -1357,10 +1357,12 @@ function Get-IntegrityUnknownDetail
     }
 }
 
-function Get-IntegrityMismatchMessage
+# Corps du message de mismatch, sans le nom de fichier : sert à la fois au message
+# complet (Get-IntegrityMismatchMessage) et à la clé de regroupement par fichier du
+# récapitulatif de fin de session (deuxième niveau, sans répéter le fichier).
+function Get-IntegrityMismatchDetail
 {
     param(
-        [Parameter(Mandatory)] [string] $Filename,
         [Parameter(Mandatory)] $Integrity
     )
 
@@ -1373,21 +1375,21 @@ function Get-IntegrityMismatchMessage
     switch ($method)
     {
         'probe' {
-            "Integrity mismatch for '{0}' [probe] - encoded file could not be probed" -f $Filename
+            '[probe] - encoded file could not be probed'
         }
         'stream-missing' {
             if ($streamLabel)
             {
-                "Integrity mismatch for '{0}' [stream-missing] - {1} is missing" -f $Filename, $streamLabel
+                "[stream-missing] - {0} is missing" -f $streamLabel
             }
             else
             {
-                "Integrity mismatch for '{0}' [stream-missing] - mapped output stream is missing" -f $Filename
+                '[stream-missing] - mapped output stream is missing'
             }
         }
         'timestamp-span' {
-            "Integrity mismatch for '{0}' [timestamp-span] - {1} - span source {2:0.000}s, output {3:0.000}s, diff {4:0.000}s, tolerance {5:0.000}s" -f `
-                $Filename, $streamLabel, `
+            "[timestamp-span] - {0} - span source {1:0.000}s, output {2:0.000}s, diff {3:0.000}s, tolerance {4:0.000}s" -f `
+                $streamLabel, `
                 (Get-IntegrityResultProperty -Integrity $Integrity -Name 'Expected'), `
                 (Get-IntegrityResultProperty -Integrity $Integrity -Name 'Actual'), `
                 (Get-IntegrityResultProperty -Integrity $Integrity -Name 'Diff'), `
@@ -1402,13 +1404,13 @@ function Get-IntegrityMismatchMessage
             $tolerance = Get-IntegrityResultProperty -Integrity $Integrity -Name 'Tolerance'
             if ($streamLabel -and $referenceLabel)
             {
-                "Integrity mismatch for '{0}' [relative-offset] - {1} vs reference {2} - relative start offset changed by {3:0.000}s (tolerance {4:0.000}s)" -f `
-                    $Filename, $streamLabel, $referenceLabel, $diff, $tolerance
+                "[relative-offset] - {0} vs reference {1} - relative start offset changed by {2:0.000}s (tolerance {3:0.000}s)" -f `
+                    $streamLabel, $referenceLabel, $diff, $tolerance
             }
             else
             {
-                "Integrity mismatch for '{0}' [relative-offset] - relative start offset changed by {1:0.000}s (tolerance {2:0.000}s)" -f `
-                    $Filename, $diff, $tolerance
+                "[relative-offset] - relative start offset changed by {0:0.000}s (tolerance {1:0.000}s)" -f `
+                    $diff, $tolerance
             }
         }
         'interleave' {
@@ -1420,26 +1422,37 @@ function Get-IntegrityMismatchMessage
             {
                 $percent = ' at {0}' -f ([double]$anchorFraction).ToString('0%', [cultureinfo]::InvariantCulture)
             }
-            "Integrity mismatch for '{0}' [interleave] - A/V packet spread{1} is {2}, limit {3}" -f `
-                $Filename, $percent, $spreadText, $limitText
+            "[interleave] - A/V packet spread{0} is {1}, limit {2}" -f `
+                $percent, $spreadText, $limitText
         }
         default {
             if ($streamLabel)
             {
-                "Integrity mismatch for '{0}' [{1}] - {2}" -f $Filename, $method, $streamLabel
+                "[{0}] - {1}" -f $method, $streamLabel
             }
             else
             {
-                "Integrity mismatch for '{0}' [{1}]" -f $Filename, $method
+                "[{0}]" -f $method
             }
         }
     }
 }
 
-function Get-IntegrityUnknownMessage
+function Get-IntegrityMismatchMessage
 {
     param(
         [Parameter(Mandatory)] [string] $Filename,
+        [Parameter(Mandatory)] $Integrity
+    )
+
+    "Integrity mismatch for '{0}' {1}" -f $Filename, (Get-IntegrityMismatchDetail -Integrity $Integrity)
+}
+
+# Corps du message unknown, sans le nom de fichier : même rôle que
+# Get-IntegrityMismatchDetail, pour le résumé unknown accepté.
+function Get-IntegrityUnknownMessageBody
+{
+    param(
         [Parameter(Mandatory)] $Integrity
     )
 
@@ -1449,7 +1462,17 @@ function Get-IntegrityUnknownMessage
     {
         $method = 'unknown'
     }
-    "Integrity check inconclusive for '{0}' [{1}] - {2}; accepting file" -f $Filename, $method, $detail
+    "[{0}] - {1}; accepting file" -f $method, $detail
+}
+
+function Get-IntegrityUnknownMessage
+{
+    param(
+        [Parameter(Mandatory)] [string] $Filename,
+        [Parameter(Mandatory)] $Integrity
+    )
+
+    "Integrity check inconclusive for '{0}' {1}" -f $Filename, (Get-IntegrityUnknownMessageBody -Integrity $Integrity)
 }
 
 function Get-IntegrityStreamMapLabel
