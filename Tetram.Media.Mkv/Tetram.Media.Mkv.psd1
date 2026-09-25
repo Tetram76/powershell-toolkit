@@ -1,7 +1,7 @@
 @{
 # --- Identité du module ---
     RootModule = 'Tetram.Media.Mkv.psm1'
-    ModuleVersion = '4.1.0'
+    ModuleVersion = '4.1.1'
     GUID = 'd4f3b1ab-7c6a-4a3a-9d9f-9d1a82bf7b95'
 
     Author = 'TRL'
@@ -70,6 +70,7 @@
 - 3.5.1 : Diagnostics Repair : en-tête uniforme `Fichier source '<chemin>'` avant chaque bloc relatif à un média (avertissement isolé, erreur, diagnostics mkvmerge) ; règles de poursuite et de remplacement inchangées.
 - 4.0.0 : Renommage cassant — module Tetram.Media.Mkv (ex Tetram.Media.Reencode), commande publique Invoke-MkvRemux (ex Invoke-ReencodeMedia).
 - 4.1.0 : Refonte du contrôle d’intégrité post-réencodage : abandon des comparaisons de durée de métadonnées au profit de l’étendue des PTS audio/vidéo, contrôle des offsets relatifs A/V et détection d’un entrelacement physique MKV anormal. Les sous-titres sont exclus des contrôles temporels. -AllowIntegrityMismatch conserve son comportement.
+- 4.1.1 : Récapitulatif de fin de session Invoke-MkvRemux : chaque warning d’intégrité accepté est rappelé avec son message complet ; les messages strictement identiques sont regroupés et suffixés ` [x N]` lorsqu’ils se répètent.
 '@
         }
     }
