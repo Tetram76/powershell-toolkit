@@ -256,6 +256,7 @@ function Initialize-ReencodeState
         BaseTempFilename = Join-Path $TempPath ([guid]::NewGuid().ToString())
         Attempts = 0
         IntegrityWarningFiles = @()
+        IntegrityWarningMessages = @()
         IntegrityFailureFiles = @()
         SessionResult = [EncodingResult]::new()
     }
@@ -528,6 +529,7 @@ function Invoke-ReencodeFile
                         $msg = "$msg — accepted because -AllowIntegrityMismatch is set"
                         Write-InfoWarning -Text $msg -Force
                         $State.IntegrityWarningFiles += $Filename
+                        $State.IntegrityWarningMessages += $msg
                     }
                     else
                     {
@@ -540,6 +542,7 @@ function Invoke-ReencodeFile
                     $msg = Get-IntegrityUnknownMessage -Filename $Filename -Integrity $integrity
                     Write-ErrorLogWithFile -Text $msg -ErrorLog $State.ErrorLog
                     $State.IntegrityWarningFiles += $Filename
+                    $State.IntegrityWarningMessages += $msg
                 }
             }
         }
@@ -869,9 +872,26 @@ function Invoke-MkvRemux
         if ($state.IntegrityWarningFiles.Count -gt 0)
         {
             Write-InfoWarning -Text ("{0} file(s) accepted with integrity warning:" -f $state.IntegrityWarningFiles.Count) -Force
-            foreach ($f in $state.IntegrityWarningFiles)
+            # Regroupement littéral (ordinal, sans normalisation), dans l'ordre de première apparition
+            $warningCounts = [System.Collections.Generic.Dictionary[string, int]]::new([StringComparer]::Ordinal)
+            $warningOrder = [System.Collections.Generic.List[string]]::new()
+            foreach ($message in $state.IntegrityWarningMessages)
             {
-                Write-InfoWarning -Text "  - $f" -Force
+                if ($warningCounts.ContainsKey($message))
+                {
+                    $warningCounts[$message]++
+                }
+                else
+                {
+                    $warningCounts.Add($message, 1)
+                    $warningOrder.Add($message)
+                }
+            }
+            foreach ($message in $warningOrder)
+            {
+                $count = $warningCounts[$message]
+                $suffix = if ($count -gt 1) { " [x $count]" } else { '' }
+                Write-InfoWarning -Text "  - $message$suffix" -Force
             }
         }
     }

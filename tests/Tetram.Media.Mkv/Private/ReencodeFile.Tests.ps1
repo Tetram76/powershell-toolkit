@@ -492,6 +492,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Should -Invoke -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity -Times 1
         $state.IntegrityFailureFiles | Should -Contain $file
         $state.IntegrityWarningFiles | Should -Not -Contain $file
+        $state.IntegrityWarningMessages | Should -HaveCount 0
         $state.SessionResult.Count | Should -Be 0
         $script:ErrorLogs | Should -Not -BeNullOrEmpty
         $script:WarningLogs | Should -BeNullOrEmpty
@@ -581,9 +582,12 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Should -Invoke -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity -Times 1
         $state.IntegrityFailureFiles | Should -HaveCount 0
         $state.IntegrityWarningFiles | Should -Contain $file
+        $state.IntegrityWarningMessages | Should -HaveCount 1
         $state.SessionResult.Count | Should -Be 1
         $script:ErrorLogs | Should -BeNullOrEmpty
-        $script:WarningLogs | Should -Not -BeNullOrEmpty
+        $script:WarningLogs | Should -HaveCount 1
+        $state.IntegrityWarningMessages[0] | Should -BeExactly $script:WarningLogs[0]
+        $state.IntegrityWarningMessages[0] | Should -BeLike '* — accepted because -AllowIntegrityMismatch is set'
         $script:WarningLogs[0] | Should -Match 'mismatch-allow'
         $script:WarningLogs[0] | Should -Match 'timestamp-span'
         $script:WarningLogs[0] | Should -Match '100'
@@ -623,6 +627,9 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         $state.IntegrityWarningFiles | Should -Contain $file
         $state.SessionResult.Count | Should -Be 1
         Test-Path -LiteralPath (Join-Path $TestDrive 'unknown-duration.mkv') -PathType Leaf | Should -BeTrue
+        $script:ErrorLogs | Should -HaveCount 1
+        $state.IntegrityWarningMessages | Should -HaveCount 1
+        $state.IntegrityWarningMessages[0] | Should -BeExactly $script:ErrorLogs[0]
         $script:ErrorLogs[0] | Should -Match 'inconclusive'
         $script:ErrorLogs[0] | Should -Match 'timestamp-span'
         $script:ErrorLogs[0] | Should -Not -Match 'comparable duration'
@@ -654,6 +661,7 @@ Describe 'Invoke-ReencodeFile — intégrité hors WhatIf' {
         Should -Invoke -ModuleName Tetram.Media.Remux Test-EncodedFileIntegrity -Times 0
         $state.IntegrityFailureFiles | Should -HaveCount 0
         $state.IntegrityWarningFiles | Should -HaveCount 0
+        $state.IntegrityWarningMessages | Should -HaveCount 0
         $state.SessionResult.Count | Should -Be 1
         Get-Content -LiteralPath $file -Raw | Should -Match 'encoded-temp'
     }
